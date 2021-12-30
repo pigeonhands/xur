@@ -27,7 +27,7 @@ impl Expression {
         match self {
             Expression::Variable(s) => format!("Expression(Var({}))", s),
             Expression::Literal(s) => format!("Expression({:?})", s),
-            Expression::Call{callie, ..} => format!("Expression(Call({:?}))", callie),
+            Expression::Call { callie, .. } => format!("Expression(Call({:?}))", callie),
             Expression::Array(s) => format!("Expression(Array({:?}))", s),
             Expression::ParenList(s) => format!("Expression(ParenList({:?}))", s),
             Expression::None => format!("Expression(None)"),
