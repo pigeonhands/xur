@@ -48,7 +48,6 @@ So, for example, mapping `to_int` to a list of integers would  not need a new fu
 
 ## Ideas / plans
 ---
-
 ### Functions
 Like the idea behind '`.`', i would like **everything** that can possably be a funciton, to be a function. Including the function definition.
 ```
