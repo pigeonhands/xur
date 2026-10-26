@@ -96,6 +96,13 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
                 visitor.visit_variant(variant);
             }
         }
+        ItemKind::Impl(imp) => {
+            visitor.visit_generics(&imp.generics);
+            visitor.visit_ty(&imp.self_ty);
+            for item in &imp.items {
+                visitor.visit_item(item);
+            }
+        }
     }
 }
 
@@ -272,7 +279,7 @@ pub fn walk_ty<V: Visitor>(visitor: &mut V, ty: &Ty) {
             }
         }
         TyKind::Paren(ty) | TyKind::List(ty) => visitor.visit_ty(ty),
-        TyKind::Infer | TyKind::Err => {}
+        TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => {}
     }
 }
 

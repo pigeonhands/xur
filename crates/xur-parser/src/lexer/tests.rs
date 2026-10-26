@@ -510,3 +510,24 @@ fn test_enum_declaration() {
         ]
     );
 }
+
+#[test]
+fn test_impl_and_self() {
+    assert_eq!(
+        lex("impl S { fn f(self) {} }"),
+        [
+            kw(Keyword::Impl),
+            id("S"),
+            TokenKind::LBrace,
+            kw(Keyword::Fn),
+            id("f"),
+            TokenKind::LParen,
+            id("self"),
+            TokenKind::RParen,
+            TokenKind::LBrace,
+            TokenKind::RBrace,
+            TokenKind::RBrace,
+            TokenKind::Eof,
+        ]
+    );
+}

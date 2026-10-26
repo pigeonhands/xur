@@ -24,6 +24,7 @@ pub enum Keyword {
     Continue,
     Struct,
     Enum,
+    Impl,
     Match,
     True,
     False,

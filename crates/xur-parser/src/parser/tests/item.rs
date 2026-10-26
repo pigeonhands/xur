@@ -96,6 +96,28 @@ fn enums() {
 }
 
 #[test]
+fn impl_blocks() {
+    assert_eq!(
+        item(
+            "impl Shape {\n    pub fn area(self) -> f64 { 1.0 }\n    fn square(side: f64) -> Self { side }\n}"
+        ),
+        "impl Shape { pub fn area(self) -> f64 { 1.0 } fn square(side: f64) -> Self { side } }"
+    );
+    assert_eq!(
+        item("impl<T> Wrapper<T> { fn get(self, i: u32) -> T { self.inner } }"),
+        "impl<T> Wrapper<T> { fn get(self, i: u32) -> T { self.inner } }"
+    );
+}
+
+#[test]
+fn only_functions_in_impl_blocks() {
+    assert_eq!(
+        parse_errors("impl S { struct T; fn f() {} }", Parser::parse_item),
+        ["only functions can be declared in an `impl` block"]
+    );
+}
+
+#[test]
 fn items_nested_in_blocks() {
     assert_eq!(
         item("fn main() { fn helper() {} helper() }"),

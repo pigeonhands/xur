@@ -64,6 +64,7 @@ impl Show for Ty {
             TyKind::Paren(ty) => format!("({})", ty.show()),
             TyKind::List(ty) => format!("[{}]", ty.show()),
             TyKind::Infer => "_".to_owned(),
+            TyKind::ImplicitSelf => "Self".to_owned(),
             TyKind::Err => "<err>".to_owned(),
         }
     }
@@ -240,7 +241,10 @@ impl Show for Item {
                     .decl
                     .inputs
                     .iter()
-                    .map(|param| format!("{}: {}", param.pat.show(), param.ty.show()))
+                    .map(|param| match param.ty.kind {
+                        TyKind::ImplicitSelf => param.pat.show(),
+                        _ => format!("{}: {}", param.pat.show(), param.ty.show()),
+                    })
                     .collect();
                 let ret = match &item.decl.output {
                     FnRetTy::Default(_) => String::new(),
@@ -261,6 +265,15 @@ impl Show for Item {
                     VariantData::Struct(_) => data.show(),
                 };
                 format!("struct {ident}{}{body}", generics.show())
+            }
+            ItemKind::Impl(imp) => {
+                let items: Vec<_> = imp.items.iter().map(Show::show).collect();
+                format!(
+                    "impl{} {} {{ {} }}",
+                    imp.generics.show(),
+                    imp.self_ty.show(),
+                    items.join(" ")
+                )
             }
             ItemKind::Enum(ident, generics, def) => {
                 let variants: Vec<_> = def

@@ -44,9 +44,9 @@ impl DefKind {
     }
 
     /// Whether names can be looked up inside a definition of this kind, as
-    /// in `math::div` or `Shape::Rect`.
+    /// in `math::div`, `Shape::Rect` or `Point::new`.
     pub fn has_scope(self) -> bool {
-        matches!(self, Self::Mod | Self::Enum)
+        matches!(self, Self::Mod | Self::Enum | Self::Struct)
     }
 }
 

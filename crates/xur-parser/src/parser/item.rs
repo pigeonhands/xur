@@ -1,10 +1,11 @@
 //! Items, attributes and whole source files, with item-level error recovery.
 
 use xur_ast::{
-    Attribute, ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Item,
-    ItemKind, MetaItem, MetaItemInner, MetaItemKind, Module, Param, UseTree, Variant, VariantData,
-    Visibility,
+    Attribute, ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Impl,
+    Item, ItemKind, MetaItem, MetaItemInner, MetaItemKind, Module, Param, Ty, TyKind, UseTree,
+    Variant, VariantData, Visibility,
 };
+use xur_errors::Diag;
 use xur_span::Span;
 
 use super::expected::Expected;
@@ -47,6 +48,7 @@ impl Parser<'_> {
                         | Keyword::Fn
                         | Keyword::Struct
                         | Keyword::Enum
+                        | Keyword::Impl
                 )
         )
     }
@@ -79,6 +81,10 @@ impl Parser<'_> {
                 let ident = self.parse_ident()?;
                 let generics = self.parse_generics()?;
                 ItemKind::Enum(ident, generics, self.parse_enum_def()?)
+            }
+            TokenKind::Keyword(Keyword::Impl) => {
+                self.bump();
+                ItemKind::Impl(Box::new(self.parse_impl()?))
             }
             _ => {
                 self.expected(Expected::Item);
@@ -207,6 +213,17 @@ impl Parser<'_> {
 
     fn parse_fn_param(&mut self) -> PResult<Param> {
         let lo = self.token.span;
+        // `self` alone, as the first parameter of a method.
+        if self.token.kind == TokenKind::Ident("self")
+            && matches!(self.look_ahead(1), TokenKind::Comma | TokenKind::RParen)
+        {
+            let pat = self.parse_pat()?;
+            let ty = Ty {
+                kind: TyKind::ImplicitSelf,
+                span: pat.span,
+            };
+            return Ok(Param { pat, ty, span: lo });
+        }
         let pat = self.parse_pat()?;
         self.expect(TokenKind::Colon)?;
         let ty = self.parse_ty()?;
@@ -214,6 +231,36 @@ impl Parser<'_> {
             pat,
             ty,
             span: lo.to(self.prev_token.span),
+        })
+    }
+
+    /// `<T> Type<T> { fns }`, after the `impl`.
+    fn parse_impl(&mut self) -> PResult<Impl> {
+        let generics = self.parse_generics()?;
+        let self_ty = self.parse_ty()?;
+        self.expect(TokenKind::LBrace)?;
+        let mut items = Vec::new();
+        while !self.eat(TokenKind::RBrace) {
+            if self.is_at_end() {
+                return Err(self.unexpected());
+            }
+            let item = self.parse_item()?;
+            if let ItemKind::Fn(_) = item.kind {
+                items.push(item);
+            } else {
+                self.report(
+                    Diag::error(
+                        "only functions can be declared in an `impl` block",
+                        item.span,
+                    )
+                    .with_label(item.span, "not a function"),
+                );
+            }
+        }
+        Ok(Impl {
+            generics,
+            self_ty,
+            items,
         })
     }
 

@@ -24,8 +24,8 @@ pub mod visit;
 pub use attr::{Attribute, MetaItem, MetaItemInner, MetaItemKind};
 pub use expr::{Arm, Closure, Expr, ExprKind, MethodCall, RangeLimits};
 pub use item::{
-    ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Item, ItemKind,
-    Module, Param, UseTree, Variant, VariantData, Visibility,
+    ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Impl, Item,
+    ItemKind, Module, Param, UseTree, Variant, VariantData, Visibility,
 };
 pub use lit::{Lit, LitKind};
 pub use node_id::{NodeId, NodeIdGen};

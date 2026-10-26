@@ -38,6 +38,18 @@ pub enum ItemKind {
     Struct(Ident, Generics, VariantData),
     /// `enum Name<T> { variants }`
     Enum(Ident, Generics, EnumDef),
+    /// `impl<T> Type<T> { fns }`
+    Impl(Box<Impl>),
+}
+
+/// An `impl` block, adding functions to a struct or enum: methods, which
+/// take `self` first, and associated functions, which don't.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Impl {
+    pub generics: Generics,
+    pub self_ty: Ty,
+    /// Always function items.
+    pub items: Vec<Item>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

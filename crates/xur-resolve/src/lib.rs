@@ -7,7 +7,8 @@
 //! 2. Every module's items are declared in its [`Scope`](scope::Scope).
 //! 3. `use` declarations are resolved, repeatedly until no more make
 //!    progress, since one import may depend on another.
-//! 4. The names used inside items (bodies, types, patterns) are resolved
+//! 4. The functions of `impl` blocks are declared in their type's scope.
+//! 5. The names used inside items (bodies, types, patterns) are resolved
 //!    against local scopes and then the module.
 //!
 //! Names only ever resolve statically. Members reached through a value
@@ -87,6 +88,15 @@ impl Resolutions {
     pub fn def_path(&self, id: DefId) -> String {
         format_def_path(&self.defs, &self.unnamed_modules, id)
     }
+
+    /// The function `name` declared in an `impl` block for the struct or
+    /// enum `ty`, for dispatching `value.name()` at runtime.
+    pub fn assoc_fn(&self, ty: DefId, name: xur_span::Symbol) -> Option<DefId> {
+        match self.scopes.get(&ty)?.get(Namespace::Value, name)?.res {
+            Res::Def(DefKind::Fn, def) => Some(def),
+            _ => None,
+        }
+    }
 }
 
 /// Resolves the modules `new` of `krate`, which were added since
@@ -101,6 +111,7 @@ fn resolve_modules(
     resolver.declare_modules(&new);
     resolver.collect_items(&new);
     resolver.resolve_imports();
+    resolver.collect_impls(&new);
     resolver.resolve_bodies(&new);
     resolver.suspend()
 }
@@ -117,6 +128,8 @@ struct Resolver<'a> {
     std: DefId,
     /// `use` declarations not yet resolved.
     pending_imports: Vec<Import<'a>>,
+    /// What the type of each `impl` block resolved to, by the impl item.
+    impl_self_tys: HashMap<NodeId, Res>,
     diags: Vec<Diag>,
 }
 
@@ -143,6 +156,7 @@ impl<'a> Resolver<'a> {
             module_defs,
             std,
             pending_imports: Vec::new(),
+            impl_self_tys: HashMap::new(),
             diags: Vec::new(),
         }
     }

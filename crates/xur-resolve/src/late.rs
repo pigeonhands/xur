@@ -10,8 +10,8 @@ use std::collections::HashMap;
 
 use xur_ast::visit::{self, Visitor};
 use xur_ast::{
-    Arm, Block, Expr, ExprKind, FnRetTy, Generics, Item, ItemKind, Local, NodeId, Pat, PatKind,
-    Path, StmtKind, Ty, TyKind,
+    Arm, Block, Expr, ExprKind, FnRetTy, Generics, Impl, Item, ItemKind, Local, NodeId, Pat,
+    PatKind, Path, StmtKind, Ty, TyKind,
 };
 use xur_errors::Diag;
 use xur_span::{Ident, Span, Symbol};
@@ -69,6 +69,24 @@ impl Resolver<'_> {
             };
             late.visit_module(loaded.ast);
         }
+    }
+
+    /// Resolves `path` as written at the top level of `module`.
+    pub(crate) fn resolve_module_level_path(
+        &mut self,
+        module: DefId,
+        path: &Path,
+        ns: Namespace,
+    ) -> Res {
+        let mut late = LateResolver {
+            r: self,
+            module,
+            value_ribs: Vec::new(),
+            type_ribs: Vec::new(),
+            pat_bindings: HashMap::new(),
+            top_level: true,
+        };
+        late.resolve_path(path, ns)
     }
 }
 
@@ -276,6 +294,51 @@ impl LateResolver<'_, '_> {
         }
     }
 
+    fn resolve_fn(&mut self, item: &Item, func: &xur_ast::Fn, kind: RibKind) {
+        self.with_ribs(kind, |this| {
+            this.declare_generics(item, &func.generics);
+            for param in &func.decl.inputs {
+                this.visit_ty(&param.ty);
+                this.resolve_pattern(&param.pat);
+            }
+            if let FnRetTy::Ty(ty) = &func.decl.output {
+                this.visit_ty(ty);
+            }
+            this.visit_block(&func.body);
+        });
+    }
+
+    /// Resolves the functions of an `impl` block, with the impl's type
+    /// parameters and `Self` in scope.
+    fn resolve_impl(&mut self, item: &Item, imp: &Impl) {
+        let self_res = self
+            .r
+            .impl_self_tys
+            .get(&item.id)
+            .copied()
+            .unwrap_or(Res::Err);
+        self.with_ribs(RibKind::Item, |this| {
+            this.declare_generics(item, &imp.generics);
+            let rib = this.type_ribs.last_mut().expect("impls have ribs");
+            let binding = RibBinding {
+                res: self_res,
+                module: None,
+            };
+            rib.bindings.insert(Symbol::intern("Self"), binding);
+
+            // The type's path was resolved when the impl was collected;
+            // only its generic arguments are left.
+            visit::walk_ty(this, &imp.self_ty);
+            for fn_item in &imp.items {
+                if let ItemKind::Fn(func) = &fn_item.kind {
+                    // Functions see the impl's type parameters, so their
+                    // rib does not mark an item boundary.
+                    this.resolve_fn(fn_item, func, RibKind::Normal);
+                }
+            }
+        });
+    }
+
     /// The module `expr` statically evaluates to: a path naming a module,
     /// or `std::import` with a literal path.
     fn static_module(&self, expr: &Expr) -> Option<DefId> {
@@ -311,17 +374,22 @@ impl Visitor for LateResolver<'_, '_> {
                 }
                 this.visit_expr(&konst.expr);
             }),
-            ItemKind::Fn(func) => self.with_ribs(RibKind::Item, |this| {
-                this.declare_generics(item, &func.generics);
-                for param in &func.decl.inputs {
-                    this.visit_ty(&param.ty);
-                    this.resolve_pattern(&param.pat);
+            ItemKind::Fn(func) => self.resolve_fn(item, func, RibKind::Item),
+            ItemKind::Impl(imp) => {
+                if !top_level {
+                    self.r.report(
+                        Diag::error(
+                            "`impl` blocks are only allowed at the top level of a module",
+                            item.span,
+                        )
+                        .with_label(
+                            imp.self_ty.span,
+                            "move this `impl` to the top level of the module",
+                        ),
+                    );
                 }
-                if let FnRetTy::Ty(ty) = &func.decl.output {
-                    this.visit_ty(ty);
-                }
-                this.visit_block(&func.body);
-            }),
+                self.resolve_impl(item, imp);
+            }
             ItemKind::Struct(_, generics, _) | ItemKind::Enum(_, generics, _) => {
                 self.with_ribs(RibKind::Item, |this| {
                     this.declare_generics(item, generics);

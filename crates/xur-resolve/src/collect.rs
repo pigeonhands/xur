@@ -1,6 +1,6 @@
 //! Declaring items in scopes (rustc's `build_reduced_graph`).
 
-use xur_ast::{Expr, Item, ItemKind, VariantData, Visibility};
+use xur_ast::{Expr, Impl, Item, ItemKind, TyKind, VariantData, Visibility};
 use xur_errors::Diag;
 use xur_span::Ident;
 
@@ -47,7 +47,9 @@ impl<'a> Resolver<'a> {
     ) -> Vec<(&'static [Namespace], Ident, Res)> {
         let mut names = Vec::new();
         match &item.kind {
-            ItemKind::Use(_) => {}
+            // Imports and impls introduce no names of their own; see
+            // `resolve_imports` and `collect_impls`.
+            ItemKind::Use(_) | ItemKind::Impl(_) => {}
             ItemKind::Const(konst) => match self.static_import_target(&konst.expr) {
                 // `const math = std::import("...")` names a module, which is
                 // both a value and a path prefix.
@@ -65,7 +67,16 @@ impl<'a> Resolver<'a> {
                 names.push((Namespace::VALUE, func.ident, res));
             }
             ItemKind::Struct(ident, _, data) => {
-                let res = self.create_def(item, DefKind::Struct, *ident, parent);
+                let data_def = DefData {
+                    kind: DefKind::Struct,
+                    name: ident.name,
+                    parent: Some(parent),
+                    span: Some(ident.span),
+                };
+                let def =
+                    create_scoped_def(&mut self.defs, &mut self.scopes, data_def, Some(module));
+                self.node_defs.insert(item.id, def);
+                let res = Res::Def(DefKind::Struct, def);
                 // Tuple and unit structs also name their constructor.
                 let namespaces = match data {
                     VariantData::Struct(_) => Namespace::TYPE,
@@ -177,4 +188,56 @@ fn duplicate_definition(ident: Ident, existing: Binding, ns: Namespace) -> Diag 
         "`{name}` must be defined only once in the {} namespace of this module",
         ns.descr()
     ))
+}
+
+impl Resolver<'_> {
+    /// Declares the functions of every top-level `impl` block in `modules`
+    /// in the scope of the struct or enum it is for. Runs after imports, as
+    /// the type may be imported.
+    pub(crate) fn collect_impls(&mut self, modules: &[ModuleIdx]) {
+        let krate = self.krate;
+        for &idx in modules {
+            let module = self.module_def(idx);
+            for item in &krate.module(idx).ast.items {
+                if let ItemKind::Impl(imp) = &item.kind {
+                    self.collect_impl(module, item, imp);
+                }
+            }
+        }
+    }
+
+    fn collect_impl(&mut self, module: DefId, item: &Item, imp: &Impl) {
+        let self_res = match &imp.self_ty.kind {
+            TyKind::Path(path) => self.resolve_module_level_path(module, path, Namespace::Type),
+            _ => Res::Err,
+        };
+        self.impl_self_tys.insert(item.id, self_res);
+        let ty = match self_res {
+            Res::Def(DefKind::Struct | DefKind::Enum, ty) => ty,
+            Res::Err => return,
+            _ => {
+                let span = imp.self_ty.span;
+                self.report(
+                    Diag::error(
+                        "`impl` blocks can only add functions to structs and enums",
+                        span,
+                    )
+                    .with_label(span, format!("this is a {}", self_res.descr())),
+                );
+                return;
+            }
+        };
+        for fn_item in &imp.items {
+            let ItemKind::Fn(func) = &fn_item.kind else {
+                continue;
+            };
+            let res = self.create_def(fn_item, DefKind::Fn, func.ident, ty);
+            let binding = Binding {
+                res,
+                vis: vis(fn_item.vis),
+                span: Some(func.ident.span),
+            };
+            self.declare(ty, Namespace::VALUE, func.ident, binding);
+        }
+    }
 }
