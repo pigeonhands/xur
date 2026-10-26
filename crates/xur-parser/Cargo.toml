@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 xur-ast.workspace = true
+xur-span.workspace = true
 strum.workspace = true
 unicode-ident.workspace = true
 thiserror.workspace = true

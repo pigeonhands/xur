@@ -1,5 +1,6 @@
 use super::*;
 use crate::token::{Keyword, TokenKind};
+use xur_span::Span;
 
 /// Lexes `src`, asserting it contains no errors, and returns the token kinds.
 fn lex(src: &str) -> Vec<TokenKind<'_>> {

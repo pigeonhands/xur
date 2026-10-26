@@ -11,9 +11,9 @@ mod cursor;
 mod tests;
 
 use crate::error::{LexError, LexErrorKind};
-use crate::span::Span;
 use crate::token::{Keyword, Token, TokenKind};
 use cursor::Cursor;
+use xur_span::Span;
 
 pub struct Lexer<'src> {
     cursor: Cursor<'src>,

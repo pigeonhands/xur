@@ -4,7 +4,8 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Result, bail};
-use xur_parser::{Lexer, LineIndex, Token};
+use xur_parser::{Lexer, Token};
+use xur_span::LineIndex;
 
 use crate::cli::DebugCommand;
 use crate::diagnostics;

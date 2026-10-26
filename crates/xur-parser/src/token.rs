@@ -3,7 +3,7 @@ use std::fmt;
 use strum::{Display, EnumString};
 
 use crate::error::LexErrorKind;
-use crate::span::Span;
+use xur_span::Span;
 
 /// All reserved keywords in Xur.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]

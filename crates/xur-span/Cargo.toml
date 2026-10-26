@@ -1,0 +1,12 @@
+[package]
+name = "xur-span"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_span"
+path = "src/lib.rs"
+
+[dependencies]

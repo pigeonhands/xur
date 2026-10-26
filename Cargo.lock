@@ -260,6 +260,7 @@ dependencies = [
  "ariadne",
  "clap",
  "xur-parser",
+ "xur-span",
 ]
 
 [[package]]
@@ -274,10 +275,15 @@ dependencies = [
  "thiserror",
  "unicode-ident",
  "xur-ast",
+ "xur-span",
 ]
 
 [[package]]
 name = "xur-runtime"
+version = "0.1.1"
+
+[[package]]
+name = "xur-span"
 version = "0.1.1"
 
 [[package]]

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::span::Span;
+use xur_span::Span;
 
 /// What went wrong while lexing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
