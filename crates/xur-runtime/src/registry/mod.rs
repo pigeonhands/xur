@@ -31,6 +31,7 @@ mod into_native;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::io::Write;
 
 use facet::{Peek, Shape};
@@ -40,9 +41,9 @@ use xur_resolve::{
 
 use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
-use crate::{RunResult, Value};
+use crate::{BuiltinType, RunResult, Value};
 
-pub use builder::{ModuleBuilder, TypeBuilder};
+pub use builder::{BuiltinBuilder, ModuleBuilder, TypeBuilder};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 
 use hooks::TypeHooks;
@@ -61,7 +62,7 @@ pub trait Context: ConvertCx {
     fn stdout(&mut self) -> &mut dyn Write;
 }
 
-pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value>;
+pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;
 
 /// The Rust types of a typed native function, for checking calls.
 #[derive(Debug, Clone)]
@@ -106,6 +107,8 @@ struct ModuleData {
 #[derive(Default)]
 pub struct Registry {
     fns: Vec<NativeFn>,
+    /// Methods of built-in values, such as `list.push`.
+    builtin_methods: HashMap<(BuiltinType, String), NativeFnId>,
     types: Vec<NativeType>,
     modules: Vec<ModuleData>,
     /// Modules that are not submodules of another, like `std`.
@@ -138,6 +141,16 @@ impl Registry {
     ) {
         let module = self.module(path).module;
         self.modules[module].init = Some(Box::new(init));
+    }
+
+    /// Methods of the built-in type `ty`, such as `list.push(x)`.
+    pub fn builtin(&mut self, ty: BuiltinType) -> BuiltinBuilder<'_> {
+        BuiltinBuilder::new(self, ty)
+    }
+
+    /// The method `name` of the built-in type `ty`.
+    pub fn builtin_method(&self, ty: BuiltinType, name: &str) -> Option<NativeFnId> {
+        self.builtin_methods.get(&(ty, name.to_owned())).copied()
     }
 
     pub fn function(&self, id: NativeFnId) -> &NativeFn {

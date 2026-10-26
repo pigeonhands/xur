@@ -6,7 +6,7 @@ use xur_resolve::NativeTypeId;
 use super::hooks::TypeHooks;
 use super::into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 use super::{CallFn, Context, NativeType, Registry, Signature};
-use crate::{RunResult, Value};
+use crate::{BuiltinType, RunResult, Value};
 
 /// Adds items to one module of a [`Registry`].
 pub struct ModuleBuilder<'r> {
@@ -35,7 +35,7 @@ impl ModuleBuilder<'_> {
     pub fn raw_function(
         &mut self,
         name: &str,
-        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + 'static,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let decl = self.registry.add_fn(name, None, Box::new(f));
         self.registry.modules[self.module].functions.push(decl);
@@ -99,6 +99,43 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
     fn add(&mut self, name: &str, signature: Signature, call: Box<CallFn>) -> &mut Self {
         let decl = self.registry.add_fn(name, Some(signature), call);
         self.registry.types[self.ty.0 as usize].functions.push(decl);
+        self
+    }
+}
+
+/// Adds methods to a built-in type, like `list` or `str`.
+pub struct BuiltinBuilder<'r> {
+    registry: &'r mut Registry,
+    ty: BuiltinType,
+}
+
+impl<'r> BuiltinBuilder<'r> {
+    pub(super) fn new(registry: &'r mut Registry, ty: BuiltinType) -> Self {
+        Self { registry, ty }
+    }
+
+    /// Registers a method as a Rust function taking the receiver, converted,
+    /// first: `|s: String| s.to_uppercase()` for `"a".to_upper()`.
+    pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
+        let (signature, call) = f.into_native();
+        self.add(name, Some(signature), call)
+    }
+
+    /// Registers a method working on Xur values directly, with the receiver
+    /// first; needed to change a list in place.
+    pub fn raw_function(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add(name, None, Box::new(f))
+    }
+
+    fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
+        let decl = self.registry.add_fn(name, signature, call);
+        self.registry
+            .builtin_methods
+            .insert((self.ty, name.to_owned()), decl.id);
         self
     }
 }

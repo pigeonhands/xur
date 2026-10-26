@@ -9,7 +9,7 @@ mod value;
 pub use error::{RunResult, RuntimeError};
 pub use lang::LangItems;
 pub use registry::{Context, Registry};
-pub use value::{Adt, NativeObject, Range, Record, Value, lock};
+pub use value::{Adt, BuiltinType, NativeObject, Range, Record, Value, lock};
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;

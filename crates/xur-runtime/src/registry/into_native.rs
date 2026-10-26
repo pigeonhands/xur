@@ -27,7 +27,7 @@ macro_rules! impl_into_native_fn {
     ($($arg:ident),*) => {
         impl<F, R, $($arg),*> IntoNativeFn<fn($($arg),*) -> R> for F
         where
-            F: Fn($($arg),*) -> R + 'static,
+            F: Fn($($arg),*) -> R + Send + Sync + 'static,
             R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*
         {
@@ -54,7 +54,7 @@ macro_rules! impl_into_native_fn {
 
         impl<F, T, R, $($arg),*> IntoNativeMethod<T, fn($($arg),*) -> R> for F
         where
-            F: Fn(&T, $($arg),*) -> R + 'static,
+            F: Fn(&T, $($arg),*) -> R + Send + Sync + 'static,
             T: Facet<'static> + Send + 'static,
             R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*
@@ -68,7 +68,7 @@ macro_rules! impl_into_native_fn {
 
         impl<F, T, R, $($arg),*> IntoNativeMethodMut<T, fn($($arg),*) -> R> for F
         where
-            F: Fn(&mut T, $($arg),*) -> R + 'static,
+            F: Fn(&mut T, $($arg),*) -> R + Send + Sync + 'static,
             T: Facet<'static> + Send + 'static,
             R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*

@@ -1,0 +1,78 @@
+//! Methods of strings: plain Rust functions, with the receiver converted to
+//! a `String` by facet.
+
+use xur_runtime::{BuiltinType, Registry};
+
+pub(crate) fn register(registry: &mut Registry) {
+    registry
+        .builtin(BuiltinType::Str)
+        .function("len", |s: String| s.chars().count() as i64)
+        .function("is_empty", |s: String| s.is_empty())
+        .function("to_upper", |s: String| s.to_uppercase())
+        .function("to_lower", |s: String| s.to_lowercase())
+        .function("trim", |s: String| s.trim().to_owned())
+        .function("contains", |s: String, part: String| s.contains(&part))
+        .function("starts_with", |s: String, prefix: String| {
+            s.starts_with(&prefix)
+        })
+        .function("ends_with", |s: String, suffix: String| {
+            s.ends_with(&suffix)
+        })
+        .function("replace", |s: String, from: String, to: String| {
+            s.replace(&from, &to)
+        })
+        .function("split", |s: String, separator: String| {
+            s.split(&separator).map(str::to_owned).collect::<Vec<_>>()
+        })
+        .function("lines", |s: String| {
+            s.lines().map(str::to_owned).collect::<Vec<_>>()
+        })
+        .function("repeat", |s: String, n: u32| s.repeat(n as usize))
+        .function("parse_int", |s: String| {
+            s.trim().parse::<i64>().map_err(|e| e.to_string())
+        })
+        .function("parse_float", |s: String| {
+            s.trim().parse::<f64>().map_err(|e| e.to_string())
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use xur_runtime::testing::TestCx;
+    use xur_runtime::{BuiltinType, Value};
+
+    use crate::registry;
+
+    fn call(name: &str, args: &[Value]) -> Value {
+        let registry = registry();
+        let mut cx = TestCx::new(&registry);
+        let id = registry
+            .builtin_method(BuiltinType::Str, name)
+            .expect("method exists");
+        cx.call(id, args).unwrap()
+    }
+
+    #[test]
+    fn string_methods() {
+        assert_eq!(call("to_upper", &[Value::str("abc")]), Value::str("ABC"));
+        assert_eq!(call("len", &[Value::str("αβ")]), Value::Int(2));
+        assert_eq!(
+            call("split", &[Value::str("a,b"), Value::str(",")]),
+            Value::list(vec![Value::str("a"), Value::str("b")])
+        );
+    }
+
+    #[test]
+    fn parsing_returns_results() {
+        let registry = registry();
+        let lang = TestCx::new(&registry).lang;
+        assert_eq!(
+            call("parse_int", &[Value::str(" 42 ")]),
+            Value::adt(lang.ok, vec![Value::Int(42)])
+        );
+        assert_eq!(
+            call("parse_int", &[Value::str("x")]),
+            Value::adt(lang.err, vec![Value::str("invalid digit found in string")])
+        );
+    }
+}

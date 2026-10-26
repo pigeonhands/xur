@@ -156,6 +156,34 @@ impl Value {
     }
 }
 
+/// The kinds of built-in value that have methods, like `list.push(x)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuiltinType {
+    Bool,
+    Int,
+    Float,
+    Str,
+    Tuple,
+    List,
+    Range,
+}
+
+impl Value {
+    /// The built-in type whose methods `value.method()` looks up.
+    pub fn builtin_type(&self) -> Option<BuiltinType> {
+        Some(match self {
+            Self::Bool(_) => BuiltinType::Bool,
+            Self::Int(_) => BuiltinType::Int,
+            Self::Float(_) => BuiltinType::Float,
+            Self::Str(_) => BuiltinType::Str,
+            Self::Tuple(_) => BuiltinType::Tuple,
+            Self::List(_) => BuiltinType::List,
+            Self::Range(_) => BuiltinType::Range,
+            _ => return None,
+        })
+    }
+}
+
 /// Structural equality, as `==` sees it. Values of different kinds are
 /// never equal; in particular `1 == 1.0` is false.
 impl PartialEq for Value {

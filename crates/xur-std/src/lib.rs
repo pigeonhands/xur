@@ -7,7 +7,10 @@
 mod any;
 mod fmt;
 mod io;
+mod list;
 mod math;
+mod num;
+mod str;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
@@ -24,6 +27,9 @@ pub fn register(registry: &mut Registry) {
     io::register(registry);
     any::register(registry);
     math::register(registry);
+    list::register(registry);
+    str::register(registry);
+    num::register(registry);
 }
 
 /// `std::import(path)`: loads a module, which may be computed at runtime.
