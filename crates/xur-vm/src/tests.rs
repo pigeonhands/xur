@@ -209,7 +209,8 @@ cannot average zero items
 2 + 3 = 5
 area = 7
 square area = 4
-Struct name: ZeroPacked",
+Struct name: ZeroPacked
+",
     );
 }
 

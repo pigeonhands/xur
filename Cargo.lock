@@ -438,11 +438,14 @@ dependencies = [
  "ariadne",
  "clap",
  "xur-ast",
+ "xur-bytecode",
  "xur-errors",
  "xur-parser",
  "xur-resolve",
+ "xur-runtime",
  "xur-span",
  "xur-std",
+ "xur-vm",
 ]
 
 [[package]]

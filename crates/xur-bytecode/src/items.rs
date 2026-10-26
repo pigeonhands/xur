@@ -54,6 +54,11 @@ impl ItemIndex {
     pub fn get(&self, def: DefId) -> Option<ItemRef> {
         self.items.get(&def).copied()
     }
+
+    /// Every indexed definition.
+    pub fn iter(&self) -> impl Iterator<Item = (DefId, ItemRef)> + '_ {
+        self.items.iter().map(|(&def, &item)| (def, item))
+    }
 }
 
 struct Indexer<'a> {

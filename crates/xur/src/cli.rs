@@ -12,6 +12,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Run a program's `main` function.
+    Run {
+        /// The root `.xur` file of the program.
+        file: PathBuf,
+    },
     /// Inspect the output of individual compiler stages.
     #[command(subcommand)]
     Debug(DebugCommand),
@@ -31,6 +36,11 @@ pub enum DebugCommand {
     },
     /// Print what every name in a program resolves to, following imports.
     Resolve {
+        /// The root `.xur` file of the program.
+        file: PathBuf,
+    },
+    /// Print the bytecode of every function in a source file.
+    Bytecode {
         /// The root `.xur` file of the program.
         file: PathBuf,
     },

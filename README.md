@@ -41,7 +41,7 @@ pub fn add(a: u32, b: u32) -> u32 {
 }
 
 fn print_name<T>() {
-    std::io::print("Struct name: {}", std::any::type_name::<T>());
+    std::io::println("Struct name: {}", std::any::type_name::<T>());
 }
 
 print_name::<ZeroPacked>();
