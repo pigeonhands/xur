@@ -1,7 +1,8 @@
 //! Read-only traversal of the AST, after `rustc_ast::visit`.
 //!
 //! Each `visit_*` method defaults to the matching `walk_*` function, which
-//! visits the node's children. A pass overrides the methods for the nodes it
+//! visits the node's children. As in rustc, the visitor is parameterised by
+//! the AST's lifetime `'ast`, so it can keep references to what it visits. A pass overrides the methods for the nodes it
 //! cares about and calls `walk_*` itself to keep descending.
 
 use crate::{
@@ -10,69 +11,69 @@ use crate::{
     VariantData,
 };
 
-pub trait Visitor: Sized {
-    fn visit_module(&mut self, module: &Module) {
+pub trait Visitor<'ast>: Sized {
+    fn visit_module(&mut self, module: &'ast Module) {
         walk_module(self, module);
     }
-    fn visit_item(&mut self, item: &Item) {
+    fn visit_item(&mut self, item: &'ast Item) {
         walk_item(self, item);
     }
-    fn visit_generics(&mut self, generics: &Generics) {
+    fn visit_generics(&mut self, generics: &'ast Generics) {
         walk_generics(self, generics);
     }
-    fn visit_generic_param(&mut self, _param: &GenericParam) {}
-    fn visit_fn_decl(&mut self, decl: &FnDecl) {
+    fn visit_generic_param(&mut self, _param: &'ast GenericParam) {}
+    fn visit_fn_decl(&mut self, decl: &'ast FnDecl) {
         walk_fn_decl(self, decl);
     }
-    fn visit_param(&mut self, param: &Param) {
+    fn visit_param(&mut self, param: &'ast Param) {
         walk_param(self, param);
     }
-    fn visit_variant_data(&mut self, data: &VariantData) {
+    fn visit_variant_data(&mut self, data: &'ast VariantData) {
         walk_variant_data(self, data);
     }
-    fn visit_variant(&mut self, variant: &Variant) {
+    fn visit_variant(&mut self, variant: &'ast Variant) {
         walk_variant(self, variant);
     }
-    fn visit_field_def(&mut self, field: &FieldDef) {
+    fn visit_field_def(&mut self, field: &'ast FieldDef) {
         walk_field_def(self, field);
     }
-    fn visit_block(&mut self, block: &Block) {
+    fn visit_block(&mut self, block: &'ast Block) {
         walk_block(self, block);
     }
-    fn visit_stmt(&mut self, stmt: &Stmt) {
+    fn visit_stmt(&mut self, stmt: &'ast Stmt) {
         walk_stmt(self, stmt);
     }
-    fn visit_local(&mut self, local: &Local) {
+    fn visit_local(&mut self, local: &'ast Local) {
         walk_local(self, local);
     }
-    fn visit_expr(&mut self, expr: &Expr) {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
         walk_expr(self, expr);
     }
-    fn visit_arm(&mut self, arm: &Arm) {
+    fn visit_arm(&mut self, arm: &'ast Arm) {
         walk_arm(self, arm);
     }
-    fn visit_pat(&mut self, pat: &Pat) {
+    fn visit_pat(&mut self, pat: &'ast Pat) {
         walk_pat(self, pat);
     }
-    fn visit_ty(&mut self, ty: &Ty) {
+    fn visit_ty(&mut self, ty: &'ast Ty) {
         walk_ty(self, ty);
     }
-    fn visit_path(&mut self, path: &Path) {
+    fn visit_path(&mut self, path: &'ast Path) {
         walk_path(self, path);
     }
-    fn visit_generic_args(&mut self, args: &GenericArgs) {
+    fn visit_generic_args(&mut self, args: &'ast GenericArgs) {
         walk_generic_args(self, args);
     }
 }
 
-pub fn walk_module<V: Visitor>(visitor: &mut V, module: &Module) {
+pub fn walk_module<'a, V: Visitor<'a>>(visitor: &mut V, module: &'a Module) {
     for item in &module.items {
         visitor.visit_item(item);
     }
 }
 
 /// Attributes are not walked: their paths name attributes, not items.
-pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
+pub fn walk_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a Item) {
     match &item.kind {
         ItemKind::Use(tree) => visitor.visit_path(&tree.path),
         ItemKind::Const(item) => {
@@ -106,13 +107,13 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
     }
 }
 
-pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &Generics) {
+pub fn walk_generics<'a, V: Visitor<'a>>(visitor: &mut V, generics: &'a Generics) {
     for param in &generics.params {
         visitor.visit_generic_param(param);
     }
 }
 
-pub fn walk_fn_decl<V: Visitor>(visitor: &mut V, decl: &FnDecl) {
+pub fn walk_fn_decl<'a, V: Visitor<'a>>(visitor: &mut V, decl: &'a FnDecl) {
     for param in &decl.inputs {
         visitor.visit_param(param);
     }
@@ -121,12 +122,12 @@ pub fn walk_fn_decl<V: Visitor>(visitor: &mut V, decl: &FnDecl) {
     }
 }
 
-pub fn walk_param<V: Visitor>(visitor: &mut V, param: &Param) {
+pub fn walk_param<'a, V: Visitor<'a>>(visitor: &mut V, param: &'a Param) {
     visitor.visit_pat(&param.pat);
     visitor.visit_ty(&param.ty);
 }
 
-pub fn walk_variant_data<V: Visitor>(visitor: &mut V, data: &VariantData) {
+pub fn walk_variant_data<'a, V: Visitor<'a>>(visitor: &mut V, data: &'a VariantData) {
     match data {
         VariantData::Struct(fields) | VariantData::Tuple(fields) => {
             for field in fields {
@@ -137,21 +138,21 @@ pub fn walk_variant_data<V: Visitor>(visitor: &mut V, data: &VariantData) {
     }
 }
 
-pub fn walk_variant<V: Visitor>(visitor: &mut V, variant: &Variant) {
+pub fn walk_variant<'a, V: Visitor<'a>>(visitor: &mut V, variant: &'a Variant) {
     visitor.visit_variant_data(&variant.data);
 }
 
-pub fn walk_field_def<V: Visitor>(visitor: &mut V, field: &FieldDef) {
+pub fn walk_field_def<'a, V: Visitor<'a>>(visitor: &mut V, field: &'a FieldDef) {
     visitor.visit_ty(&field.ty);
 }
 
-pub fn walk_block<V: Visitor>(visitor: &mut V, block: &Block) {
+pub fn walk_block<'a, V: Visitor<'a>>(visitor: &mut V, block: &'a Block) {
     for stmt in &block.stmts {
         visitor.visit_stmt(stmt);
     }
 }
 
-pub fn walk_stmt<V: Visitor>(visitor: &mut V, stmt: &Stmt) {
+pub fn walk_stmt<'a, V: Visitor<'a>>(visitor: &mut V, stmt: &'a Stmt) {
     match &stmt.kind {
         StmtKind::Let(local) => visitor.visit_local(local),
         StmtKind::Item(item) => visitor.visit_item(item),
@@ -162,7 +163,7 @@ pub fn walk_stmt<V: Visitor>(visitor: &mut V, stmt: &Stmt) {
 
 /// Visits the initializer before the pattern, since the pattern's bindings
 /// are not in scope in it.
-pub fn walk_local<V: Visitor>(visitor: &mut V, local: &Local) {
+pub fn walk_local<'a, V: Visitor<'a>>(visitor: &mut V, local: &'a Local) {
     if let Some(ty) = &local.ty {
         visitor.visit_ty(ty);
     }
@@ -172,7 +173,7 @@ pub fn walk_local<V: Visitor>(visitor: &mut V, local: &Local) {
     visitor.visit_pat(&local.pat);
 }
 
-pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: &Expr) {
+pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
     match &expr.kind {
         ExprKind::Lit(_) | ExprKind::Continue | ExprKind::Err => {}
         ExprKind::Path(path) => visitor.visit_path(path),
@@ -246,12 +247,12 @@ pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: &Expr) {
     }
 }
 
-pub fn walk_arm<V: Visitor>(visitor: &mut V, arm: &Arm) {
+pub fn walk_arm<'a, V: Visitor<'a>>(visitor: &mut V, arm: &'a Arm) {
     visitor.visit_pat(&arm.pat);
     visitor.visit_expr(&arm.body);
 }
 
-pub fn walk_pat<V: Visitor>(visitor: &mut V, pat: &Pat) {
+pub fn walk_pat<'a, V: Visitor<'a>>(visitor: &mut V, pat: &'a Pat) {
     match &pat.kind {
         PatKind::Wild | PatKind::Ident(_) | PatKind::Lit(_) | PatKind::Err => {}
         PatKind::Path(path) => visitor.visit_path(path),
@@ -270,7 +271,7 @@ pub fn walk_pat<V: Visitor>(visitor: &mut V, pat: &Pat) {
     }
 }
 
-pub fn walk_ty<V: Visitor>(visitor: &mut V, ty: &Ty) {
+pub fn walk_ty<'a, V: Visitor<'a>>(visitor: &mut V, ty: &'a Ty) {
     match &ty.kind {
         TyKind::Path(path) => visitor.visit_path(path),
         TyKind::Tuple(tys) => {
@@ -283,7 +284,7 @@ pub fn walk_ty<V: Visitor>(visitor: &mut V, ty: &Ty) {
     }
 }
 
-pub fn walk_path<V: Visitor>(visitor: &mut V, path: &Path) {
+pub fn walk_path<'a, V: Visitor<'a>>(visitor: &mut V, path: &'a Path) {
     for segment in &path.segments {
         if let Some(args) = &segment.args {
             visitor.visit_generic_args(args);
@@ -291,7 +292,7 @@ pub fn walk_path<V: Visitor>(visitor: &mut V, path: &Path) {
     }
 }
 
-pub fn walk_generic_args<V: Visitor>(visitor: &mut V, args: &GenericArgs) {
+pub fn walk_generic_args<'a, V: Visitor<'a>>(visitor: &mut V, args: &'a GenericArgs) {
     for ty in &args.args {
         visitor.visit_ty(ty);
     }

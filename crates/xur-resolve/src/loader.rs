@@ -116,8 +116,8 @@ pub(crate) fn static_import(expr: &Expr) -> Option<(NodeId, Symbol, Span)> {
 /// Collects the literal-path imports in a module, with paths as written.
 struct ImportFinder(Vec<Import>);
 
-impl Visitor for ImportFinder {
-    fn visit_expr(&mut self, expr: &Expr) {
+impl<'ast> Visitor<'ast> for ImportFinder {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
         if let Some((callee, path, span)) = static_import(expr) {
             self.0.push(Import {
                 callee,

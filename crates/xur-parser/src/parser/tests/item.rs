@@ -203,8 +203,8 @@ fn visitor_reaches_every_path() {
 
     #[derive(Default)]
     struct Paths(Vec<String>);
-    impl Visitor for Paths {
-        fn visit_path(&mut self, path: &xur_ast::Path) {
+    impl<'ast> Visitor<'ast> for Paths {
+        fn visit_path(&mut self, path: &'ast xur_ast::Path) {
             self.0.push(path.show());
             visit::walk_path(self, path);
         }

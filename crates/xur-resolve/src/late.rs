@@ -352,8 +352,8 @@ impl LateResolver<'_, '_> {
     }
 }
 
-impl Visitor for LateResolver<'_, '_> {
-    fn visit_item(&mut self, item: &Item) {
+impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
+    fn visit_item(&mut self, item: &'ast Item) {
         let top_level = std::mem::replace(&mut self.top_level, false);
         match &item.kind {
             ItemKind::Use(tree) => {
@@ -400,14 +400,14 @@ impl Visitor for LateResolver<'_, '_> {
         self.top_level = top_level;
     }
 
-    fn visit_block(&mut self, block: &Block) {
+    fn visit_block(&mut self, block: &'ast Block) {
         self.with_ribs(RibKind::Normal, |this| {
             this.declare_block_items(block);
             visit::walk_block(this, block);
         });
     }
 
-    fn visit_local(&mut self, local: &Local) {
+    fn visit_local(&mut self, local: &'ast Local) {
         if let Some(ty) = &local.ty {
             self.visit_ty(ty);
         }
@@ -430,7 +430,7 @@ impl Visitor for LateResolver<'_, '_> {
         }
     }
 
-    fn visit_expr(&mut self, expr: &Expr) {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
         match &expr.kind {
             ExprKind::Path(path) => {
                 self.resolve_path(path, Namespace::Value);
@@ -457,14 +457,14 @@ impl Visitor for LateResolver<'_, '_> {
         }
     }
 
-    fn visit_arm(&mut self, arm: &Arm) {
+    fn visit_arm(&mut self, arm: &'ast Arm) {
         self.with_ribs(RibKind::Normal, |this| {
             this.resolve_pattern(&arm.pat);
             this.visit_expr(&arm.body);
         });
     }
 
-    fn visit_pat(&mut self, pat: &Pat) {
+    fn visit_pat(&mut self, pat: &'ast Pat) {
         match &pat.kind {
             PatKind::Ident(ident) => {
                 // As in rustc, a lone identifier that names a unit variant,
@@ -487,7 +487,7 @@ impl Visitor for LateResolver<'_, '_> {
         }
     }
 
-    fn visit_ty(&mut self, ty: &Ty) {
+    fn visit_ty(&mut self, ty: &'ast Ty) {
         if let TyKind::Path(path) = &ty.kind {
             self.resolve_path(path, Namespace::Type);
         }

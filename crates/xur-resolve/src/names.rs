@@ -24,8 +24,8 @@ pub fn names(module: &Module) -> Vec<NameRef> {
 
 struct Collector(Vec<NameRef>);
 
-impl Visitor for Collector {
-    fn visit_path(&mut self, path: &Path) {
+impl<'ast> Visitor<'ast> for Collector {
+    fn visit_path(&mut self, path: &'ast Path) {
         self.0.push(NameRef {
             id: path.id,
             span: path.span,
@@ -33,7 +33,7 @@ impl Visitor for Collector {
         visit::walk_path(self, path);
     }
 
-    fn visit_pat(&mut self, pat: &Pat) {
+    fn visit_pat(&mut self, pat: &'ast Pat) {
         if let PatKind::Ident(_) = pat.kind {
             self.0.push(NameRef {
                 id: pat.id,
