@@ -6,10 +6,9 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use xur_ast::visit::{self, Visitor};
-use xur_span::{FileLoader, Span};
+use xur_span::FileLoader;
 
-use crate::{Crate, Res, Resolutions, load_crate, resolve};
+use crate::{Crate, Resolutions, load_crate, names, resolve};
 
 /// Serves files from memory.
 #[derive(Default)]
@@ -77,52 +76,20 @@ impl Resolved {
 
     /// Like [`Self::res_of`], for the `n`th (from 0) occurrence of `text`.
     pub(crate) fn res_of_nth(&self, text: &str, n: usize) -> String {
-        let mut names = Names(Vec::new());
+        let source_map = &self.krate.source_map;
         let prelude = self.krate.module(self.krate.prelude);
-        for module in &self.krate.modules {
-            if !std::ptr::eq(module, prelude) {
-                names.visit_module(&module.ast);
-            }
-        }
-        let (_, id) = names
-            .0
-            .into_iter()
-            .filter(|&(span, _)| self.krate.source_map.slice(span) == text)
+        let name = self
+            .krate
+            .modules
+            .iter()
+            .filter(|module| !std::ptr::eq(*module, prelude))
+            .flat_map(|module| names(&module.ast))
+            .filter(|name| source_map.slice(name.span) == text)
             .nth(n)
             .unwrap_or_else(|| panic!("no occurrence {n} of `{text}`"));
-        match self.resolutions.res.get(&id) {
+        match self.resolutions.res.get(&name.id) {
             None => "unresolved".to_owned(),
-            Some(&res) => self.describe(res),
+            Some(&res) => self.resolutions.describe(res, source_map),
         }
-    }
-
-    pub(crate) fn describe(&self, res: Res) -> String {
-        match res {
-            Res::Def(kind, def) => format!("{} {}", kind.descr(), self.resolutions.def_path(def)),
-            Res::Local(id) => {
-                let ident = self.resolutions.locals[&id];
-                let pos = self.krate.source_map.describe_pos(ident.span);
-                format!("local {ident} at {pos}")
-            }
-            Res::PrimTy(ty) => format!("builtin type {}", ty.name()),
-            Res::Err => "error".to_owned(),
-        }
-    }
-}
-
-/// Collects every path and identifier pattern in a module, with node ids.
-struct Names(Vec<(Span, xur_ast::NodeId)>);
-
-impl Visitor for Names {
-    fn visit_path(&mut self, path: &xur_ast::Path) {
-        self.0.push((path.span, path.id));
-        visit::walk_path(self, path);
-    }
-
-    fn visit_pat(&mut self, pat: &xur_ast::Pat) {
-        if let xur_ast::PatKind::Ident(_) = pat.kind {
-            self.0.push((pat.span, pat.id));
-        }
-        visit::walk_pat(self, pat);
     }
 }

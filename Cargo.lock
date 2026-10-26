@@ -262,6 +262,7 @@ dependencies = [
  "xur-ast",
  "xur-errors",
  "xur-parser",
+ "xur-resolve",
  "xur-span",
 ]
 

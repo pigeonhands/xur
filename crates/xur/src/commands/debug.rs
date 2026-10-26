@@ -3,11 +3,12 @@
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use xur_ast::NodeIdGen;
 use xur_errors::Diag;
 use xur_parser::{Lexer, Token};
-use xur_span::{SourceFile, SourceMap};
+use xur_resolve::{Crate, Res, Resolutions};
+use xur_span::{RealFileLoader, SourceFile, SourceMap};
 
 use crate::cli::DebugCommand;
 use crate::{diagnostics, source};
@@ -16,6 +17,7 @@ pub fn run(command: DebugCommand) -> Result<()> {
     match command {
         DebugCommand::Tokens { file } => tokens(&file),
         DebugCommand::Ast { file } => ast(&file),
+        DebugCommand::Resolve { file } => resolve(&file),
     }
 }
 
@@ -29,7 +31,7 @@ fn tokens(path: &Path) -> Result<()> {
     ignore_broken_pipe(write_token_table(&mut out, &file, &tokens))?;
 
     let diags: Vec<_> = errors.into_iter().map(Diag::from).collect();
-    fail_on_errors(&source_map, &file, diags, "lex")
+    fail_on_errors(&source_map, &file.name, diags, "lex")
 }
 
 /// Prints the module's syntax tree, like rustc's `-Zunpretty=ast-tree`.
@@ -43,23 +45,57 @@ fn ast(path: &Path) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
     ignore_broken_pipe(writeln!(out, "{module:#?}").and_then(|()| out.flush()))?;
 
-    fail_on_errors(&source_map, &file, diags, "parse")
+    fail_on_errors(&source_map, &file.name, diags, "parse")
 }
 
-/// Reports `diags`, failing if there were any. `root` is the file the
+/// Loads the program rooted at `path` and prints, for each module, every
+/// path and identifier pattern with what it resolves to.
+fn resolve(path: &Path) -> Result<()> {
+    let (krate, mut diags) = xur_resolve::load_crate(path, &RealFileLoader)
+        .with_context(|| format!("failed to read `{}`", path.display()))?;
+    let (resolutions, resolve_diags) = xur_resolve::resolve(&krate);
+    diags.extend(resolve_diags);
+
+    let mut out = BufWriter::new(io::stdout().lock());
+    ignore_broken_pipe(write_resolutions(&mut out, &krate, &resolutions))?;
+
+    let root = &krate.module(krate.root).path.display().to_string();
+    fail_on_errors(&krate.source_map, root, diags, "resolve")
+}
+
+/// Reports `diags`, failing if there were any. `root` names the file the
 /// command was run on.
-fn fail_on_errors(
-    source_map: &SourceMap,
-    root: &SourceFile,
-    diags: Vec<Diag>,
-    stage: &str,
-) -> Result<()> {
+fn fail_on_errors(source_map: &SourceMap, root: &str, diags: Vec<Diag>, stage: &str) -> Result<()> {
     if diags.is_empty() {
         return Ok(());
     }
     let count = diags.len();
     diagnostics::emit(source_map, diags)?;
-    bail!("could not {stage} `{}` due to {count} error(s)", root.name)
+    bail!("could not {stage} `{root}` due to {count} error(s)")
+}
+
+/// One row per name, module by module (the prelude is left out):
+/// position, the name as written, and what it resolves to.
+fn write_resolutions(
+    out: &mut impl Write,
+    krate: &Crate,
+    resolutions: &Resolutions,
+) -> io::Result<()> {
+    let source_map = &krate.source_map;
+    let prelude = krate.module(krate.prelude);
+    for module in krate.modules.iter().filter(|m| !std::ptr::eq(*m, prelude)) {
+        for name in xur_resolve::names(&module.ast) {
+            let position = source_map.describe_pos(name.span);
+            let text = source_map.slice(name.span);
+            let meaning = match resolutions.res.get(&name.id) {
+                Some(&Res::Local(id)) if id == name.id => "new local".to_owned(),
+                Some(&res) => resolutions.describe(res, source_map),
+                None => "unresolved".to_owned(),
+            };
+            writeln!(out, "{position:<22} {text:<28} {meaning}")?;
+        }
+    }
+    out.flush()
 }
 
 fn write_token_table(

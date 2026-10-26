@@ -29,4 +29,9 @@ pub enum DebugCommand {
         /// The `.xur` file to parse.
         file: PathBuf,
     },
+    /// Print what every name in a program resolves to, following imports.
+    Resolve {
+        /// The root `.xur` file of the program.
+        file: PathBuf,
+    },
 }

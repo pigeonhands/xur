@@ -17,6 +17,7 @@ mod ident;
 mod imports;
 mod late;
 mod loader;
+mod names;
 mod scope;
 mod std_lib;
 
@@ -31,6 +32,7 @@ use xur_span::Ident;
 
 pub use def::{Builtin, DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
 pub use loader::{Crate, LoadedModule, ModuleIdx, load_crate};
+pub use names::{NameRef, names};
 
 use imports::Import;
 use scope::Scope;

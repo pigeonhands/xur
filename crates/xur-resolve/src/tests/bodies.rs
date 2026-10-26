@@ -13,9 +13,9 @@ fn params_and_locals() {
 fn shadowing() {
     let resolved = resolve_src("fn f() {\n    let x = 1;\n    let x = x;\n    x\n}");
     resolved.assert_no_errors();
-    // Occurrences in visiting order: binding, initializer, binding, tail.
+    // Occurrences in source order: binding, binding, initializer, tail.
     // The initializer sees the first `x`; the tail sees the second.
-    assert_eq!(resolved.res_of_nth("x", 1), "local x at main.xur:2:9");
+    assert_eq!(resolved.res_of_nth("x", 2), "local x at main.xur:2:9");
     assert_eq!(resolved.res_of_nth("x", 3), "local x at main.xur:3:9");
 }
 
