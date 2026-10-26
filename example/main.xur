@@ -70,6 +70,14 @@ fn main() {
         Err(_) => io::println("something else went wrong"),
     }
 
+    // `std::import` is an ordinary function: it takes any string, and the
+    // module it returns is a value that can be stored like anything else.
+    let plugin = "./math.xur";
+    let modules = [math, std::import(plugin)];
+    for m in modules {
+        io::println("2 + 3 = {}", m.add(2, 3));
+    }
+
     io::println("area = {}", area(Shape::Rect(2.0, 3.5)));
     print_name::<ZeroPacked>();
 }

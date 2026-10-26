@@ -23,6 +23,16 @@ fn main() {
 }
 ```
 
+`std::import` is an ordinary function, so the path can be computed at
+runtime and the module stored like any other value:
+
+```rust
+let modules = [math, std::import(plugin_path)];
+for m in modules {
+    io::println("2 + 3 = {}", m.add(2, 3));
+}
+```
+
 ### Functions and generics
 
 ```rust
