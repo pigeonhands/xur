@@ -1,5 +1,6 @@
 //! Running Xur programs.
 
+pub mod convert;
 mod error;
 mod lang;
 mod value;
