@@ -304,10 +304,18 @@ fn test_keyword_display() {
 }
 
 #[test]
-fn test_example_main_file() {
-    let content = std::fs::read_to_string("../../example/main.xur").expect("read example/main.xur");
-    let kinds = lex(&content);
-    assert_eq!(kinds.last(), Some(&TokenKind::Eof));
+fn test_examples_lex_cleanly() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../example");
+    let mut count = 0;
+    for entry in std::fs::read_dir(dir).expect("read example dir") {
+        let path = entry.expect("read example entry").path();
+        if path.extension().is_some_and(|ext| ext == "xur") {
+            let src = std::fs::read_to_string(&path).expect("read example file");
+            assert_eq!(Lexer::new(&src).tokenise().1, [], "lex errors in {path:?}");
+            count += 1;
+        }
+    }
+    assert!(count > 0, "no examples found in {dir}");
 }
 
 #[test]

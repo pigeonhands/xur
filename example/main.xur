@@ -14,12 +14,32 @@ struct ZeroPacked {
     b: u32
 }
 
-#[repr(allign(4))] // struct layout is packed with zero padding / 1-byte alignment
+#[repr(align(4))] // struct layout is aligned to 4 bytes
 #[endian(Little)]
-struct ZeroPacked {
+struct Aligned {
     a: u32
     b: u32
     #[field(offset=100)] c: u32 // at 100 bytes from start of struct
+}
+
+// enum variants can carry data
+enum Shape {
+    Circle(f64)
+    Rect(f64, f64)
+}
+
+// `match` is an expression; each arm produces a value
+fn area(shape: Shape) -> f64 {
+    match shape {
+        Shape::Circle(r) => 3.14159 * r * r,
+        Shape::Rect(w, h) => w * h,
+    }
+}
+
+// `?` returns early with the `Err`, otherwise unwraps the `Ok` value
+fn average(total: u32, count: u32) -> Result<u32, math::MathError> {
+    let avg = math.div(total, count)?;
+    Ok(avg)
 }
 
 fn print_name<T>(s: T) {
@@ -31,7 +51,25 @@ fn main() {
 
     io::println("Hello, World");
     for i in 0..10 {
-        io::println("1 + {} = {}", i, math.add(1, i));
+        let parity = if i % 2 == 0 { "even" } else { "odd" };
+        io::println("1 + {} = {} ({})", i, math.add(1, i), parity);
     }
+
+    // closures, with an expression or a block body
+    let double = |x: u32| x * 2;
+    let offset = 10;
+    let shift = |x| {
+        let y = double(x);
+        y + offset // captures `offset`
+    };
+    io::println("shift(4) = {}", shift(4));
+
+    match average(10, 0) {
+        Ok(avg) => io::println("average = {}", avg),
+        Err(math::MathError::DivideByZero) => io::println("cannot average zero items"),
+        Err(_) => io::println("something else went wrong"),
+    }
+
+    io::println("area = {}", area(Shape::Rect(2.0, 3.5)));
     print_name::<ZeroPacked>();
 }

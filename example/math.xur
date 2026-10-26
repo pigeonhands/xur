@@ -1,4 +1,20 @@
+pub enum MathError {
+    DivideByZero
+    Overflow
+}
 
 pub fn add(a: u32, b: u32) -> u32 {
     a + b
+}
+
+// `Result` is an ordinary enum from the std prelude:
+//     enum Result<T, E> { Ok(T) Err(E) }
+//
+// `if` is an expression, so its value is the function's result.
+pub fn div(a: u32, b: u32) -> Result<u32, MathError> {
+    if b == 0 {
+        Err(MathError::DivideByZero)
+    } else {
+        Ok(a / b)
+    }
 }
