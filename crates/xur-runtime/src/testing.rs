@@ -1,7 +1,6 @@
 //! A stand-in for the interpreter, for unit-testing native functions
 //! without running a program. Enabled by the `testing` feature.
 
-use std::io::Write;
 use std::path::Path;
 
 use xur_resolve::{NativeFnId, NativeModule, Program};
@@ -76,8 +75,9 @@ impl Context for TestCx<'_> {
         &self.type_args
     }
 
-    fn stdout(&mut self) -> &mut dyn Write {
-        &mut self.stdout
+    fn print(&mut self, text: &str) -> RunResult<()> {
+        self.stdout.extend_from_slice(text.as_bytes());
+        Ok(())
     }
 }
 

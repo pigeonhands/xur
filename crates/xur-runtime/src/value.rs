@@ -43,6 +43,10 @@ pub enum Value {
     Ctor(DefId),
     /// A function implemented in Rust.
     NativeFn(NativeFnId),
+    /// A closure: code owned by the engine running it, and what it captured.
+    Closure(Arc<Closure>),
+    /// An iterator, from iterating a list or range or from a native function.
+    Iterator(Arc<ValueIter>),
     /// A module: modules are values.
     Module(DefId),
     /// `a..b`, `a..=b`, `a..`, `..b` over integers.
@@ -55,6 +59,37 @@ pub struct Adt {
     /// The struct or variant.
     pub ctor: DefId,
     pub fields: Vec<Value>,
+}
+
+/// A closure value.
+#[derive(Debug)]
+pub struct Closure {
+    /// The closure's code, in whatever form the engine running it uses.
+    pub code: Arc<dyn Any + Send + Sync>,
+    /// The values of the variables it captured when it was created.
+    pub captures: Vec<Value>,
+    /// The type arguments in effect where it was created.
+    pub type_args: Vec<String>,
+}
+
+/// A shared iterator over values.
+pub struct ValueIter(Mutex<Box<dyn Iterator<Item = Value> + Send>>);
+
+impl ValueIter {
+    pub fn new(iter: impl Iterator<Item = Value> + Send + 'static) -> Self {
+        Self(Mutex::new(Box::new(iter)))
+    }
+
+    #[allow(clippy::should_implement_trait)] // it is shared, so `&self`
+    pub fn next(&self) -> Option<Value> {
+        lock(&self.0).next()
+    }
+}
+
+impl fmt::Debug for ValueIter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ValueIter")
+    }
 }
 
 /// A value of a registered Rust type. Methods registered as taking
@@ -149,6 +184,8 @@ impl Value {
             Self::Native(_) => "native object",
             Self::Record(_) => "record",
             Self::Fn(_) | Self::NativeFn(_) => "function",
+            Self::Closure(_) => "closure",
+            Self::Iterator(_) => "iterator",
             Self::Ctor(_) => "constructor",
             Self::Module(_) => "module",
             Self::Range(_) => "range",
@@ -205,6 +242,8 @@ impl PartialEq for Value {
             (Self::Module(a), Self::Module(b)) => a == b,
             (Self::NativeFn(a), Self::NativeFn(b)) => a == b,
             (Self::Range(a), Self::Range(b)) => a == b,
+            (Self::Closure(a), Self::Closure(b)) => Arc::ptr_eq(a, b),
+            (Self::Iterator(a), Self::Iterator(b)) => Arc::ptr_eq(a, b),
             _ => false,
         }
     }

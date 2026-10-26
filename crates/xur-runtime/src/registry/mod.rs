@@ -32,7 +32,6 @@ mod into_native;
 mod tests;
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use facet::{Peek, Shape};
@@ -59,8 +58,8 @@ pub trait Context: ConvertCx {
     /// The names of the generic arguments the native function was called
     /// with, as in `type_name::<T>()`.
     fn type_args(&self) -> &[String];
-    /// Where the program's standard output goes.
-    fn stdout(&mut self) -> &mut dyn Write;
+    /// Writes `text` to the program's standard output.
+    fn print(&mut self, text: &str) -> RunResult<()>;
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;

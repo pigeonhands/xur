@@ -21,9 +21,7 @@ fn print(cx: &mut dyn Context, args: &[Value], end: &str) -> RunResult<Value> {
     };
     let mut text = format(cx, template, args)?;
     text.push_str(end);
-    cx.stdout()
-        .write_all(text.as_bytes())
-        .map_err(|error| RuntimeError::new(format!("failed to write to stdout: {error}")))?;
+    cx.print(&text)?;
     Ok(Value::Unit)
 }
 
