@@ -24,6 +24,8 @@ pub enum Keyword {
     Break,
     Continue,
     Struct,
+    Enum,
+    Match,
     True,
     False,
 }
@@ -40,6 +42,8 @@ pub enum TokenKind<'src> {
     // --- Identifiers & keywords ---
     Ident(&'src str),
     Keyword(Keyword),
+    /// A lone `_`, used as a wildcard pattern. `_name` is an `Ident`.
+    Underscore,
 
     // --- Delimiters ---
     LParen,
@@ -56,10 +60,11 @@ pub enum TokenKind<'src> {
     DotDot,
     DotDotEq,
     ColonColon,
-    ColonColonLt,
     Colon,
     Hash,
     Arrow,
+    FatArrow,
+    Question,
 
     // --- Operators ---
     Eq,
@@ -76,6 +81,7 @@ pub enum TokenKind<'src> {
     Slash,
     Percent,
     AmpAmp,
+    Pipe,
     PipePipe,
 
     /// Malformed input. The lexer keeps going after producing one of these.
@@ -93,6 +99,7 @@ impl fmt::Display for TokenKind<'_> {
             Self::FloatLit(_) => "<float>",
             Self::Ident(_) => "<ident>",
             Self::Keyword(keyword) => return keyword.fmt(f),
+            Self::Underscore => "_",
             Self::LParen => "(",
             Self::RParen => ")",
             Self::LBrace => "{",
@@ -105,10 +112,11 @@ impl fmt::Display for TokenKind<'_> {
             Self::DotDot => "..",
             Self::DotDotEq => "..=",
             Self::ColonColon => "::",
-            Self::ColonColonLt => "::<",
             Self::Colon => ":",
             Self::Hash => "#",
             Self::Arrow => "->",
+            Self::FatArrow => "=>",
+            Self::Question => "?",
             Self::Eq => "=",
             Self::EqEq => "==",
             Self::BangEq => "!=",
@@ -123,6 +131,7 @@ impl fmt::Display for TokenKind<'_> {
             Self::Slash => "/",
             Self::Percent => "%",
             Self::AmpAmp => "&&",
+            Self::Pipe => "|",
             Self::PipePipe => "||",
             Self::Error(_) => "<error>",
             Self::Eof => "<eof>",

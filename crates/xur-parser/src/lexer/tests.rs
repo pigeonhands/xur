@@ -250,7 +250,8 @@ fn test_turbofish() {
         kinds,
         vec![
             id("print_name"),
-            TokenKind::ColonColonLt,
+            TokenKind::ColonColon,
+            TokenKind::Lt,
             id("ZeroPacked"),
             TokenKind::Gt,
             TokenKind::LParen,
@@ -293,7 +294,9 @@ fn test_keyword_display() {
     assert_eq!(TokenKind::Keyword(Keyword::Struct).to_string(), "struct");
     assert_eq!(TokenKind::Ident("foo").to_string(), "<ident>");
     assert_eq!(TokenKind::ColonColon.to_string(), "::");
-    assert_eq!(TokenKind::ColonColonLt.to_string(), "::<");
+    assert_eq!(TokenKind::FatArrow.to_string(), "=>");
+    assert_eq!(TokenKind::Pipe.to_string(), "|");
+    assert_eq!(TokenKind::Underscore.to_string(), "_");
     assert_eq!(TokenKind::Hash.to_string(), "#");
     assert_eq!(TokenKind::Arrow.to_string(), "->");
     assert_eq!(TokenKind::LBrace.to_string(), "{");
@@ -384,6 +387,109 @@ fn test_all_errors_are_reported() {
             LexErrorKind::UnexpectedChar('$'),
             LexErrorKind::UnterminatedString,
             LexErrorKind::UnexpectedChar('@'),
+        ]
+    );
+}
+
+#[test]
+fn test_closure() {
+    assert_eq!(
+        lex("|x: u32| x + 1"),
+        [
+            TokenKind::Pipe,
+            id("x"),
+            TokenKind::Colon,
+            id("u32"),
+            TokenKind::Pipe,
+            id("x"),
+            TokenKind::Plus,
+            TokenKind::IntLit(1),
+            TokenKind::Eof,
+        ]
+    );
+    assert_eq!(
+        lex("|| a || b"),
+        [
+            TokenKind::PipePipe,
+            id("a"),
+            TokenKind::PipePipe,
+            id("b"),
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_match_arms() {
+    assert_eq!(
+        lex("match r { Ok(v) => v, _ => 0 }"),
+        [
+            kw(Keyword::Match),
+            id("r"),
+            TokenKind::LBrace,
+            id("Ok"),
+            TokenKind::LParen,
+            id("v"),
+            TokenKind::RParen,
+            TokenKind::FatArrow,
+            id("v"),
+            TokenKind::Comma,
+            TokenKind::Underscore,
+            TokenKind::FatArrow,
+            TokenKind::IntLit(0),
+            TokenKind::RBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_underscore_prefixed_ident() {
+    assert_eq!(
+        lex("_ _x __"),
+        [TokenKind::Underscore, id("_x"), id("__"), TokenKind::Eof]
+    );
+}
+
+#[test]
+fn test_try_operator() {
+    assert_eq!(
+        lex("parse(s)?"),
+        [
+            id("parse"),
+            TokenKind::LParen,
+            id("s"),
+            TokenKind::RParen,
+            TokenKind::Question,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_enum_declaration() {
+    assert_eq!(
+        lex("pub enum Result<T, E> { Ok(T) Err(E) }"),
+        [
+            kw(Keyword::Pub),
+            kw(Keyword::Enum),
+            id("Result"),
+            TokenKind::Lt,
+            id("T"),
+            TokenKind::Comma,
+            id("E"),
+            TokenKind::Gt,
+            TokenKind::LBrace,
+            id("Ok"),
+            TokenKind::LParen,
+            id("T"),
+            TokenKind::RParen,
+            id("Err"),
+            TokenKind::LParen,
+            id("E"),
+            TokenKind::RParen,
+            TokenKind::RBrace,
+            TokenKind::Eof,
         ]
     );
 }

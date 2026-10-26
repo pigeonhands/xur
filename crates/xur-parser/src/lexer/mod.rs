@@ -91,14 +91,9 @@ impl<'src> Lexer<'src> {
             '*' => TokenKind::Star,
             '/' => TokenKind::Slash,
             '%' => TokenKind::Percent,
+            '?' => TokenKind::Question,
 
-            ':' if c.eat(':') => {
-                if c.eat('<') {
-                    TokenKind::ColonColonLt
-                } else {
-                    TokenKind::ColonColon
-                }
-            }
+            ':' if c.eat(':') => TokenKind::ColonColon,
             ':' => TokenKind::Colon,
             '.' if c.eat('.') => {
                 if c.eat('=') {
@@ -111,6 +106,7 @@ impl<'src> Lexer<'src> {
             '-' if c.eat('>') => TokenKind::Arrow,
             '-' => TokenKind::Minus,
             '=' if c.eat('=') => TokenKind::EqEq,
+            '=' if c.eat('>') => TokenKind::FatArrow,
             '=' => TokenKind::Eq,
             '!' if c.eat('=') => TokenKind::BangEq,
             '!' => TokenKind::Bang,
@@ -120,6 +116,7 @@ impl<'src> Lexer<'src> {
             '>' => TokenKind::Gt,
             '&' if c.eat('&') => TokenKind::AmpAmp,
             '|' if c.eat('|') => TokenKind::PipePipe,
+            '|' => TokenKind::Pipe,
 
             other => TokenKind::Error(LexErrorKind::UnexpectedChar(other)),
         }
@@ -211,8 +208,10 @@ impl<'src> Lexer<'src> {
 
     fn lex_ident(&mut self, start: usize) -> TokenKind<'src> {
         self.cursor.eat_while(unicode_ident::is_xid_continue);
-        let name = self.cursor.slice_from(start);
-        Keyword::try_from(name).map_or(TokenKind::Ident(name), TokenKind::Keyword)
+        match self.cursor.slice_from(start) {
+            "_" => TokenKind::Underscore,
+            name => Keyword::try_from(name).map_or(TokenKind::Ident(name), TokenKind::Keyword),
+        }
     }
 }
 
