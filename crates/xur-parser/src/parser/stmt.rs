@@ -77,7 +77,7 @@ impl Parser<'_> {
         } else {
             None
         };
-        self.expect(TokenKind::Semi)?;
+        self.expect_semi()?;
         Ok(Local {
             pat,
             ty,
@@ -94,12 +94,13 @@ impl Parser<'_> {
             ..Restrictions::default()
         })?);
         if self.eat(TokenKind::Semi) {
-            Ok(StmtKind::Semi(expr))
-        } else if expr.is_block_like() || self.check(TokenKind::RBrace) {
-            Ok(StmtKind::Expr(expr))
-        } else {
-            Err(self.unexpected())
+            return Ok(StmtKind::Semi(expr));
         }
+        if expr.is_block_like() || self.check(TokenKind::RBrace) {
+            return Ok(StmtKind::Expr(expr));
+        }
+        self.expect_semi()?;
+        Ok(StmtKind::Semi(expr))
     }
 
     /// Skips to the end of the current statement: past the next `;`, or up

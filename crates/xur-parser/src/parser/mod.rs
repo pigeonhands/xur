@@ -242,14 +242,35 @@ impl<'src> Parser<'src> {
 
         // As in rustc: if the unexpected token starts a new line, the problem
         // is most likely something missing at the end of the previous one.
-        let gap = &self.src[self.prev_token.span.end..self.token.span.start];
-        if self.prev_token.span != Span::default() && gap.contains('\n') {
+        if self.token_starts_line() {
             let missing = self.prev_token.span.shrink_to_hi();
             Diag::error(message, missing)
                 .with_label(missing, label)
                 .with_label(self.token.span, "unexpected token")
         } else {
             Diag::error(message, self.token.span).with_label(self.token.span, label)
+        }
+    }
+
+    /// Whether a line break separates the current token from the previous one.
+    fn token_starts_line(&self) -> bool {
+        let gap = &self.src[self.prev_token.span.end..self.token.span.start];
+        self.prev_token.span != Span::default() && gap.contains('\n')
+    }
+
+    /// Expects a `;`. As in rustc, a `;` missing at the end of a line is
+    /// reported but otherwise treated as present, so parsing continues with
+    /// the next line instead of skipping it.
+    fn expect_semi(&mut self) -> PResult<()> {
+        if self.eat(TokenKind::Semi) {
+            return Ok(());
+        }
+        let diag = self.unexpected();
+        if self.token_starts_line() {
+            self.report(diag);
+            Ok(())
+        } else {
+            Err(diag)
         }
     }
 

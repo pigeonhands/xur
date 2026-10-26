@@ -166,7 +166,7 @@ impl Parser<'_> {
     fn parse_use_tree(&mut self) -> PResult<UseTree> {
         let path = self.parse_path(PathStyle::Mod)?;
         let span = path.span;
-        self.expect(TokenKind::Semi)?;
+        self.expect_semi()?;
         Ok(UseTree { path, span })
     }
 
@@ -180,7 +180,7 @@ impl Parser<'_> {
         };
         self.expect(TokenKind::Eq)?;
         let expr = Box::new(self.parse_expr()?);
-        self.expect(TokenKind::Semi)?;
+        self.expect_semi()?;
         Ok(ConstItem { ident, ty, expr })
     }
 
@@ -242,7 +242,7 @@ impl Parser<'_> {
             Ok(VariantData::Struct(self.parse_record_fields()?))
         } else if self.eat(TokenKind::LParen) {
             let fields = self.parse_tuple_fields()?;
-            self.expect(TokenKind::Semi)?;
+            self.expect_semi()?;
             Ok(VariantData::Tuple(fields))
         } else if self.eat(TokenKind::Semi) {
             Ok(VariantData::Unit)

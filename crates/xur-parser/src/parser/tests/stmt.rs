@@ -72,6 +72,20 @@ fn missing_semicolon_is_recovered() {
 }
 
 #[test]
+fn missing_semicolon_at_end_of_line_is_assumed() {
+    let (block, errors) = block_with_errors("{\n    let x = 1\n    x = 2\n    y\n}");
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert_eq!(block, "{ let x = 1; (x = 2); y }");
+}
+
+#[test]
+fn errors_after_a_missing_semicolon_are_still_found() {
+    let (_, errors) = block_with_errors("{\n    let x = 1\n    let y = a < b < c;\n}");
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert_eq!(errors[1], "comparison operators cannot be chained");
+}
+
+#[test]
 fn every_bad_statement_is_reported() {
     let (block, errors) = block_with_errors("{ a b; f(1 2); ok(); }");
     assert_eq!(errors.len(), 2, "{errors:?}");
