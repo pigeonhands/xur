@@ -47,7 +47,7 @@ fn print_name<T>(s: T) {
 print_name::<ZeroPacked>();
 ```
 
-### `if` and `match` are expressions
+### `if` and `match` are expressions, and `impl` adds methods
 
 ```rust
 let parity = if i % 2 == 0 { "even" } else { "odd" };
@@ -57,10 +57,18 @@ enum Shape {
     Rect(f64, f64)
 }
 
-fn area(shape: Shape) -> f64 {
-    match shape {
-        Shape::Circle(r) => 3.14159 * r * r,
-        Shape::Rect(w, h) => w * h,
+impl Shape {
+    // a method, called on a value: `shape.area()`
+    pub fn area(self) -> f64 {
+        match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rect(w, h) => w * h,
+        }
+    }
+
+    // an associated function, called on the type: `Shape::square(2.0)`
+    pub fn square(side: f64) -> Self {
+        Shape::Rect(side, side)
     }
 }
 ```

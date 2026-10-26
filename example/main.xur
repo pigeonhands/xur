@@ -28,11 +28,19 @@ enum Shape {
     Rect(f64, f64)
 }
 
-// `match` is an expression; each arm produces a value
-fn area(shape: Shape) -> f64 {
-    match shape {
-        Shape::Circle(r) => 3.14159 * r * r,
-        Shape::Rect(w, h) => w * h,
+impl Shape {
+    // a method, called on a value: `shape.area()`
+    pub fn area(self) -> f64 {
+        // `match` is an expression; each arm produces a value
+        match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rect(w, h) => w * h,
+        }
+    }
+
+    // an associated function, called on the type: `Shape::square(2.0)`
+    pub fn square(side: f64) -> Self {
+        Shape::Rect(side, side)
     }
 }
 
@@ -78,6 +86,7 @@ fn main() {
         io::println("2 + 3 = {}", m.add(2, 3));
     }
 
-    io::println("area = {}", area(Shape::Rect(2.0, 3.5)));
+    io::println("area = {}", Shape::Rect(2.0, 3.5).area());
+    io::println("square area = {}", Shape::square(2.0).area());
     print_name::<ZeroPacked>();
 }
