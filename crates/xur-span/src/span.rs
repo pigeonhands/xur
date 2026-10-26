@@ -1,7 +1,8 @@
+use std::fmt;
 use std::ops::Range;
 
 /// A half-open byte range `start..end` into the source text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -21,9 +22,26 @@ impl Span {
         self.start == self.end
     }
 
+    /// The span from the start of `self` to the end of `end`.
+    pub fn to(self, end: Span) -> Span {
+        Span::new(self.start, end.end)
+    }
+
+    /// The empty span at the end of `self`.
+    pub fn shrink_to_hi(self) -> Span {
+        Span::new(self.end, self.end)
+    }
+
     /// The source text this span covers.
     pub fn slice<'src>(&self, src: &'src str) -> &'src str {
         &src[self.start..self.end]
+    }
+}
+
+/// Prints as `start..end`, keeping AST dumps compact.
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
     }
 }
 
@@ -43,5 +61,13 @@ mod tests {
         assert_eq!(span.slice("let foo = 1"), "foo");
         assert_eq!(span.len(), 3);
         assert_eq!(Range::from(span), 4..7);
+    }
+
+    #[test]
+    fn span_to_and_shrink() {
+        let span = Span::new(2, 4).to(Span::new(8, 11));
+        assert_eq!(span, Span::new(2, 11));
+        assert_eq!(span.shrink_to_hi(), Span::new(11, 11));
+        assert_eq!(format!("{span:?}"), "2..11");
     }
 }
