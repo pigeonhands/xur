@@ -245,3 +245,29 @@ fn panics_stop_the_program() {
         Err("bad 1".into())
     );
 }
+
+#[test]
+fn files() {
+    let dir = std::env::temp_dir().join(format!("xur-fs-test-{}", std::process::id()));
+    let dir = dir.display().to_string();
+    let src = format!(
+        "fn main() {{
+            let dir = \"{dir}\";
+            std::fs::create_dir_all(dir).unwrap();
+            let path = dir + \"/notes.txt\";
+            std::fs::write(path, \"one\\n\").unwrap();
+            std::fs::append(path, \"two\\n\").unwrap();
+            let file = std::fs::File::open(path).unwrap();
+            std::io::println(\"{{}}\", file.read_to_string().unwrap().lines());
+            std::io::println(\"{{}} {{}}\", std::fs::exists(path), std::fs::read_dir(dir).unwrap());
+            std::fs::remove(path).unwrap();
+            std::io::println(\"{{}}\", std::fs::read_to_string(path).is_err());
+        }}"
+    );
+    let output = run(&src);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        output,
+        Ok("[\"one\", \"two\"]\ntrue [\"notes.txt\"]\ntrue\n".into())
+    );
+}

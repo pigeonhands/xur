@@ -6,6 +6,7 @@
 
 mod any;
 mod fmt;
+mod fs;
 mod io;
 mod list;
 mod math;
@@ -28,6 +29,7 @@ pub fn register(registry: &Registry) {
         .raw_function("import", import)
         .raw_function("panic", panic);
     io::register(registry);
+    fs::register(registry);
     any::register(registry);
     math::register(registry);
     list::register(registry);
@@ -43,6 +45,11 @@ fn import(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             "`std::import` takes a single path string",
         )),
     }
+}
+
+/// How Rust errors appear in Xur: as the `Err` of a `Result`, by message.
+fn error_text(error: impl std::fmt::Display) -> String {
+    error.to_string()
 }
 
 /// `std::panic(format, args...)`: stops the program with a runtime error,

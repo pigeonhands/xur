@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 xur-runtime.workspace = true
+facet.workspace = true
 
 [dev-dependencies]
 xur-runtime = { workspace = true, features = ["testing"] }
