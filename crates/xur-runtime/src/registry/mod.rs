@@ -34,7 +34,9 @@ mod tests;
 use std::io::Write;
 
 use facet::{Peek, Shape};
-use xur_resolve::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId};
+use xur_resolve::{
+    NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
+};
 
 use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
@@ -88,8 +90,13 @@ struct NativeType {
     hooks: TypeHooks,
 }
 
+/// Fills in a lazy module, the first time a program uses it.
+type ModuleInit = Box<dyn FnOnce(&mut ModuleBuilder<'_>) + Send + Sync>;
+
 struct ModuleData {
     name: String,
+    /// For a lazy module not yet needed, what registers its contents.
+    init: Option<ModuleInit>,
     children: Vec<usize>,
     functions: Vec<NativeFnDecl>,
     types: Vec<NativeTypeId>,
@@ -119,6 +126,18 @@ impl Registry {
             module = self.child(Some(module), name);
         }
         ModuleBuilder::new(self, module)
+    }
+
+    /// Registers the module at `path` lazily: `init` registers its contents
+    /// the first time a program looks inside it, so large modules that a
+    /// program doesn't use cost nothing.
+    pub fn lazy_module(
+        &mut self,
+        path: &str,
+        init: impl FnOnce(&mut ModuleBuilder<'_>) + Send + Sync + 'static,
+    ) {
+        let module = self.module(path).module;
+        self.modules[module].init = Some(Box::new(init));
     }
 
     pub fn function(&self, id: NativeFnId) -> &NativeFn {
@@ -188,8 +207,16 @@ impl Registry {
 
     fn decl(&self, module: usize) -> NativeModule {
         let data = &self.modules[module];
+        if data.init.is_some() {
+            return NativeModule {
+                name: data.name.clone(),
+                lazy: true,
+                ..NativeModule::default()
+            };
+        }
         NativeModule {
             name: data.name.clone(),
+            lazy: false,
             functions: data.functions.clone(),
             types: data
                 .types
@@ -223,6 +250,7 @@ impl Registry {
         let module = self.modules.len();
         self.modules.push(ModuleData {
             name: name.to_owned(),
+            init: None,
             children: Vec::new(),
             functions: Vec::new(),
             types: Vec::new(),
@@ -250,5 +278,30 @@ impl Registry {
             name: name.to_owned(),
             id,
         }
+    }
+}
+
+impl NativeProvider for Registry {
+    fn modules(&self) -> Vec<NativeModule> {
+        self.decls()
+    }
+
+    fn expand(&mut self, path: &[String]) -> NativeModule {
+        let mut module: Option<usize> = None;
+        for name in path {
+            let siblings = match module {
+                Some(parent) => &self.modules[parent].children,
+                None => &self.roots,
+            };
+            module = siblings
+                .iter()
+                .copied()
+                .find(|&m| self.modules[m].name == *name);
+        }
+        let module = module.unwrap_or_else(|| panic!("no native module `{}`", path.join("::")));
+        if let Some(init) = self.modules[module].init.take() {
+            init(&mut ModuleBuilder::new(self, module));
+        }
+        self.decl(module)
     }
 }

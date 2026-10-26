@@ -325,7 +325,12 @@ mod tests {
 
     fn cx() -> Cx {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
-        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader), &[]).unwrap();
+        let (program, _) = Program::load(
+            Path::new("main.xur"),
+            Box::new(loader),
+            Box::new(Vec::new()),
+        )
+        .unwrap();
         let mut registry = Registry::new();
         registry.module("geo").ty::<Point>("Point");
         Cx(LangItems::new(&program), registry)

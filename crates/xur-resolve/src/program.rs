@@ -4,7 +4,7 @@ use std::path::Path;
 use xur_errors::Diag;
 use xur_span::FileLoader;
 
-use crate::NativeModule;
+use crate::NativeProvider;
 
 use crate::loader::{Loader, normalize};
 use crate::{Crate, ModuleIdx, Resolutions, resolve_modules};
@@ -17,6 +17,7 @@ use crate::{Crate, ModuleIdx, Resolutions, resolve_modules};
 /// valid.
 pub struct Program {
     pub krate: Crate,
+    natives: Box<dyn NativeProvider>,
     /// Only `None` while a batch of modules is being resolved.
     resolutions: Option<Resolutions>,
     loader: Loader,
@@ -24,14 +25,14 @@ pub struct Program {
 
 impl Program {
     /// Loads and resolves the program rooted at `root`, with the native
-    /// modules `natives` (such as `std`) available by name.
+    /// modules of `natives` (such as `std`) available by name.
     ///
     /// Fails only if `root` itself cannot be read; everything else wrong
     /// with the program is returned as diagnostics.
     pub fn load(
         root: &Path,
         file_loader: Box<dyn FileLoader>,
-        natives: &[NativeModule],
+        mut natives: Box<dyn NativeProvider>,
     ) -> io::Result<(Self, Vec<Diag>)> {
         let src = file_loader.read_file(root)?;
         let mut loader = Loader::new(file_loader);
@@ -40,11 +41,17 @@ impl Program {
         let root = loader.add_tree(&mut krate, normalize(root), src, &mut diags);
         debug_assert_eq!(root, krate.root);
 
-        let (resolutions, resolve_diags) =
-            resolve_modules(&krate, Resolutions::new(natives), 0..krate.modules.len());
+        let resolutions = Resolutions::new(&natives.modules());
+        let (resolutions, resolve_diags) = resolve_modules(
+            &krate,
+            natives.as_mut(),
+            resolutions,
+            0..krate.modules.len(),
+        );
         diags.extend(resolve_diags);
         let program = Self {
             krate,
+            natives,
             resolutions: Some(resolutions),
             loader,
         };
@@ -78,6 +85,7 @@ impl Program {
             .expect("resolutions are only taken while resolving");
         let (resolutions, resolve_diags) = resolve_modules(
             &self.krate,
+            self.natives.as_mut(),
             resolutions,
             first_new..self.krate.modules.len(),
         );

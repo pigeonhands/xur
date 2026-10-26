@@ -95,10 +95,11 @@ impl Resolver<'_> {
 
     /// Walks the module path `rest` from `start`, what the path's first
     /// segment `first` resolved to, and returns the scope to look the
-    /// path's last segment up in. Privacy errors along the way are added to
+    /// path's last segment up in. Lazy native modules along the way are
+    /// expanded. Privacy errors along the way are added to
     /// `privacy` rather than reported, for the caller to report on success.
     pub(crate) fn resolve_prefix(
-        &self,
+        &mut self,
         start: Res,
         first: Ident,
         rest: &[PathSegment],
@@ -107,6 +108,7 @@ impl Resolver<'_> {
     ) -> Lookup<DefId> {
         let mut scope = expect_scope(start, first)?;
         for segment in rest {
+            self.expand_lazy(scope);
             let ident = segment.ident;
             let binding = self
                 .lookup_in_scope(scope, Namespace::Type, ident.name)
@@ -114,6 +116,8 @@ impl Resolver<'_> {
             privacy.extend(self.privacy_error(scope, binding, ident, from));
             scope = expect_scope(binding.res, ident)?;
         }
+        // The caller looks the last segment up in the returned scope.
+        self.expand_lazy(scope);
         Ok(scope)
     }
 

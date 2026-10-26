@@ -269,8 +269,12 @@ mod tests {
 
     fn load(files: &[(&str, &str)]) -> (Crate, Vec<String>) {
         let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
-        let (program, diags) =
-            Program::load(Path::new(files[0].0), loader, &crate::tests::natives()).unwrap();
+        let (program, diags) = Program::load(
+            Path::new(files[0].0),
+            loader,
+            Box::new(crate::tests::natives()),
+        )
+        .unwrap();
         (
             program.krate,
             diags.into_iter().map(|d| d.message).collect(),

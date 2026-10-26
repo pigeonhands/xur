@@ -45,7 +45,12 @@ mod tests {
     #[test]
     fn finds_the_prelude_variants() {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
-        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader), &[]).unwrap();
+        let (program, _) = Program::load(
+            Path::new("main.xur"),
+            Box::new(loader),
+            Box::new(Vec::new()),
+        )
+        .unwrap();
         let lang = LangItems::new(&program);
         let path = |def| program.resolutions().def_path(def);
         assert_eq!(path(lang.some), "Option::Some");

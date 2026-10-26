@@ -19,7 +19,7 @@ pub(crate) struct Resolved {
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
     let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
     let (program, diags) =
-        Program::load(Path::new(files[0].0), loader, &natives()).expect("root exists");
+        Program::load(Path::new(files[0].0), loader, Box::new(natives())).expect("root exists");
     let errors = diags.into_iter().map(|d| d.message).collect();
     Resolved { program, errors }
 }
@@ -75,8 +75,8 @@ pub(crate) fn natives() -> Vec<NativeModule> {
     let module = |name: &str, functions, modules| NativeModule {
         name: name.to_owned(),
         functions,
-        types: Vec::new(),
         modules,
+        ..NativeModule::default()
     };
     let std = module(
         "std",

@@ -10,27 +10,53 @@ use crate::native::{NativeFnDecl, NativeModule};
 use crate::scope::{Binding, Scope, Vis};
 
 /// Creates definitions and scopes for `modules` and everything in them,
-/// returning each top-level module by name.
+/// returning each top-level module by name. Lazy modules are declared empty
+/// and recorded in `lazy` with their paths, for [`populate`].
 pub(crate) fn declare(
     defs: &mut Definitions,
     scopes: &mut HashMap<DefId, Scope>,
+    lazy: &mut HashMap<DefId, Vec<String>>,
     modules: &[NativeModule],
 ) -> HashMap<Symbol, DefId> {
-    let mut declarer = Declarer { defs, scopes };
+    let mut declarer = Declarer { defs, scopes, lazy };
     modules
         .iter()
-        .map(|module| (Symbol::intern(&module.name), declarer.module(module, None)))
+        .map(|module| {
+            let path = vec![module.name.clone()];
+            let def = declarer.scoped(DefKind::Mod, &module.name, None, None);
+            declarer.contents(def, module, path);
+            (Symbol::intern(&module.name), def)
+        })
         .collect()
+}
+
+/// Declares the contents of the lazy module `def`, at `path`, now that they
+/// are known.
+pub(crate) fn populate(
+    defs: &mut Definitions,
+    scopes: &mut HashMap<DefId, Scope>,
+    lazy: &mut HashMap<DefId, Vec<String>>,
+    def: DefId,
+    path: Vec<String>,
+    contents: &NativeModule,
+) {
+    Declarer { defs, scopes, lazy }.contents(def, contents, path);
 }
 
 struct Declarer<'a> {
     defs: &'a mut Definitions,
     scopes: &'a mut HashMap<DefId, Scope>,
+    lazy: &'a mut HashMap<DefId, Vec<String>>,
 }
 
 impl Declarer<'_> {
-    fn module(&mut self, module: &NativeModule, parent: Option<DefId>) -> DefId {
-        let def = self.scoped(DefKind::Mod, &module.name, parent, None);
+    /// Declares the contents of `module`, whose definition is `def`, or
+    /// records it as lazy.
+    fn contents(&mut self, def: DefId, module: &NativeModule, path: Vec<String>) {
+        if module.lazy {
+            self.lazy.insert(def, path);
+            return;
+        }
         self.functions(def, &module.functions);
         for ty in &module.types {
             let kind = DefKind::NativeType(ty.id);
@@ -39,7 +65,10 @@ impl Declarer<'_> {
             self.bind(def, Namespace::Type, &ty.name, Res::Def(kind, ty_def));
         }
         for child in &module.modules {
-            let child_def = self.module(child, Some(def));
+            let child_def = self.scoped(DefKind::Mod, &child.name, Some(def), None);
+            let mut child_path = path.clone();
+            child_path.push(child.name.clone());
+            self.contents(child_def, child, child_path);
             self.bind(
                 def,
                 Namespace::Type,
@@ -47,7 +76,6 @@ impl Declarer<'_> {
                 Res::Def(DefKind::Mod, child_def),
             );
         }
-        def
     }
 
     fn functions(&mut self, scope: DefId, functions: &[NativeFnDecl]) {

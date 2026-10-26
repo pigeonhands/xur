@@ -51,8 +51,8 @@ fn ast(path: &Path) -> Result<()> {
 /// Loads the program rooted at `path` and prints, for each module, every
 /// path and identifier pattern with what it resolves to.
 fn resolve(path: &Path) -> Result<()> {
-    let natives = xur_std::registry().decls();
-    let (program, diags) = Program::load(path, Box::new(RealFileLoader), &natives)
+    let natives = Box::new(xur_std::registry());
+    let (program, diags) = Program::load(path, Box::new(RealFileLoader), natives)
         .with_context(|| format!("failed to read `{}`", path.display()))?;
     let krate = &program.krate;
 

@@ -39,7 +39,9 @@ use xur_span::{Ident, Symbol};
 pub use def::{DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
 pub use loader::{Crate, LoadedModule, ModuleIdx};
 pub use names::{NameRef, names};
-pub use native::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId};
+pub use native::{
+    NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
+};
 pub use program::Program;
 
 use imports::Import;
@@ -65,6 +67,8 @@ pub struct Resolutions {
     scopes: HashMap<DefId, Scope>,
     /// The top-level native modules, such as `std`, by name.
     native_roots: HashMap<Symbol, DefId>,
+    /// Lazy native modules not yet expanded, with their paths.
+    lazy_natives: HashMap<DefId, Vec<String>>,
 }
 
 impl Resolutions {
@@ -72,7 +76,8 @@ impl Resolutions {
     fn new(natives: &[NativeModule]) -> Self {
         let mut defs = Definitions::default();
         let mut scopes = HashMap::new();
-        let native_roots = natives::declare(&mut defs, &mut scopes, natives);
+        let mut lazy_natives = HashMap::new();
+        let native_roots = natives::declare(&mut defs, &mut scopes, &mut lazy_natives, natives);
         Self {
             defs,
             res: HashMap::new(),
@@ -82,6 +87,7 @@ impl Resolutions {
             unnamed_modules: Vec::new(),
             scopes,
             native_roots,
+            lazy_natives,
         }
     }
 
@@ -113,10 +119,11 @@ impl Resolutions {
 /// `resolutions` was last updated.
 fn resolve_modules(
     krate: &Crate,
+    natives: &mut dyn NativeProvider,
     resolutions: Resolutions,
     new: Range<usize>,
 ) -> (Resolutions, Vec<Diag>) {
-    let mut resolver = Resolver::resume(krate, resolutions);
+    let mut resolver = Resolver::resume(krate, natives, resolutions);
     let new: Vec<_> = new.map(ModuleIdx).collect();
     resolver.declare_modules(&new);
     resolver.collect_items(&new);
@@ -128,6 +135,7 @@ fn resolve_modules(
 
 struct Resolver<'a> {
     krate: &'a Crate,
+    natives: &'a mut dyn NativeProvider,
     defs: Definitions,
     /// The names declared in each module and enum.
     scopes: HashMap<DefId, Scope>,
@@ -136,6 +144,7 @@ struct Resolver<'a> {
     node_defs: HashMap<NodeId, DefId>,
     module_defs: Vec<DefId>,
     native_roots: HashMap<Symbol, DefId>,
+    lazy_natives: HashMap<DefId, Vec<String>>,
     /// `use` declarations not yet resolved.
     pending_imports: Vec<Import<'a>>,
     /// What the type of each `impl` block resolved to, by the impl item.
@@ -145,7 +154,11 @@ struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// Picks up resolution where `resolutions` left off.
-    fn resume(krate: &'a Crate, resolutions: Resolutions) -> Self {
+    fn resume(
+        krate: &'a Crate,
+        natives: &'a mut dyn NativeProvider,
+        resolutions: Resolutions,
+    ) -> Self {
         let Resolutions {
             defs,
             res,
@@ -155,9 +168,11 @@ impl<'a> Resolver<'a> {
             unnamed_modules: _,
             scopes,
             native_roots,
+            lazy_natives,
         } = resolutions;
         Self {
             krate,
+            natives,
             defs,
             scopes,
             res,
@@ -165,6 +180,7 @@ impl<'a> Resolver<'a> {
             node_defs,
             module_defs,
             native_roots,
+            lazy_natives,
             pending_imports: Vec::new(),
             impl_self_tys: HashMap::new(),
             diags: Vec::new(),
@@ -207,6 +223,22 @@ impl<'a> Resolver<'a> {
         &self.scopes[&def]
     }
 
+    /// Declares the contents of `scope` if it is a lazy native module not
+    /// yet expanded. Called before looking names up inside a scope.
+    fn expand_lazy(&mut self, scope: DefId) {
+        if let Some(path) = self.lazy_natives.remove(&scope) {
+            let contents = self.natives.expand(&path);
+            natives::populate(
+                &mut self.defs,
+                &mut self.scopes,
+                &mut self.lazy_natives,
+                scope,
+                path,
+                &contents,
+            );
+        }
+    }
+
     /// Hands the accumulated state back, with the diagnostics of this batch.
     fn suspend(self) -> (Resolutions, Vec<Diag>) {
         let unnamed_modules = [self.krate.root, self.krate.prelude]
@@ -222,6 +254,7 @@ impl<'a> Resolver<'a> {
             unnamed_modules,
             scopes: self.scopes,
             native_roots: self.native_roots,
+            lazy_natives: self.lazy_natives,
         };
         (resolutions, self.diags)
     }

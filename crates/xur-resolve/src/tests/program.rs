@@ -22,7 +22,7 @@ fn load() -> Program {
     let (program, diags) = Program::load(
         Path::new("main.xur"),
         Box::new(MemoryFileLoader::new(FILES.iter().copied())),
-        &natives(),
+        Box::new(natives()),
     )
     .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
@@ -84,10 +84,66 @@ fn missing_root_fails() {
         Program::load(
             Path::new("nope.xur"),
             Box::new(MemoryFileLoader::new(FILES.iter().copied())),
-            &natives(),
+            Box::new(natives()),
         )
         .is_err()
     );
     // A program whose root exists loads, whatever its imports.
     resolve_files(FILES).assert_no_errors();
+}
+
+/// Provides `lazy` with one function, counting how often it is expanded.
+#[derive(Default)]
+struct LazyNatives {
+    expansions: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl crate::NativeProvider for LazyNatives {
+    fn modules(&self) -> Vec<crate::NativeModule> {
+        vec![crate::NativeModule {
+            name: "lazy".to_owned(),
+            lazy: true,
+            ..Default::default()
+        }]
+    }
+
+    fn expand(&mut self, path: &[String]) -> crate::NativeModule {
+        assert_eq!(path, ["lazy"]);
+        self.expansions
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        crate::NativeModule {
+            name: "lazy".to_owned(),
+            functions: vec![crate::NativeFnDecl {
+                name: "f".to_owned(),
+                id: crate::NativeFnId(0),
+            }],
+            ..Default::default()
+        }
+    }
+}
+
+fn load_lazy(src: &str) -> (usize, Vec<String>) {
+    let natives = LazyNatives::default();
+    let expansions = natives.expansions.clone();
+    let loader = MemoryFileLoader::new([("main.xur", src)]);
+    let (_, diags) =
+        Program::load(Path::new("main.xur"), Box::new(loader), Box::new(natives)).unwrap();
+    let messages = diags.into_iter().map(|d| d.message).collect();
+    (
+        expansions.load(std::sync::atomic::Ordering::SeqCst),
+        messages,
+    )
+}
+
+#[test]
+fn lazy_native_modules_are_expanded_once_when_used() {
+    assert_eq!(load_lazy("fn main() {}"), (0, vec![]));
+    assert_eq!(
+        load_lazy("fn main() { lazy::f(); lazy::f(); }"),
+        (1, vec![])
+    );
+    assert_eq!(
+        load_lazy("fn main() { lazy::g(); }"),
+        (1, vec!["cannot find value `g` in module `lazy`".to_owned()])
+    );
 }

@@ -11,7 +11,7 @@ use crate::{RunResult, Value};
 /// Adds items to one module of a [`Registry`].
 pub struct ModuleBuilder<'r> {
     registry: &'r mut Registry,
-    module: usize,
+    pub(super) module: usize,
 }
 
 impl<'r> ModuleBuilder<'r> {

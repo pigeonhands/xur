@@ -1,5 +1,7 @@
 use facet::Facet;
 
+use xur_resolve::NativeProvider;
+
 use super::*;
 use crate::testing::{TestCx, fn_id};
 
@@ -127,4 +129,20 @@ fn bad_calls_are_runtime_errors() {
         cx.call(double, &[Value::str("x")]).unwrap_err().message,
         "expected `i64`, found string"
     );
+}
+
+#[test]
+fn lazy_modules_are_registered_when_expanded() {
+    let mut registry = Registry::new();
+    registry.lazy_module("big::part", |m| {
+        m.function("answer", || 42i64);
+    });
+    let decls = registry.decls();
+    assert!(decls[0].modules[0].lazy);
+    assert!(decls[0].modules[0].functions.is_empty());
+
+    let expanded = registry.expand(&["big".into(), "part".into()]);
+    assert!(!expanded.lazy);
+    assert_eq!(expanded.functions[0].name, "answer");
+    assert!(!registry.decls()[0].modules[0].lazy);
 }
