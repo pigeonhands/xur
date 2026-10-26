@@ -8,8 +8,6 @@ use std::str::Chars;
 pub(super) struct Cursor<'src> {
     src: &'src str,
     chars: Chars<'src>,
-    line: u32,
-    col: u32,
 }
 
 impl<'src> Cursor<'src> {
@@ -17,8 +15,6 @@ impl<'src> Cursor<'src> {
         Self {
             src,
             chars: src.chars(),
-            line: 1,
-            col: 1,
         }
     }
 
@@ -27,21 +23,9 @@ impl<'src> Cursor<'src> {
         self.src.len() - self.chars.as_str().len()
     }
 
-    pub(super) fn line(&self) -> u32 {
-        self.line
-    }
-
-    pub(super) fn col(&self) -> u32 {
-        self.col
-    }
-
     /// The source text from `start` up to the current position.
     pub(super) fn slice_from(&self, start: usize) -> &'src str {
         &self.src[start..self.pos()]
-    }
-
-    pub(super) fn starts_with(&self, prefix: &str) -> bool {
-        self.chars.as_str().starts_with(prefix)
     }
 
     pub(super) fn peek(&self) -> Option<char> {
@@ -55,14 +39,7 @@ impl<'src> Cursor<'src> {
     }
 
     pub(super) fn bump(&mut self) -> Option<char> {
-        let c = self.chars.next()?;
-        if c == '\n' {
-            self.line += 1;
-            self.col = 1;
-        } else {
-            self.col += 1;
-        }
-        Some(c)
+        self.chars.next()
     }
 
     /// Consumes the next character if it is `expected`.
@@ -76,13 +53,13 @@ impl<'src> Cursor<'src> {
 
     /// Consumes `prefix` if the remaining input starts with it.
     pub(super) fn eat_str(&mut self, prefix: &str) -> bool {
-        let matched = self.starts_with(prefix);
-        if matched {
-            prefix.chars().for_each(|_| {
-                self.bump();
-            });
+        match self.chars.as_str().strip_prefix(prefix) {
+            Some(rest) => {
+                self.chars = rest.chars();
+                true
+            }
+            None => false,
         }
-        matched
     }
 
     pub(super) fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {

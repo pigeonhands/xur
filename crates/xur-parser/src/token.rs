@@ -1,32 +1,9 @@
+use std::fmt;
+
 use strum::{Display, EnumString};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    /// Byte offset of the first character of this token.
-    pub start: usize,
-    /// Byte offset one past the last character of this token.
-    pub end: usize,
-    /// 1-based line number.
-    pub line: u32,
-    /// 1-based column number (byte-indexed).
-    pub col: u32,
-}
-
-impl Span {
-    pub(crate) fn new(start: usize, end: usize, line: u32, col: u32) -> Self {
-        Self {
-            start,
-            end,
-            line,
-            col,
-        }
-    }
-
-    /// Returns the slice of the original source code corresponding to this span.
-    pub fn slice<'src>(&self, src: &'src str) -> &'src str {
-        &src[self.start..self.end]
-    }
-}
+use crate::error::LexErrorKind;
+use crate::span::Span;
 
 /// All reserved keywords in Xur.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
@@ -51,96 +28,107 @@ pub enum Keyword {
     False,
 }
 
-#[derive(Debug, Clone, PartialEq, Display)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind<'src> {
-    // --- Literals (zero-allocation borrowed slices) ---
-    #[strum(to_string = "<string>")]
+    // --- Literals (zero-copy slices of the source) ---
+    /// The raw text between the quotes; escape sequences are not yet resolved.
     StringLit(&'src str),
-    #[strum(to_string = "<int>")]
-    IntLit(i64),
-    #[strum(to_string = "<float>")]
+    /// Always non-negative: a leading `-` is lexed as a separate `Minus`.
+    IntLit(u64),
     FloatLit(f64),
 
     // --- Identifiers & keywords ---
-    #[strum(to_string = "<ident>")]
     Ident(&'src str),
-    /// A reserved keyword — display delegates to `Keyword`'s own `Display`.
-    #[strum(to_string = "{0}")]
     Keyword(Keyword),
 
-    // --- Punctuation ---
-    #[strum(to_string = "(")]
+    // --- Delimiters ---
     LParen,
-    #[strum(to_string = ")")]
     RParen,
-    #[strum(to_string = "{")]
     LBrace,
-    #[strum(to_string = "}}")]
     RBrace,
-    #[strum(to_string = "[")]
     LBracket,
-    #[strum(to_string = "]")]
     RBracket,
-    #[strum(to_string = ";")]
+
+    // --- Punctuation ---
     Semi,
-    #[strum(to_string = ",")]
     Comma,
-    #[strum(to_string = ".")]
     Dot,
-    #[strum(to_string = "..")]
     DotDot,
-    #[strum(to_string = "..=")]
     DotDotEq,
-    #[strum(to_string = "::")]
     ColonColon,
-    #[strum(to_string = "::<")]
     ColonColonLt,
-    #[strum(to_string = ":")]
     Colon,
-    #[strum(to_string = "#")]
     Hash,
-    #[strum(to_string = "->")]
     Arrow,
-    #[strum(to_string = "=")]
+
+    // --- Operators ---
     Eq,
-    #[strum(to_string = "==")]
     EqEq,
-    #[strum(to_string = "!=")]
     BangEq,
-    #[strum(to_string = "!")]
     Bang,
-    #[strum(to_string = "<")]
     Lt,
-    #[strum(to_string = "<=")]
     LtEq,
-    #[strum(to_string = ">")]
     Gt,
-    #[strum(to_string = ">=")]
     GtEq,
-    #[strum(to_string = "+")]
     Plus,
-    #[strum(to_string = "-")]
     Minus,
-    #[strum(to_string = "*")]
     Star,
-    #[strum(to_string = "/")]
     Slash,
-    #[strum(to_string = "%")]
     Percent,
-    #[strum(to_string = "&&")]
     AmpAmp,
-    #[strum(to_string = "||")]
     PipePipe,
 
-    // --- Resilient error tokens ---
-    #[strum(to_string = "<error: unterminated string>")]
-    UnterminatedString,
-    #[strum(to_string = "<unknown>")]
-    Unknown(char),
-
-    // --- Meta ---
-    #[strum(to_string = "<eof>")]
+    /// Malformed input. The lexer keeps going after producing one of these.
+    Error(LexErrorKind),
     Eof,
+}
+
+impl fmt::Display for TokenKind<'_> {
+    /// Shows the token's source text for fixed tokens and a `<placeholder>`
+    /// for tokens whose text varies, e.g. in "expected `;`, found <ident>".
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            Self::StringLit(_) => "<string>",
+            Self::IntLit(_) => "<int>",
+            Self::FloatLit(_) => "<float>",
+            Self::Ident(_) => "<ident>",
+            Self::Keyword(keyword) => return keyword.fmt(f),
+            Self::LParen => "(",
+            Self::RParen => ")",
+            Self::LBrace => "{",
+            Self::RBrace => "}",
+            Self::LBracket => "[",
+            Self::RBracket => "]",
+            Self::Semi => ";",
+            Self::Comma => ",",
+            Self::Dot => ".",
+            Self::DotDot => "..",
+            Self::DotDotEq => "..=",
+            Self::ColonColon => "::",
+            Self::ColonColonLt => "::<",
+            Self::Colon => ":",
+            Self::Hash => "#",
+            Self::Arrow => "->",
+            Self::Eq => "=",
+            Self::EqEq => "==",
+            Self::BangEq => "!=",
+            Self::Bang => "!",
+            Self::Lt => "<",
+            Self::LtEq => "<=",
+            Self::Gt => ">",
+            Self::GtEq => ">=",
+            Self::Plus => "+",
+            Self::Minus => "-",
+            Self::Star => "*",
+            Self::Slash => "/",
+            Self::Percent => "%",
+            Self::AmpAmp => "&&",
+            Self::PipePipe => "||",
+            Self::Error(_) => "<error>",
+            Self::Eof => "<eof>",
+        };
+        f.write_str(text)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

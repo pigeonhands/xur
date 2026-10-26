@@ -13,3 +13,4 @@ path = "src/lib.rs"
 xur-ast.workspace = true
 strum.workspace = true
 unicode-ident.workspace = true
+thiserror.workspace = true

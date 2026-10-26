@@ -1,29 +1,24 @@
-use crate::token::Span;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq)]
+use crate::span::Span;
+
+/// What went wrong while lexing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum LexErrorKind {
+    #[error("unexpected character `{0}`")]
+    UnexpectedChar(char),
+    #[error("unterminated string literal")]
+    UnterminatedString,
+    #[error("unterminated block comment")]
+    UnterminatedBlockComment,
+    #[error("integer literal is too large")]
+    IntTooLarge,
+}
+
+/// A lexing error and the source range it covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("{kind}")]
 pub struct LexError {
-    pub message: String,
+    pub kind: LexErrorKind,
     pub span: Span,
 }
-
-impl LexError {
-    pub(crate) fn new(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            message: message.into(),
-            span,
-        }
-    }
-}
-
-impl fmt::Display for LexError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "lex error at {}:{}: {}",
-            self.span.line, self.span.col, self.message
-        )
-    }
-}
-
-impl std::error::Error for LexError {}

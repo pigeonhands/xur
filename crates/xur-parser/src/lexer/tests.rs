@@ -1,13 +1,23 @@
 use super::*;
 use crate::token::{Keyword, TokenKind};
 
+/// Lexes `src`, asserting it contains no errors, and returns the token kinds.
 fn lex(src: &str) -> Vec<TokenKind<'_>> {
-    Lexer::new(src)
-        .tokenise()
-        .expect("lex failed")
-        .into_iter()
-        .map(|t| t.kind)
-        .collect()
+    let (tokens, errors) = Lexer::new(src).tokenise();
+    assert_eq!(errors, [], "unexpected lex errors in {src:?}");
+    tokens.into_iter().map(|t| t.kind).collect()
+}
+
+/// Lexes `src` and returns only its errors.
+fn lex_errors(src: &str) -> Vec<LexError> {
+    Lexer::new(src).tokenise().1
+}
+
+fn error(kind: LexErrorKind, start: usize, end: usize) -> LexError {
+    LexError {
+        kind,
+        span: Span::new(start, end),
+    }
 }
 
 fn kw<'a>(k: Keyword) -> TokenKind<'a> {
@@ -151,13 +161,13 @@ fn test_unicode_identifiers() {
 
 #[test]
 fn test_iterator_streaming_and_resilient_recovery() {
-    let mut lexer = Lexer::new("let 42? // unknown char ?");
+    let mut lexer = Lexer::new("let 42$ // unknown char $");
     let t1 = lexer.next().unwrap();
     assert_eq!(t1.kind, kw(Keyword::Let));
     let t2 = lexer.next().unwrap();
     assert_eq!(t2.kind, TokenKind::IntLit(42));
     let t3 = lexer.next().unwrap();
-    assert_eq!(t3.kind, TokenKind::Unknown('?'));
+    assert_eq!(t3.kind, TokenKind::Error(LexErrorKind::UnexpectedChar('$')));
     let t4 = lexer.next().unwrap();
     assert_eq!(t4.kind, TokenKind::Eof);
     assert!(lexer.next().is_none());
@@ -286,16 +296,15 @@ fn test_keyword_display() {
     assert_eq!(TokenKind::ColonColonLt.to_string(), "::<");
     assert_eq!(TokenKind::Hash.to_string(), "#");
     assert_eq!(TokenKind::Arrow.to_string(), "->");
+    assert_eq!(TokenKind::LBrace.to_string(), "{");
+    assert_eq!(TokenKind::RBrace.to_string(), "}");
 }
 
 #[test]
 fn test_example_main_file() {
     let content = std::fs::read_to_string("../../example/main.xur").expect("read example/main.xur");
-    let toks = Lexer::new(&content)
-        .tokenise()
-        .expect("should lex example/main.xur cleanly");
-    assert!(!toks.is_empty());
-    assert_eq!(toks.last().unwrap().kind, TokenKind::Eof);
+    let kinds = lex(&content);
+    assert_eq!(kinds.last(), Some(&TokenKind::Eof));
 }
 
 #[test]
@@ -309,7 +318,72 @@ fn test_full_main() {
             io::println("1 + 2 = {}", math.add(1, 2));
         }
     "#;
-    let toks = Lexer::new(src).tokenise().expect("should lex cleanly");
-    assert!(!toks.is_empty());
-    assert_eq!(toks.last().unwrap().kind, TokenKind::Eof);
+    let kinds = lex(src);
+    assert_eq!(kinds.last(), Some(&TokenKind::Eof));
+}
+
+#[test]
+fn test_spans_are_byte_ranges() {
+    let src = "let α = \"hi\";";
+    let (tokens, _) = Lexer::new(src).tokenise();
+    let slices: Vec<_> = tokens.iter().map(|t| t.span.slice(src)).collect();
+    assert_eq!(slices, ["let", "α", "=", "\"hi\"", ";", ""]);
+    assert_eq!(tokens.last().unwrap().span, Span::new(src.len(), src.len()));
+}
+
+#[test]
+fn test_unexpected_char() {
+    assert_eq!(
+        lex_errors("let $x"),
+        [error(LexErrorKind::UnexpectedChar('$'), 4, 5)]
+    );
+}
+
+#[test]
+fn test_unterminated_string_stops_at_newline() {
+    let src = "\"oops\nlet x;";
+    assert_eq!(
+        lex_errors(src),
+        [error(LexErrorKind::UnterminatedString, 0, 5)]
+    );
+    let kinds: Vec<_> = Lexer::new(src)
+        .tokenise()
+        .0
+        .into_iter()
+        .map(|t| t.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        [kw(Keyword::Let), id("x"), TokenKind::Semi, TokenKind::Eof]
+    );
+}
+
+#[test]
+fn test_unterminated_block_comment() {
+    assert_eq!(
+        lex_errors("a /* outer /* inner */"),
+        [error(LexErrorKind::UnterminatedBlockComment, 2, 22)]
+    );
+}
+
+#[test]
+fn test_int_too_large() {
+    assert_eq!(
+        lex_errors("18_446_744_073_709_551_616"),
+        [error(LexErrorKind::IntTooLarge, 0, 26)]
+    );
+    assert_eq!(lex("18446744073709551615")[0], TokenKind::IntLit(u64::MAX));
+}
+
+#[test]
+fn test_all_errors_are_reported() {
+    let kinds: Vec<_> = lex_errors("$ \"a\n@").into_iter().map(|e| e.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            LexErrorKind::UnexpectedChar('$'),
+            LexErrorKind::UnterminatedString,
+            LexErrorKind::UnexpectedChar('@'),
+        ]
+    );
 }
