@@ -5,6 +5,8 @@
 //! 2. Every module's items are declared in its [`Scope`](scope::Scope).
 //! 3. `use` declarations are resolved, repeatedly until no more make
 //!    progress, since one import may depend on another.
+//! 4. The names used inside items (bodies, types, patterns) are resolved
+//!    against local scopes and then the module.
 //!
 //! Names only ever resolve statically. Members reached through a value
 //! (`math.add`, `point.x`) are not names and are left for later stages.
@@ -13,6 +15,7 @@ mod collect;
 mod def;
 mod ident;
 mod imports;
+mod late;
 mod loader;
 mod scope;
 mod std_lib;
@@ -24,6 +27,7 @@ use std::collections::HashMap;
 
 use xur_ast::NodeId;
 use xur_errors::Diag;
+use xur_span::Ident;
 
 pub use def::{Builtin, DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
 pub use loader::{Crate, LoadedModule, ModuleIdx, load_crate};
@@ -35,8 +39,11 @@ use scope::Scope;
 #[derive(Debug)]
 pub struct Resolutions {
     pub defs: Definitions,
-    /// What each resolved path (and, later, binding pattern) refers to.
+    /// What each path and each identifier pattern refers to. A pattern that
+    /// binds a variable resolves to [`Res::Local`] of itself.
     pub res: HashMap<NodeId, Res>,
+    /// The name of each local variable, by the pattern that binds it.
+    pub locals: HashMap<NodeId, Ident>,
     /// The definition created for each item, variant and generic parameter.
     pub node_defs: HashMap<NodeId, DefId>,
     /// The module definition of each loaded file, by [`ModuleIdx`].
@@ -60,6 +67,7 @@ pub fn resolve(krate: &Crate) -> (Resolutions, Vec<Diag>) {
     let mut resolver = Resolver::new(krate);
     resolver.collect_items();
     resolver.resolve_imports();
+    resolver.resolve_bodies();
     resolver.finish()
 }
 
@@ -69,6 +77,7 @@ struct Resolver<'a> {
     /// The names declared in each module and enum.
     scopes: HashMap<DefId, Scope>,
     res: HashMap<NodeId, Res>,
+    locals: HashMap<NodeId, Ident>,
     node_defs: HashMap<NodeId, DefId>,
     module_defs: Vec<DefId>,
     std: DefId,
@@ -100,6 +109,7 @@ impl<'a> Resolver<'a> {
             defs,
             scopes,
             res: HashMap::new(),
+            locals: HashMap::new(),
             node_defs: HashMap::new(),
             module_defs,
             std,
@@ -132,6 +142,7 @@ impl<'a> Resolver<'a> {
         let resolutions = Resolutions {
             defs: self.defs,
             res: self.res,
+            locals: self.locals,
             node_defs: self.node_defs,
             module_defs: self.module_defs,
             unnamed_modules,

@@ -1,3 +1,4 @@
+mod bodies;
 mod imports;
 mod items;
 
@@ -67,18 +68,28 @@ impl Resolved {
         assert_eq!(self.errors, Vec::<String>::new());
     }
 
-    /// Describes what the first path written exactly as `text` (in any
-    /// module) resolved to, e.g. "builtin function std::io::println".
+    /// Describes what the first path or identifier pattern written exactly
+    /// as `text` (in any module but the prelude) resolved to, e.g.
+    /// "builtin function std::io::println".
     pub(crate) fn res_of(&self, text: &str) -> String {
-        let mut paths = Paths(Vec::new());
+        self.res_of_nth(text, 0)
+    }
+
+    /// Like [`Self::res_of`], for the `n`th (from 0) occurrence of `text`.
+    pub(crate) fn res_of_nth(&self, text: &str, n: usize) -> String {
+        let mut names = Names(Vec::new());
+        let prelude = self.krate.module(self.krate.prelude);
         for module in &self.krate.modules {
-            paths.visit_module(&module.ast);
+            if !std::ptr::eq(module, prelude) {
+                names.visit_module(&module.ast);
+            }
         }
-        let (_, id) = paths
+        let (_, id) = names
             .0
             .into_iter()
-            .find(|&(span, _)| self.krate.source_map.slice(span) == text)
-            .unwrap_or_else(|| panic!("no path `{text}`"));
+            .filter(|&(span, _)| self.krate.source_map.slice(span) == text)
+            .nth(n)
+            .unwrap_or_else(|| panic!("no occurrence {n} of `{text}`"));
         match self.resolutions.res.get(&id) {
             None => "unresolved".to_owned(),
             Some(&res) => self.describe(res),
@@ -88,19 +99,30 @@ impl Resolved {
     pub(crate) fn describe(&self, res: Res) -> String {
         match res {
             Res::Def(kind, def) => format!("{} {}", kind.descr(), self.resolutions.def_path(def)),
-            Res::Local(_) => "local".to_owned(),
+            Res::Local(id) => {
+                let ident = self.resolutions.locals[&id];
+                let pos = self.krate.source_map.describe_pos(ident.span);
+                format!("local {ident} at {pos}")
+            }
             Res::PrimTy(ty) => format!("builtin type {}", ty.name()),
             Res::Err => "error".to_owned(),
         }
     }
 }
 
-/// Collects every path in a module with its node id.
-struct Paths(Vec<(Span, xur_ast::NodeId)>);
+/// Collects every path and identifier pattern in a module, with node ids.
+struct Names(Vec<(Span, xur_ast::NodeId)>);
 
-impl Visitor for Paths {
+impl Visitor for Names {
     fn visit_path(&mut self, path: &xur_ast::Path) {
         self.0.push((path.span, path.id));
         visit::walk_path(self, path);
+    }
+
+    fn visit_pat(&mut self, pat: &xur_ast::Pat) {
+        if let xur_ast::PatKind::Ident(_) = pat.kind {
+            self.0.push((pat.span, pat.id));
+        }
+        visit::walk_pat(self, pat);
     }
 }
