@@ -14,7 +14,12 @@ pub struct Span {
 
 impl Span {
     pub(crate) fn new(start: usize, end: usize, line: u32, col: u32) -> Self {
-        Self { start, end, line, col }
+        Self {
+            start,
+            end,
+            line,
+            col,
+        }
     }
 
     /// Returns the slice of the original source code corresponding to this span.

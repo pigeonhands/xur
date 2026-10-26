@@ -9,3 +9,9 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pigeonhands/xur"
 
+
+[workspace.dependencies]
+xur-ast = { path = "crates/xur-ast" }
+xur-parser = { path = "crates/xur-parser" }
+strum = { version = "0.27", features = ["derive"] }
+unicode-ident = "1.0"
