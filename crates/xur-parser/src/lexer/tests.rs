@@ -9,9 +9,15 @@ fn lex(src: &str) -> Vec<TokenKind<'_>> {
     tokens.into_iter().map(|t| t.kind).collect()
 }
 
+/// Lexes `src`, returning the token kinds and the errors.
+fn lex_with_errors(src: &str) -> (Vec<TokenKind<'_>>, Vec<LexError>) {
+    let (tokens, errors) = Lexer::new(src).tokenise();
+    (tokens.into_iter().map(|t| t.kind).collect(), errors)
+}
+
 /// Lexes `src` and returns only its errors.
 fn lex_errors(src: &str) -> Vec<LexError> {
-    Lexer::new(src).tokenise().1
+    lex_with_errors(src).1
 }
 
 fn error(kind: LexErrorKind, start: usize, end: usize) -> LexError {
@@ -104,9 +110,9 @@ fn test_number_literals() {
     assert_eq!(
         kinds,
         vec![
-            TokenKind::IntLit(42),
-            TokenKind::FloatLit(2.5),
-            TokenKind::IntLit(1_000_000),
+            TokenKind::IntLit("42"),
+            TokenKind::FloatLit("2.5"),
+            TokenKind::IntLit("1_000_000"),
             TokenKind::Eof
         ]
     );
@@ -153,25 +159,11 @@ fn test_unicode_identifiers() {
             kw(Keyword::Let),
             id("α_beta"),
             TokenKind::Eq,
-            TokenKind::IntLit(10),
+            TokenKind::IntLit("10"),
             TokenKind::Semi,
             TokenKind::Eof,
         ]
     );
-}
-
-#[test]
-fn test_iterator_streaming_and_resilient_recovery() {
-    let mut lexer = Lexer::new("let 42$ // unknown char $");
-    let t1 = lexer.next().unwrap();
-    assert_eq!(t1.kind, kw(Keyword::Let));
-    let t2 = lexer.next().unwrap();
-    assert_eq!(t2.kind, TokenKind::IntLit(42));
-    let t3 = lexer.next().unwrap();
-    assert_eq!(t3.kind, TokenKind::Error(LexErrorKind::UnexpectedChar('$')));
-    let t4 = lexer.next().unwrap();
-    assert_eq!(t4.kind, TokenKind::Eof);
-    assert!(lexer.next().is_none());
 }
 
 #[test]
@@ -204,14 +196,14 @@ fn test_loop_constructs() {
             kw(Keyword::For),
             id("i"),
             kw(Keyword::In),
-            TokenKind::IntLit(0),
+            TokenKind::IntLit("0"),
             TokenKind::DotDot,
-            TokenKind::IntLit(10),
+            TokenKind::IntLit("10"),
             TokenKind::LBrace,
             kw(Keyword::If),
             id("i"),
             TokenKind::EqEq,
-            TokenKind::IntLit(5),
+            TokenKind::IntLit("5"),
             TokenKind::LBrace,
             kw(Keyword::Break),
             TokenKind::Semi,
@@ -233,12 +225,12 @@ fn test_range_operators() {
     assert_eq!(
         kinds,
         vec![
-            TokenKind::IntLit(0),
+            TokenKind::IntLit("0"),
             TokenKind::DotDot,
-            TokenKind::IntLit(10),
-            TokenKind::IntLit(1),
+            TokenKind::IntLit("10"),
+            TokenKind::IntLit("1"),
             TokenKind::DotDotEq,
-            TokenKind::IntLit(5),
+            TokenKind::IntLit("5"),
             TokenKind::Eof,
         ]
     );
@@ -344,30 +336,26 @@ fn test_spans_are_byte_ranges() {
 }
 
 #[test]
-fn test_unexpected_char() {
-    assert_eq!(
-        lex_errors("let $x"),
-        [error(LexErrorKind::UnexpectedChar('$'), 4, 5)]
-    );
+fn test_unexpected_char_is_skipped() {
+    let (kinds, errors) = lex_with_errors("let $x");
+    assert_eq!(kinds, [kw(Keyword::Let), id("x"), TokenKind::Eof]);
+    assert_eq!(errors, [error(LexErrorKind::UnexpectedChar('$'), 4, 5)]);
 }
 
 #[test]
 fn test_unterminated_string_stops_at_newline() {
-    let src = "\"oops\nlet x;";
-    assert_eq!(
-        lex_errors(src),
-        [error(LexErrorKind::UnterminatedString, 0, 5)]
-    );
-    let kinds: Vec<_> = Lexer::new(src)
-        .tokenise()
-        .0
-        .into_iter()
-        .map(|t| t.kind)
-        .collect();
+    let (kinds, errors) = lex_with_errors("\"oops\nlet x;");
     assert_eq!(
         kinds,
-        [kw(Keyword::Let), id("x"), TokenKind::Semi, TokenKind::Eof]
+        [
+            TokenKind::StringLit("oops"),
+            kw(Keyword::Let),
+            id("x"),
+            TokenKind::Semi,
+            TokenKind::Eof
+        ]
     );
+    assert_eq!(errors, [error(LexErrorKind::UnterminatedString, 0, 5)]);
 }
 
 #[test]
@@ -379,12 +367,29 @@ fn test_unterminated_block_comment() {
 }
 
 #[test]
-fn test_int_too_large() {
+fn test_number_literals_keep_their_text() {
+    // Value conversion, and so overflow checking, happens in the parser.
     assert_eq!(
-        lex_errors("18_446_744_073_709_551_616"),
-        [error(LexErrorKind::IntTooLarge, 0, 26)]
+        lex("18_446_744_073_709_551_616 1_0.0_1"),
+        [
+            TokenKind::IntLit("18_446_744_073_709_551_616"),
+            TokenKind::FloatLit("1_0.0_1"),
+            TokenKind::Eof
+        ]
     );
-    assert_eq!(lex("18446744073709551615")[0], TokenKind::IntLit(u64::MAX));
+}
+
+#[test]
+fn test_int_followed_by_method_call() {
+    assert_eq!(
+        lex("1.max"),
+        [
+            TokenKind::IntLit("1"),
+            TokenKind::Dot,
+            id("max"),
+            TokenKind::Eof
+        ]
+    );
 }
 
 #[test]
@@ -412,7 +417,7 @@ fn test_closure() {
             TokenKind::Pipe,
             id("x"),
             TokenKind::Plus,
-            TokenKind::IntLit(1),
+            TokenKind::IntLit("1"),
             TokenKind::Eof,
         ]
     );
@@ -445,7 +450,7 @@ fn test_match_arms() {
             TokenKind::Comma,
             TokenKind::Underscore,
             TokenKind::FatArrow,
-            TokenKind::IntLit(0),
+            TokenKind::IntLit("0"),
             TokenKind::RBrace,
             TokenKind::Eof,
         ]

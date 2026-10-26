@@ -12,8 +12,6 @@ pub enum LexErrorKind {
     UnterminatedString,
     #[error("unterminated block comment")]
     UnterminatedBlockComment,
-    #[error("integer literal is too large")]
-    IntTooLarge,
 }
 
 /// A lexing error and the source range it covers.
@@ -30,7 +28,6 @@ impl From<LexError> for Diag {
             LexErrorKind::UnexpectedChar(_) => "not valid in Xur source",
             LexErrorKind::UnterminatedString => "missing closing `\"`",
             LexErrorKind::UnterminatedBlockComment => "comment is never closed",
-            LexErrorKind::IntTooLarge => "does not fit in 64 bits",
         };
         Diag::error(error.kind.to_string(), error.span).with_label(error.span, label)
     }

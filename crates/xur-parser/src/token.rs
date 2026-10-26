@@ -2,7 +2,6 @@ use std::fmt;
 
 use strum::{Display, EnumString};
 
-use crate::error::LexErrorKind;
 use xur_span::Span;
 
 /// All reserved keywords in Xur.
@@ -30,14 +29,16 @@ pub enum Keyword {
     False,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind<'src> {
     // --- Literals (zero-copy slices of the source) ---
     /// The raw text between the quotes; escape sequences are not yet resolved.
     StringLit(&'src str),
-    /// Always non-negative: a leading `-` is lexed as a separate `Minus`.
-    IntLit(u64),
-    FloatLit(f64),
+    /// The digits as written, including `_` separators. Always non-negative:
+    /// a leading `-` is lexed as a separate `Minus`.
+    IntLit(&'src str),
+    /// The literal as written, e.g. `1_000.5`.
+    FloatLit(&'src str),
 
     // --- Identifiers & keywords ---
     Ident(&'src str),
@@ -84,8 +85,6 @@ pub enum TokenKind<'src> {
     Pipe,
     PipePipe,
 
-    /// Malformed input. The lexer keeps going after producing one of these.
-    Error(LexErrorKind),
     Eof,
 }
 
@@ -133,14 +132,13 @@ impl fmt::Display for TokenKind<'_> {
             Self::AmpAmp => "&&",
             Self::Pipe => "|",
             Self::PipePipe => "||",
-            Self::Error(_) => "<error>",
             Self::Eof => "<eof>",
         };
         f.write_str(text)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token<'src> {
     pub kind: TokenKind<'src>,
     pub span: Span,

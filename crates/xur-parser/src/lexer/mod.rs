@@ -3,8 +3,12 @@
 //! - Zero-copy: tokens borrow slices from the original `&'src str`.
 //! - Unicode identifiers via UAX #31 (`unicode-ident`).
 //! - Nested block comments (`/* ... /* ... */ ... */`).
-//! - Resilient: malformed input becomes a [`TokenKind::Error`] token and
-//!   lexing carries on, so every error in a file is reported in one pass.
+//! - Resilient: like rustc's lexer, errors are recorded on the side and a
+//!   best-effort token is still produced (an unknown character is skipped,
+//!   an unterminated string still becomes a string), so the parser never
+//!   sees holes and every error in a file is reported in one pass.
+//! - Literals keep their source text; turning them into values (and
+//!   reporting overflow or bad escapes) is the parser's job.
 
 mod cursor;
 #[cfg(test)]
@@ -17,67 +21,73 @@ use xur_span::Span;
 
 pub struct Lexer<'src> {
     cursor: Cursor<'src>,
-    finished: bool,
+    errors: Vec<LexError>,
 }
 
 impl<'src> Lexer<'src> {
     pub fn new(src: &'src str) -> Self {
         Self {
             cursor: Cursor::new(src),
-            finished: false,
+            errors: Vec::new(),
         }
     }
 
     /// Lexes the whole source.
     ///
-    /// Returns the valid tokens (ending with `Eof`) and, separately, every
-    /// error encountered. Error tokens are not included in the token list.
-    pub fn tokenise(self) -> (Vec<Token<'src>>, Vec<LexError>) {
+    /// Returns every token (always ending with `Eof`) and every error found.
+    /// Errors never leave gaps in the token stream.
+    pub fn tokenise(mut self) -> (Vec<Token<'src>>, Vec<LexError>) {
         let mut tokens = Vec::new();
-        let mut errors = Vec::new();
-        for token in self {
-            match token.kind {
-                TokenKind::Error(kind) => errors.push(LexError {
-                    kind,
-                    span: token.span,
-                }),
-                _ => tokens.push(token),
+        loop {
+            let token = self.next_token();
+            tokens.push(token);
+            if token.kind == TokenKind::Eof {
+                return (tokens, self.errors);
             }
         }
-        (tokens, errors)
     }
 
-    /// Lexes the next token. Returns `Eof` forever once the input is exhausted.
-    pub fn next_token(&mut self) -> Token<'src> {
-        if let Err(error) = self.skip_trivia() {
-            return error;
-        }
+    fn next_token(&mut self) -> Token<'src> {
+        loop {
+            self.skip_trivia();
 
-        let start = self.cursor.pos();
-        let kind = match self.cursor.bump() {
-            None => TokenKind::Eof,
-            Some(c) => self.lex_token(c, start),
-        };
-        Token::new(kind, self.span_from(start))
+            let start = self.cursor.pos();
+            let Some(first) = self.cursor.bump() else {
+                return Token::new(TokenKind::Eof, self.span_from(start));
+            };
+            match self.lex_token(first, start) {
+                Some(kind) => return Token::new(kind, self.span_from(start)),
+                None => self.error(LexErrorKind::UnexpectedChar(first), start),
+            }
+        }
     }
 
     fn span_from(&self, start: usize) -> Span {
         Span::new(start, self.cursor.pos())
     }
 
-    fn lex_token(&mut self, first: char, start: usize) -> TokenKind<'src> {
-        match first {
-            '"' => self.lex_string(),
+    /// Records an error covering `start` up to the current position.
+    fn error(&mut self, kind: LexErrorKind, start: usize) {
+        let span = self.span_from(start);
+        self.errors.push(LexError { kind, span });
+    }
+
+    /// Lexes the token starting with the already-consumed `first`, or
+    /// returns `None` if no token can start with it.
+    fn lex_token(&mut self, first: char, start: usize) -> Option<TokenKind<'src>> {
+        let kind = match first {
+            '"' => self.lex_string(start),
             c if c.is_ascii_digit() => self.lex_number(start),
             c if is_ident_start(c) => self.lex_ident(start),
-            c => self.lex_punct(c),
-        }
+            c => return self.lex_punct(c),
+        };
+        Some(kind)
     }
 
     /// Lexes punctuation and operators, preferring the longest match.
-    fn lex_punct(&mut self, first: char) -> TokenKind<'src> {
+    fn lex_punct(&mut self, first: char) -> Option<TokenKind<'src>> {
         let c = &mut self.cursor;
-        match first {
+        let kind = match first {
             '(' => TokenKind::LParen,
             ')' => TokenKind::RParen,
             '{' => TokenKind::LBrace,
@@ -118,14 +128,14 @@ impl<'src> Lexer<'src> {
             '|' if c.eat('|') => TokenKind::PipePipe,
             '|' => TokenKind::Pipe,
 
-            other => TokenKind::Error(LexErrorKind::UnexpectedChar(other)),
-        }
+            _ => return None,
+        };
+        Some(kind)
     }
 
     /// Skips whitespace, line comments and (nested) block comments.
     ///
-    /// A block comment still open at end of input is returned as an error token.
-    fn skip_trivia(&mut self) -> Result<(), Token<'src>> {
+    fn skip_trivia(&mut self) {
         loop {
             self.cursor.eat_while(char::is_whitespace);
 
@@ -134,11 +144,10 @@ impl<'src> Lexer<'src> {
                 self.cursor.eat_while(|c| c != '\n');
             } else if self.cursor.eat_str("/*") {
                 if !self.skip_block_comment() {
-                    let kind = TokenKind::Error(LexErrorKind::UnterminatedBlockComment);
-                    return Err(Token::new(kind, self.span_from(start)));
+                    self.error(LexErrorKind::UnterminatedBlockComment, start);
                 }
             } else {
-                return Ok(());
+                return;
             }
         }
     }
@@ -160,11 +169,16 @@ impl<'src> Lexer<'src> {
     }
 
     /// Lexes a string literal whose opening `"` was already consumed.
-    fn lex_string(&mut self) -> TokenKind<'src> {
+    ///
+    /// An unterminated string ends at the end of its line.
+    fn lex_string(&mut self, start: usize) -> TokenKind<'src> {
         let content_start = self.cursor.pos();
         loop {
             match self.cursor.peek() {
-                None | Some('\n') => return TokenKind::Error(LexErrorKind::UnterminatedString),
+                None | Some('\n') => {
+                    self.error(LexErrorKind::UnterminatedString, start);
+                    return TokenKind::StringLit(self.cursor.slice_from(content_start));
+                }
                 Some('"') => break,
                 Some('\\') => {
                     self.cursor.bump();
@@ -194,15 +208,11 @@ impl<'src> Lexer<'src> {
             self.cursor.eat_while(is_digit);
         }
 
-        let digits = self.cursor.slice_from(start).replace('_', "");
+        let text = self.cursor.slice_from(start);
         if is_float {
-            // `digits.digits` always parses; values beyond `f64::MAX` become infinity.
-            TokenKind::FloatLit(digits.parse().expect("lexed float is well-formed"))
+            TokenKind::FloatLit(text)
         } else {
-            digits.parse().map_or(
-                TokenKind::Error(LexErrorKind::IntTooLarge),
-                TokenKind::IntLit,
-            )
+            TokenKind::IntLit(text)
         }
     }
 
@@ -212,20 +222,6 @@ impl<'src> Lexer<'src> {
             "_" => TokenKind::Underscore,
             name => Keyword::try_from(name).map_or(TokenKind::Ident(name), TokenKind::Keyword),
         }
-    }
-}
-
-impl<'src> Iterator for Lexer<'src> {
-    type Item = Token<'src>;
-
-    /// Yields every token including a final `Eof`, then `None`.
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-        let tok = self.next_token();
-        self.finished = tok.kind == TokenKind::Eof;
-        Some(tok)
     }
 }
 
