@@ -2,11 +2,18 @@ use xur_ast::ItemKind;
 
 use super::show::Show;
 use super::{parse_errors, parse_ok};
-use xur_ast::NodeIdGen;
+use xur_ast::{Module, NodeIdGen};
+use xur_errors::Diag;
+use xur_span::SourceMap;
 
-use crate::parser::{Parser, parse_module};
+use crate::parser::{Parser, parse_file};
 
-fn parse_module_fresh(src: &str) -> (xur_ast::Module, Vec<xur_errors::Diag>) {
+fn parse_module(src: &str, ids: &mut NodeIdGen) -> (Module, Vec<Diag>) {
+    let file = SourceMap::new().add_file("test.xur", src);
+    parse_file(&file, ids)
+}
+
+fn parse_module_fresh(src: &str) -> (Module, Vec<Diag>) {
     parse_module(src, &mut NodeIdGen::default())
 }
 
@@ -147,6 +154,17 @@ fn examples_parse_cleanly() {
         }
     }
     assert!(count > 0, "no examples found in {dir}");
+}
+
+#[test]
+fn spans_are_global_positions() {
+    let mut map = SourceMap::new();
+    map.add_file("a.xur", "fn a() {}");
+    let b = map.add_file("b.xur", "\nfn b() {\n    x y\n}");
+    let (module, diags) = parse_file(&b, &mut NodeIdGen::default());
+    assert_eq!(module.span, b.span());
+    assert_eq!(map.slice(module.items[0].span), "fn b() {\n    x y\n}");
+    assert_eq!(map.describe_pos(diags[0].span), "b.xur:3:7");
 }
 
 #[test]

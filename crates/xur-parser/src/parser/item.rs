@@ -31,7 +31,7 @@ impl Parser<'_> {
         }
         Module {
             items,
-            span: Span::new(0, self.src.len()),
+            span: Span::new(self.offset, self.offset + self.src.len()),
         }
     }
 

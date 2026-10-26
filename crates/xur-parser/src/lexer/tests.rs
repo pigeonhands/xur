@@ -330,7 +330,10 @@ fn test_full_main() {
 fn test_spans_are_byte_ranges() {
     let src = "let α = \"hi\";";
     let (tokens, _) = Lexer::new(src).tokenise();
-    let slices: Vec<_> = tokens.iter().map(|t| t.span.slice(src)).collect();
+    let slices: Vec<_> = tokens
+        .iter()
+        .map(|t| &src[t.span.start..t.span.end])
+        .collect();
     assert_eq!(slices, ["let", "α", "=", "\"hi\"", ";", ""]);
     assert_eq!(tokens.last().unwrap().span, Span::new(src.len(), src.len()));
 }

@@ -22,7 +22,7 @@ mod tests;
 
 use xur_ast::{Module, NodeId, NodeIdGen};
 use xur_errors::Diag;
-use xur_span::{Ident, Span, Symbol};
+use xur_span::{Ident, SourceFile, Span, Symbol};
 
 use self::expected::Expected;
 use crate::lexer::Lexer;
@@ -33,8 +33,8 @@ pub use self::path::PathStyle;
 /// Lexes and parses a whole source file, returning the module (complete
 /// even if there were errors, with `Err` nodes where parsing failed) and
 /// every diagnostic. Node ids are taken from `ids`.
-pub fn parse_module(src: &str, ids: &mut NodeIdGen) -> (Module, Vec<Diag>) {
-    let mut parser = Parser::new(src);
+pub fn parse_file(file: &SourceFile, ids: &mut NodeIdGen) -> (Module, Vec<Diag>) {
+    let mut parser = Parser::for_file(file);
     parser.ids = std::mem::take(ids);
     let module = parser.parse_module();
     *ids = std::mem::take(&mut parser.ids);
@@ -47,6 +47,8 @@ pub type PResult<T> = Result<T, Diag>;
 
 pub struct Parser<'src> {
     src: &'src str,
+    /// Global position of the start of `src`.
+    offset: usize,
     /// Always ends with `Eof`.
     tokens: Vec<Token<'src>>,
     /// Index of `token` in `tokens`.
@@ -76,17 +78,29 @@ struct Restrictions {
 }
 
 impl<'src> Parser<'src> {
-    /// Lexes `src` and prepares to parse it. Lex errors are kept and returned
-    /// by [`Parser::finish`] along with any parse errors.
+    /// Lexes a standalone string and prepares to parse it; spans start at
+    /// position 0. Lex errors are kept and returned by [`Parser::finish`]
+    /// along with any parse errors.
     pub fn new(src: &'src str) -> Self {
-        let (tokens, lex_errors) = Lexer::new(src).tokenise();
+        Self::from_lexer(src, 0, Lexer::new(src))
+    }
+
+    /// Like [`Parser::new`], for a file from the source map.
+    pub fn for_file(file: &'src SourceFile) -> Self {
+        Self::from_lexer(&file.src, file.start, Lexer::for_file(file))
+    }
+
+    fn from_lexer(src: &'src str, offset: usize, lexer: Lexer<'src>) -> Self {
+        let (tokens, lex_errors) = lexer.tokenise();
         let token = tokens[0];
         Self {
             src,
+            offset,
             tokens,
             pos: 0,
             token,
-            prev_token: Token::new(TokenKind::Eof, Span::default()),
+            // A placeholder until the first `bump`; see `token_starts_line`.
+            prev_token: Token::new(TokenKind::Eof, Span::new(offset, offset)),
             expected: Vec::new(),
             diags: lex_errors.into_iter().map(Diag::from).collect(),
             restrictions: Restrictions::default(),
@@ -260,10 +274,19 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// Whether a line break separates the current token from the previous one.
+    /// Whether a line break separates the current token from the previous
+    /// one. Always false for the first token, which has no previous one.
     fn token_starts_line(&self) -> bool {
-        let gap = &self.src[self.prev_token.span.end..self.token.span.start];
-        self.prev_token.span != Span::default() && gap.contains('\n')
+        let has_prev = self.prev_token.kind != TokenKind::Eof;
+        has_prev
+            && self
+                .text(self.prev_token.span.end, self.token.span.start)
+                .contains('\n')
+    }
+
+    /// The source text between global positions `start` and `end`.
+    fn text(&self, start: usize, end: usize) -> &'src str {
+        &self.src[start - self.offset..end - self.offset]
     }
 
     /// Expects a `;`. As in rustc, a `;` missing at the end of a line is
@@ -287,7 +310,7 @@ impl<'src> Parser<'src> {
         match token.kind {
             TokenKind::Eof => "end of file".to_owned(),
             TokenKind::Keyword(keyword) => format!("keyword `{keyword}`"),
-            _ => format!("`{}`", token.span.slice(self.src)),
+            _ => format!("`{}`", self.text(token.span.start, token.span.end)),
         }
     }
 }

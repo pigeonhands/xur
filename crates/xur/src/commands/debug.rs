@@ -7,11 +7,10 @@ use anyhow::{Result, bail};
 use xur_ast::NodeIdGen;
 use xur_errors::Diag;
 use xur_parser::{Lexer, Token};
-use xur_span::LineIndex;
+use xur_span::{SourceFile, SourceMap};
 
 use crate::cli::DebugCommand;
-use crate::diagnostics;
-use crate::source::SourceFile;
+use crate::{diagnostics, source};
 
 pub fn run(command: DebugCommand) -> Result<()> {
     match command {
@@ -22,45 +21,56 @@ pub fn run(command: DebugCommand) -> Result<()> {
 
 /// Prints one row per token: position, kind, and the source text it covers.
 fn tokens(path: &Path) -> Result<()> {
-    let file = SourceFile::load(path)?;
-    let (tokens, errors) = Lexer::new(&file.text).tokenise();
+    let mut source_map = SourceMap::new();
+    let file = source::load(&mut source_map, path)?;
+    let (tokens, errors) = Lexer::for_file(&file).tokenise();
 
     let mut out = BufWriter::new(io::stdout().lock());
-    ignore_broken_pipe(write_token_table(&mut out, &file.text, &tokens))?;
+    ignore_broken_pipe(write_token_table(&mut out, &file, &tokens))?;
 
     let diags: Vec<_> = errors.into_iter().map(Diag::from).collect();
-    fail_on_errors(&file, diags, "lex")
+    fail_on_errors(&source_map, &file, diags, "lex")
 }
 
 /// Prints the module's syntax tree, like rustc's `-Zunpretty=ast-tree`.
 /// The tree is printed even when there are errors, with `Err` nodes where
 /// parsing failed.
 fn ast(path: &Path) -> Result<()> {
-    let file = SourceFile::load(path)?;
-    let (module, diags) = xur_parser::parse_module(&file.text, &mut NodeIdGen::default());
+    let mut source_map = SourceMap::new();
+    let file = source::load(&mut source_map, path)?;
+    let (module, diags) = xur_parser::parse_file(&file, &mut NodeIdGen::default());
 
     let mut out = BufWriter::new(io::stdout().lock());
     ignore_broken_pipe(writeln!(out, "{module:#?}").and_then(|()| out.flush()))?;
 
-    fail_on_errors(&file, diags, "parse")
+    fail_on_errors(&source_map, &file, diags, "parse")
 }
 
-/// Reports `diags`, failing if there were any.
-fn fail_on_errors(file: &SourceFile, diags: Vec<Diag>, stage: &str) -> Result<()> {
+/// Reports `diags`, failing if there were any. `root` is the file the
+/// command was run on.
+fn fail_on_errors(
+    source_map: &SourceMap,
+    root: &SourceFile,
+    diags: Vec<Diag>,
+    stage: &str,
+) -> Result<()> {
     if diags.is_empty() {
         return Ok(());
     }
     let count = diags.len();
-    diagnostics::emit(file, diags)?;
-    bail!("could not {stage} `{}` due to {count} error(s)", file.name)
+    diagnostics::emit(source_map, diags)?;
+    bail!("could not {stage} `{}` due to {count} error(s)", root.name)
 }
 
-fn write_token_table(out: &mut impl Write, src: &str, tokens: &[Token<'_>]) -> io::Result<()> {
-    let lines = LineIndex::new(src);
+fn write_token_table(
+    out: &mut impl Write,
+    file: &SourceFile,
+    tokens: &[Token<'_>],
+) -> io::Result<()> {
     for token in tokens {
-        let position = lines.line_col(token.span.start).to_string();
+        let position = file.line_col(token.span.start).to_string();
         let kind = token.kind.to_string();
-        writeln!(out, "{position:<8} {kind:<10} {}", token.span.slice(src))?;
+        writeln!(out, "{position:<8} {kind:<10} {}", file.slice(token.span))?;
     }
     out.flush()
 }
@@ -79,10 +89,10 @@ mod tests {
 
     #[test]
     fn token_table_rows() {
-        let src = "let x =\n  \"hi\";";
-        let (tokens, _) = Lexer::new(src).tokenise();
+        let file = SourceMap::new().add_file("test.xur", "let x =\n  \"hi\";");
+        let (tokens, _) = Lexer::for_file(&file).tokenise();
         let mut out = Vec::new();
-        write_token_table(&mut out, src, &tokens).unwrap();
+        write_token_table(&mut out, &file, &tokens).unwrap();
         assert_eq!(
             String::from_utf8(out).unwrap(),
             "1:1      let        let\n\

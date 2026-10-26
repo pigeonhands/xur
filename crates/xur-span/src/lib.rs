@@ -1,13 +1,13 @@
 //! Source locations and interned names.
 //!
-//! A [`Span`] is just a byte range into the source text. Human-readable
-//! line/column positions are computed on demand with a [`LineIndex`], so the
-//! lexer never has to track them.
+//! A [`Span`] is a byte range in the [`SourceMap`]'s global position space.
+//! Human-readable line/column positions are computed on demand, so the lexer
+//! never has to track them.
 
-mod line_index;
+mod source_map;
 mod span;
 mod symbol;
 
-pub use line_index::{LineCol, LineIndex};
+pub use source_map::{LineCol, SourceFile, SourceMap};
 pub use span::Span;
 pub use symbol::{Ident, Symbol};

@@ -31,11 +31,6 @@ impl Span {
     pub fn shrink_to_hi(self) -> Span {
         Span::new(self.end, self.end)
     }
-
-    /// The source text this span covers.
-    pub fn slice<'src>(&self, src: &'src str) -> &'src str {
-        &src[self.start..self.end]
-    }
 }
 
 /// Prints as `start..end`, keeping AST dumps compact.
@@ -58,7 +53,6 @@ mod tests {
     #[test]
     fn span_slice_and_range() {
         let span = Span::new(4, 7);
-        assert_eq!(span.slice("let foo = 1"), "foo");
         assert_eq!(span.len(), 3);
         assert_eq!(Range::from(span), 4..7);
     }

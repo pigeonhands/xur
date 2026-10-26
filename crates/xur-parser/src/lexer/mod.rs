@@ -17,17 +17,30 @@ mod tests;
 use crate::error::{LexError, LexErrorKind};
 use crate::token::{Keyword, Token, TokenKind};
 use cursor::Cursor;
-use xur_span::Span;
+use xur_span::{SourceFile, Span};
 
 pub struct Lexer<'src> {
     cursor: Cursor<'src>,
+    /// Global position of the start of the source, added to every span.
+    offset: usize,
     errors: Vec<LexError>,
 }
 
 impl<'src> Lexer<'src> {
+    /// Lexes a standalone string; spans start at position 0.
     pub fn new(src: &'src str) -> Self {
+        Self::with_offset(src, 0)
+    }
+
+    /// Lexes a file from the source map, with spans in its global positions.
+    pub fn for_file(file: &'src SourceFile) -> Self {
+        Self::with_offset(&file.src, file.start)
+    }
+
+    fn with_offset(src: &'src str, offset: usize) -> Self {
         Self {
             cursor: Cursor::new(src),
+            offset,
             errors: Vec::new(),
         }
     }
@@ -62,8 +75,9 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// The span from cursor position `start` to the current position.
     fn span_from(&self, start: usize) -> Span {
-        Span::new(start, self.cursor.pos())
+        Span::new(self.offset + start, self.offset + self.cursor.pos())
     }
 
     /// Records an error covering `start` up to the current position.
