@@ -52,6 +52,8 @@ impl Parser<'_> {
             StmtKind::Empty
         } else if self.eat_keyword(Keyword::Let) {
             StmtKind::Let(Box::new(self.parse_local()?))
+        } else if self.is_item_start() {
+            StmtKind::Item(Box::new(self.parse_item()?))
         } else {
             self.parse_stmt_expr()?
         };

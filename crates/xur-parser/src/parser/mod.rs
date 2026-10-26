@@ -10,6 +10,7 @@
 
 mod expected;
 mod expr;
+mod item;
 mod lit;
 mod pat;
 mod path;
@@ -19,6 +20,7 @@ mod ty;
 #[cfg(test)]
 mod tests;
 
+use xur_ast::Module;
 use xur_errors::Diag;
 use xur_span::{Ident, Span, Symbol};
 
@@ -27,6 +29,15 @@ use crate::lexer::Lexer;
 use crate::token::{Keyword, Token, TokenKind};
 
 pub use self::path::PathStyle;
+
+/// Lexes and parses a whole source file, returning the module (complete
+/// even if there were errors, with `Err` nodes where parsing failed) and
+/// every diagnostic.
+pub fn parse_module(src: &str) -> (Module, Vec<Diag>) {
+    let mut parser = Parser::new(src);
+    let module = parser.parse_module();
+    (module, parser.finish())
+}
 
 /// The result of a parsing function. The error has not been reported yet:
 /// the caller either reports it or propagates it to a recovery point.

@@ -4,8 +4,9 @@
 //! pins down exactly how an expression was grouped.
 
 use xur_ast::{
-    Arm, Block, Expr, ExprKind, FnDecl, FnRetTy, GenericArgs, Lit, LitKind, Local, Pat, PatKind,
-    Path, RangeLimits, Stmt, StmtKind, Ty, TyKind,
+    Arm, Attribute, Block, Expr, ExprKind, FieldDef, FnDecl, FnRetTy, GenericArgs, Generics, Item,
+    ItemKind, Lit, LitKind, Local, MetaItem, MetaItemInner, MetaItemKind, Pat, PatKind, Path,
+    RangeLimits, Stmt, StmtKind, Ty, TyKind, VariantData, Visibility,
 };
 
 pub(super) trait Show {
@@ -189,7 +190,7 @@ impl Show for Stmt {
     fn show(&self) -> String {
         match &self.kind {
             StmtKind::Let(local) => local.show(),
-            StmtKind::Item(_) => "<item>".to_owned(),
+            StmtKind::Item(item) => item.show(),
             StmtKind::Expr(expr) => expr.show(),
             StmtKind::Semi(expr) => format!("{};", expr.show()),
             StmtKind::Empty => ";".to_owned(),
@@ -207,5 +208,134 @@ impl Show for Local {
             out += &format!(" = {}", init.show());
         }
         out + ";"
+    }
+}
+
+impl Show for Item {
+    fn show(&self) -> String {
+        let mut out = String::new();
+        for attr in &self.attrs {
+            out += &attr.show();
+            out += " ";
+        }
+        if let Visibility::Public(_) = self.vis {
+            out += "pub ";
+        }
+        out += &match &self.kind {
+            ItemKind::Use(tree) => format!("use {};", tree.path.show()),
+            ItemKind::Const(item) => match &item.ty {
+                Some(ty) => format!(
+                    "const {}: {} = {};",
+                    item.ident,
+                    ty.show(),
+                    item.expr.show()
+                ),
+                None => format!("const {} = {};", item.ident, item.expr.show()),
+            },
+            ItemKind::Fn(item) => {
+                let params: Vec<_> = item
+                    .decl
+                    .inputs
+                    .iter()
+                    .map(|param| format!("{}: {}", param.pat.show(), param.ty.show()))
+                    .collect();
+                let ret = match &item.decl.output {
+                    FnRetTy::Default(_) => String::new(),
+                    FnRetTy::Ty(ty) => format!(" -> {}", ty.show()),
+                };
+                format!(
+                    "fn {}{}({}){ret} {}",
+                    item.ident,
+                    item.generics.show(),
+                    params.join(", "),
+                    item.body.show()
+                )
+            }
+            ItemKind::Struct(ident, generics, data) => {
+                let body = match data {
+                    VariantData::Unit => ";".to_owned(),
+                    VariantData::Tuple(_) => format!("{};", data.show()),
+                    VariantData::Struct(_) => data.show(),
+                };
+                format!("struct {ident}{}{body}", generics.show())
+            }
+            ItemKind::Enum(ident, generics, def) => {
+                let variants: Vec<_> = def
+                    .variants
+                    .iter()
+                    .map(|variant| format!("{}{}", variant.ident, variant.data.show()))
+                    .collect();
+                format!(
+                    "enum {ident}{} {{ {} }}",
+                    generics.show(),
+                    variants.join(", ")
+                )
+            }
+        };
+        out
+    }
+}
+
+impl Show for Attribute {
+    fn show(&self) -> String {
+        format!("#[{}]", self.meta.show())
+    }
+}
+
+impl Show for MetaItem {
+    fn show(&self) -> String {
+        let path = self.path.show();
+        match &self.kind {
+            MetaItemKind::Word => path,
+            MetaItemKind::List(items) => format!("{path}({})", list(items)),
+            MetaItemKind::NameValue(lit) => format!("{path} = {}", lit.show()),
+        }
+    }
+}
+
+impl Show for MetaItemInner {
+    fn show(&self) -> String {
+        match self {
+            Self::MetaItem(meta) => meta.show(),
+            Self::Lit(lit) => lit.show(),
+        }
+    }
+}
+
+impl Show for Generics {
+    fn show(&self) -> String {
+        if self.params.is_empty() {
+            return String::new();
+        }
+        let params: Vec<_> = self.params.iter().map(|p| p.ident.to_string()).collect();
+        format!("<{}>", params.join(", "))
+    }
+}
+
+/// Renders fields as ` { a: u32, b: u32 }` or `(u32, u32)`; nothing if unit.
+impl Show for VariantData {
+    fn show(&self) -> String {
+        match self {
+            Self::Struct(fields) => format!(" {{ {} }}", list(fields)),
+            Self::Tuple(fields) => format!("({})", list(fields)),
+            Self::Unit => String::new(),
+        }
+    }
+}
+
+impl Show for FieldDef {
+    fn show(&self) -> String {
+        let mut out = String::new();
+        for attr in &self.attrs {
+            out += &attr.show();
+            out += " ";
+        }
+        if let Visibility::Public(_) = self.vis {
+            out += "pub ";
+        }
+        match self.ident {
+            Some(ident) => out + &format!("{ident}: {}", self.ty.show()),
+            None => out + &self.ty.show(),
+        }
     }
 }
