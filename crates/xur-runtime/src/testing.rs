@@ -4,8 +4,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use facet::Shape;
-use xur_resolve::{NativeFnId, NativeModule, NativeTypeId, Program};
+use xur_resolve::{NativeFnId, NativeModule, Program};
 use xur_span::MemoryFileLoader;
 
 use crate::convert::ConvertCx;
@@ -47,8 +46,8 @@ impl ConvertCx for TestCx<'_> {
         &self.lang
     }
 
-    fn native_type(&self, shape: &'static Shape) -> Option<NativeTypeId> {
-        self.registry.type_of_shape(shape)
+    fn registry(&self) -> &Registry {
+        self.registry
     }
 }
 

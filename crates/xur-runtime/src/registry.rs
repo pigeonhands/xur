@@ -9,8 +9,9 @@
 //! registry
 //!     .module("geo")
 //!     .ty::<Point>("Point")
-//!     .function("new", |x: f64, y: f64| Point { x, y })
-//!     .function("norm", |p: Point| p.x.hypot(p.y)); // `p.norm()` in Xur
+//!     .function("new", |x: f64, y: f64| Point { x, y }) // `Point::new(1.0, 2.0)`
+//!     .method("norm", |p: &Point| p.x.hypot(p.y)) //     `p.norm()`
+//!     .method_mut("scale", |p: &mut Point, k: f64| { p.x *= k; p.y *= k });
 //! ```
 //!
 //! Any `Fn(A, B, ...) -> R` whose argument and return types implement
@@ -18,13 +19,21 @@
 //! the result back with [`convert`](crate::convert). Functions that need the
 //! running program itself, such as `std::import`, are registered with
 //! [`ModuleBuilder::raw_function`] and receive a [`Context`].
+//!
+//! Values of a registered type live in Xur as [`Value::Native`]: the Rust
+//! value itself, shared, so methods taking `&mut self` change it in place.
+//! Its fields can be read (`p.x`) and it is displayed with its `Display` or
+//! `Debug` implementation.
 
+use std::any::Any;
 use std::io::Write;
+use std::marker::PhantomData;
 
-use facet::{Facet, Shape};
+use facet::{Facet, Peek, Shape};
 use xur_resolve::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId};
 
-use crate::convert::{ConvertCx, from_value, to_value};
+use crate::convert::{Builder, ConvertCx, from_value, into_value, peek_to_value, reflect_error};
+use crate::value::NativeObject;
 use crate::{RunResult, RuntimeError, Value};
 
 /// What a native function can ask of the running program.
@@ -67,6 +76,76 @@ struct NativeType {
     name: String,
     shape: &'static Shape,
     functions: Vec<NativeFnDecl>,
+    hooks: TypeHooks,
+}
+
+/// Operations on values of one registered type, instantiated where the type
+/// is still known (in [`ModuleBuilder::ty`]) and used where it is erased.
+struct TypeHooks {
+    /// Clones the value behind a peek, for a registered value nested inside
+    /// another, like the elements of a `Vec<Point>`.
+    clone_peek: fn(Peek<'_, 'static>) -> Option<Box<dyn Any>>,
+    /// Writes a clone of the value into a builder for the type.
+    set: fn(Builder, &dyn Any) -> RunResult<Builder>,
+    /// Reads a field by name.
+    field: fn(&dyn ConvertCx, &dyn Any, &str) -> Option<RunResult<Value>>,
+    display: fn(&dyn Any) -> String,
+    eq: fn(&dyn Any, &dyn Any) -> bool,
+}
+
+impl TypeHooks {
+    fn new<T: Facet<'static> + Clone + 'static>() -> Self {
+        Self {
+            clone_peek: clone_peek::<T>,
+            set: set::<T>,
+            field: field::<T>,
+            display: display::<T>,
+            eq: eq::<T>,
+        }
+    }
+}
+
+fn downcast<T: 'static>(value: &dyn Any) -> &T {
+    value
+        .downcast_ref()
+        .expect("type hooks are only used with their own type")
+}
+
+fn clone_peek<T: Facet<'static> + Clone>(peek: Peek<'_, 'static>) -> Option<Box<dyn Any>> {
+    let value: &T = peek.get().ok()?;
+    Some(Box::new(value.clone()))
+}
+
+fn set<T: Facet<'static> + Clone>(partial: Builder, value: &dyn Any) -> RunResult<Builder> {
+    partial
+        .set(downcast::<T>(value).clone())
+        .map_err(reflect_error)
+}
+
+fn field<T: Facet<'static>>(
+    cx: &dyn ConvertCx,
+    value: &dyn Any,
+    name: &str,
+) -> Option<RunResult<Value>> {
+    let fields = Peek::new(downcast::<T>(value)).into_struct().ok()?;
+    let field = fields.field_by_name(name).ok()?;
+    Some(peek_to_value(cx, field))
+}
+
+/// Uses `Display`, or `Debug` if the type has no `Display`.
+fn display<T: Facet<'static>>(value: &dyn Any) -> String {
+    let peek = Peek::new(downcast::<T>(value));
+    let displayed = peek.to_string();
+    // Without a `Display`, a peek shows the type name as `⟨Type⟩`.
+    if displayed == format!("⟨{}⟩", T::SHAPE) {
+        format!("{peek:?}")
+    } else {
+        displayed
+    }
+}
+
+fn eq<T: Facet<'static>>(a: &dyn Any, b: &dyn Any) -> bool {
+    Peek::new(downcast::<T>(a)) == Peek::new(downcast::<T>(b))
 }
 
 struct ModuleData {
@@ -117,6 +196,45 @@ impl Registry {
     pub fn type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
         let index = self.types.iter().position(|ty| ty.shape == shape)?;
         Some(NativeTypeId(index as u32))
+    }
+
+    /// Reads field `name` of a native object.
+    pub fn field(
+        &self,
+        cx: &dyn ConvertCx,
+        object: &NativeObject,
+        name: &str,
+    ) -> Option<RunResult<Value>> {
+        (self.hooks(object.ty).field)(cx, &*object.borrow_any(), name)
+    }
+
+    /// Formats a native object with its `Display`, or else `Debug`.
+    pub fn display(&self, object: &NativeObject) -> String {
+        (self.hooks(object.ty).display)(&*object.borrow_any())
+    }
+
+    /// Whether two native objects are equal by their Rust `PartialEq`.
+    pub fn native_eq(&self, a: &NativeObject, b: &NativeObject) -> bool {
+        a.ty == b.ty && (self.hooks(a.ty).eq)(&*a.borrow_any(), &*b.borrow_any())
+    }
+
+    /// A native object holding a clone of the registered value behind `peek`.
+    pub(crate) fn object_from_peek(
+        &self,
+        ty: NativeTypeId,
+        peek: Peek<'_, 'static>,
+    ) -> Option<NativeObject> {
+        let value = (self.hooks(ty).clone_peek)(peek)?;
+        Some(NativeObject::new(ty, value))
+    }
+
+    /// Writes a clone of `object` into a builder for its type.
+    pub(crate) fn set_object(&self, partial: Builder, object: &NativeObject) -> RunResult<Builder> {
+        (self.hooks(object.ty).set)(partial, &*object.borrow_any())
+    }
+
+    fn hooks(&self, ty: NativeTypeId) -> &TypeHooks {
+        &self.types[ty.0 as usize].hooks
     }
 
     /// The registered modules as name resolution sees them.
@@ -219,38 +337,72 @@ impl ModuleBuilder<'_> {
         self
     }
 
-    /// Registers the Rust type `T` as `name`. Values of `T` returned to Xur
-    /// are records whose methods are the type's functions.
-    pub fn ty<T: Facet<'static>>(&mut self, name: &str) -> TypeBuilder<'_> {
+    /// Registers the Rust type `T` as `name`. Values of `T` passed to Xur
+    /// become native objects holding the Rust value.
+    pub fn ty<T: Facet<'static> + Clone + 'static>(&mut self, name: &str) -> TypeBuilder<'_, T> {
         let id = NativeTypeId(self.registry.types.len() as u32);
         self.registry.types.push(NativeType {
             name: name.to_owned(),
             shape: T::SHAPE,
             functions: Vec::new(),
+            hooks: TypeHooks::new::<T>(),
         });
         self.registry.modules[self.module].types.push(id);
         TypeBuilder {
             registry: self.registry,
             ty: id,
+            _ty: PhantomData,
         }
     }
 }
 
-/// Adds functions to a registered native type.
-pub struct TypeBuilder<'r> {
+/// Adds functions to the registered native type `T`.
+pub struct TypeBuilder<'r, T> {
     registry: &'r mut Registry,
     ty: NativeTypeId,
+    _ty: PhantomData<T>,
 }
 
-impl TypeBuilder<'_> {
-    /// Registers `Type::name`. If the function's first parameter is the
-    /// type itself, it can also be called as a method: `value.name()`.
+impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
+    /// Registers the associated function `Type::name`. If its first
+    /// parameter is `T` it can also be called as a method, on a copy.
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
+        self.add(name, signature, call)
+    }
+
+    /// Registers a method taking `&self`: `value.name(args)` in Xur.
+    pub fn method<Marker>(&mut self, name: &str, f: impl IntoNativeMethod<T, Marker>) -> &mut Self {
+        let (signature, call) = f.into_native();
+        self.add(name, signature, call)
+    }
+
+    /// Registers a method taking `&mut self`, which changes the object in
+    /// place.
+    pub fn method_mut<Marker>(
+        &mut self,
+        name: &str,
+        f: impl IntoNativeMethodMut<T, Marker>,
+    ) -> &mut Self {
+        let (signature, call) = f.into_native();
+        self.add(name, signature, call)
+    }
+
+    fn add(&mut self, name: &str, signature: Signature, call: Box<CallFn>) -> &mut Self {
         let decl = self.registry.add_fn(name, Some(signature), call);
         self.registry.types[self.ty.0 as usize].functions.push(decl);
         self
     }
+}
+
+/// Methods taking `&T`, for [`TypeBuilder::method`].
+pub trait IntoNativeMethod<T, Marker> {
+    fn into_native(self) -> (Signature, Box<CallFn>);
+}
+
+/// Methods taking `&mut T`, for [`TypeBuilder::method_mut`].
+pub trait IntoNativeMethodMut<T, Marker> {
+    fn into_native(self) -> (Signature, Box<CallFn>);
 }
 
 /// Functions that can be registered with [`ModuleBuilder::function`]: any
@@ -265,7 +417,7 @@ macro_rules! impl_into_native_fn {
         impl<F, R, $($arg),*> IntoNativeFn<fn($($arg),*) -> R> for F
         where
             F: Fn($($arg),*) -> R + 'static,
-            R: Facet<'static>,
+            R: Facet<'static> + 'static,
             $($arg: Facet<'static>,)*
         {
             fn into_native(self) -> (Signature, Box<CallFn>) {
@@ -283,12 +435,78 @@ macro_rules! impl_into_native_fn {
                         )));
                     };
                     let result = self($(from_value::<$arg>(cx, $arg)?),*);
-                    to_value(cx, &result)
+                    into_value(cx, result)
                 };
                 (signature, Box::new(call))
             }
         }
+
+        impl<F, T, R, $($arg),*> IntoNativeMethod<T, fn($($arg),*) -> R> for F
+        where
+            F: Fn(&T, $($arg),*) -> R + 'static,
+            T: Facet<'static> + 'static,
+            R: Facet<'static> + 'static,
+            $($arg: Facet<'static>,)*
+        {
+            // Arguments are bound to variables named after their types.
+            #[allow(non_snake_case)]
+            fn into_native(self) -> (Signature, Box<CallFn>) {
+                impl_into_native_fn!(@method self, T, R, borrow, [&], $($arg),*)
+            }
+        }
+
+        impl<F, T, R, $($arg),*> IntoNativeMethodMut<T, fn($($arg),*) -> R> for F
+        where
+            F: Fn(&mut T, $($arg),*) -> R + 'static,
+            T: Facet<'static> + 'static,
+            R: Facet<'static> + 'static,
+            $($arg: Facet<'static>,)*
+        {
+            // Arguments are bound to variables named after their types.
+            #[allow(non_snake_case)]
+            fn into_native(self) -> (Signature, Box<CallFn>) {
+                impl_into_native_fn!(@method self, T, R, borrow_mut, [&mut], $($arg),*)
+            }
+        }
     };
+    // The body shared by `&self` and `&mut self` methods, which differ only
+    // in how the receiver is borrowed.
+    (@method $f:ident, $ty:ident, $ret:ident, $borrow:ident, [$($recv:tt)*], $($arg:ident),*) => {{
+        let signature = Signature {
+            params: vec![$ty::SHAPE, $($arg::SHAPE),*],
+            ret: $ret::SHAPE,
+        };
+        let arity = signature.params.len();
+        let call = move |cx: &mut dyn Context, args: &[Value]| {
+            #[allow(non_snake_case)]
+            let [receiver, $($arg),*] = args else {
+                return Err(RuntimeError::new(format!(
+                    "expected {arity} argument(s), found {}",
+                    args.len()
+                )));
+            };
+            $(let $arg = from_value::<$arg>(cx, $arg)?;)*
+            let Value::Native(object) = receiver else {
+                return Err(RuntimeError::new(format!(
+                    "expected `{}`, found {}",
+                    $ty::SHAPE,
+                    receiver.kind()
+                )));
+            };
+            let result = {
+                #[allow(unused_mut)]
+                let mut this = object.$borrow::<$ty>().ok_or_else(|| {
+                    RuntimeError::new(format!(
+                        "expected `{}` that is not already in use",
+                        $ty::SHAPE
+                    ))
+                })?;
+                $f($($recv)* *this, $($arg),*)
+            };
+            into_value(cx, result)
+        };
+        (signature, Box::new(call) as Box<CallFn>)
+    }};
 }
 
 impl_into_native_fn!();
@@ -320,7 +538,11 @@ mod tests {
             .module("geo")
             .ty::<Point>("Point")
             .function("new", |x: f64, y: f64| Point { x, y })
-            .function("norm", |p: Point| p.x.hypot(p.y));
+            .method("norm", |p: &Point| p.x.hypot(p.y))
+            .method_mut("scale", |p: &mut Point, k: f64| {
+                p.x *= k;
+                p.y *= k;
+            });
         registry
     }
 
@@ -334,6 +556,7 @@ mod tests {
         assert_eq!(geo.modules[0].functions[1].name, "describe");
         assert_eq!(geo.types[0].name, "Point");
         assert_eq!(geo.types[0].functions[1].name, "norm");
+        assert_eq!(geo.types[0].functions[2].name, "scale");
     }
 
     #[test]
@@ -361,24 +584,53 @@ mod tests {
         assert_eq!(signature.ret, String::SHAPE);
     }
 
+    fn new_point(cx: &mut TestCx<'_>, x: f64, y: f64) -> Value {
+        let new = fn_id(cx.registry, "geo::Point::new");
+        cx.call(new, &[Value::Float(x), Value::Float(y)]).unwrap()
+    }
+
     #[test]
-    fn native_types_round_trip_as_records() {
+    fn registered_types_are_native_objects() {
         let registry = registry();
         let mut cx = TestCx::new(&registry);
-        let point = cx
-            .call(
-                fn_id(&registry, "geo::Point::new"),
-                &[Value::Float(3.0), Value::Float(4.0)],
-            )
-            .unwrap();
-        let Value::Record(record) = &point else {
-            panic!("expected a record, found {point:?}");
+        let point = new_point(&mut cx, 3.0, 4.0);
+        let Value::Native(object) = &point else {
+            panic!("expected a native object, found {point:?}");
         };
-        assert_eq!(record.ty, registry.type_of_shape(Point::SHAPE));
+        assert_eq!(*object.borrow::<Point>().unwrap(), Point { x: 3.0, y: 4.0 });
         assert_eq!(
             cx.call(fn_id(&registry, "geo::Point::norm"), &[point]),
             Ok(Value::Float(5.0))
         );
+    }
+
+    #[test]
+    fn mutating_methods_change_the_object_in_place() {
+        let registry = registry();
+        let mut cx = TestCx::new(&registry);
+        let point = new_point(&mut cx, 1.0, 2.0);
+        let alias = point.clone();
+        let scale = fn_id(&registry, "geo::Point::scale");
+        assert_eq!(cx.call(scale, &[point, Value::Float(3.0)]), Ok(Value::Unit));
+        let Value::Native(object) = &alias else {
+            unreachable!()
+        };
+        assert_eq!(*object.borrow::<Point>().unwrap(), Point { x: 3.0, y: 6.0 });
+    }
+
+    #[test]
+    fn native_fields_display_and_equality() {
+        let registry = registry();
+        let mut cx = TestCx::new(&registry);
+        let (Value::Native(a), Value::Native(b)) =
+            (new_point(&mut cx, 1.0, 2.0), new_point(&mut cx, 1.0, 2.0))
+        else {
+            unreachable!()
+        };
+        assert_eq!(registry.field(&cx, &a, "y"), Some(Ok(Value::Float(2.0))));
+        assert_eq!(registry.field(&cx, &a, "z"), None);
+        assert_eq!(registry.display(&a), "Point { x: 1.0, y: 2.0 }");
+        assert!(registry.native_eq(&a, &b));
     }
 
     #[test]

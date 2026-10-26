@@ -1,10 +1,12 @@
 //! Runtime values.
 //!
-//! Xur is dynamically checked, so every value carries what it is. Lists are
-//! shared and mutable, like Python's; everything else is immutable, so
-//! cloning a value is always cheap.
+//! Xur is dynamically checked, so every value carries what it is. Lists and
+//! native objects are shared and mutable, like Python's objects; everything
+//! else is immutable. Cloning a value is always cheap.
 
-use std::cell::RefCell;
+use std::any::Any;
+use std::cell::{Ref, RefCell, RefMut};
+use std::fmt;
 use std::rc::Rc;
 
 use xur_resolve::{DefId, NativeFnId, NativeTypeId};
@@ -22,7 +24,9 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     /// An instance of a struct or enum variant defined in Xur.
     Adt(Rc<Adt>),
-    /// An instance of a type implemented in Rust, as named fields.
+    /// A value of a registered Rust type, held as the Rust value itself.
+    Native(Rc<NativeObject>),
+    /// A value of an unregistered Rust struct, converted to named fields.
     Record(Rc<Record>),
     /// A function defined in Xur, including those in `impl` blocks.
     Fn(DefId),
@@ -45,12 +49,49 @@ pub struct Adt {
     pub fields: Vec<Value>,
 }
 
-/// An instance of a Rust type, converted to named fields.
-#[derive(Debug, Clone)]
+/// A value of a registered Rust type. Methods registered as taking
+/// `&mut self` change it in place, and every Xur value referring to it sees
+/// the change.
+pub struct NativeObject {
+    pub ty: NativeTypeId,
+    value: RefCell<Box<dyn Any>>,
+}
+
+impl NativeObject {
+    pub fn new(ty: NativeTypeId, value: Box<dyn Any>) -> Self {
+        Self {
+            ty,
+            value: RefCell::new(value),
+        }
+    }
+
+    /// The Rust value, if it is a `T`. Fails if it is borrowed mutably.
+    pub fn borrow<T: 'static>(&self) -> Option<Ref<'_, T>> {
+        let value = self.value.try_borrow().ok()?;
+        Ref::filter_map(value, |value| value.downcast_ref()).ok()
+    }
+
+    /// The Rust value mutably, if it is a `T`. Fails if it is borrowed.
+    pub fn borrow_mut<T: 'static>(&self) -> Option<RefMut<'_, T>> {
+        let value = self.value.try_borrow_mut().ok()?;
+        RefMut::filter_map(value, |value| value.downcast_mut()).ok()
+    }
+
+    /// The Rust value, type-erased.
+    pub fn borrow_any(&self) -> Ref<'_, dyn Any> {
+        Ref::map(self.value.borrow(), |value| value.as_ref())
+    }
+}
+
+impl fmt::Debug for NativeObject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NativeObject").field(&self.ty).finish()
+    }
+}
+
+/// A value of an unregistered Rust struct, converted to named fields.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Record {
-    /// The registered native type, if the Rust type was registered; its
-    /// methods can then be called on the record.
-    pub ty: Option<NativeTypeId>,
     pub fields: Vec<(Symbol, Value)>,
 }
 
@@ -99,7 +140,8 @@ impl Value {
             Self::Tuple(_) => "tuple",
             Self::List(_) => "list",
             Self::Adt(_) => "struct or enum",
-            Self::Record(_) => "native value",
+            Self::Native(_) => "native object",
+            Self::Record(_) => "record",
             Self::Fn(_) | Self::NativeFn(_) => "function",
             Self::Ctor(_) => "constructor",
             Self::Module(_) => "module",
@@ -121,7 +163,10 @@ impl PartialEq for Value {
             (Self::Tuple(a), Self::Tuple(b)) => a == b,
             (Self::List(a), Self::List(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Self::Adt(a), Self::Adt(b)) => a.ctor == b.ctor && a.fields == b.fields,
-            (Self::Record(a), Self::Record(b)) => a.ty == b.ty && a.fields == b.fields,
+            // Native objects are compared by identity here; the interpreter
+            // compares their Rust values when the type supports it.
+            (Self::Native(a), Self::Native(b)) => Rc::ptr_eq(a, b),
+            (Self::Record(a), Self::Record(b)) => a == b,
             (Self::Fn(a), Self::Fn(b)) | (Self::Ctor(a), Self::Ctor(b)) => a == b,
             (Self::Module(a), Self::Module(b)) => a == b,
             (Self::NativeFn(a), Self::NativeFn(b)) => a == b,

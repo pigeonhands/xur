@@ -10,25 +10,35 @@
 //! | tuples                             | tuples                       |
 //! | `Vec<T>`, arrays, slices           | lists                        |
 //! | `Option<T>`, `Result<T, E>`        | the prelude's `Option`, `Result` |
-//! | structs deriving `Facet`           | records with named fields    |
+//! | registered types                   | native objects               |
+//! | other structs deriving `Facet`     | records with named fields    |
 
 use facet::{Def, Facet, Partial, Peek, ScalarType, Shape, StructKind, StructType, Type, UserType};
-use xur_resolve::NativeTypeId;
 use xur_span::Symbol;
 
-use crate::value::{Adt, Record};
-use crate::{LangItems, RunResult, RuntimeError, Value};
+use crate::value::{Adt, NativeObject, Record};
+use crate::{LangItems, Registry, RunResult, RuntimeError, Value};
 
 /// What conversions need to know about the running program.
 pub trait ConvertCx {
     fn lang(&self) -> &LangItems;
-    /// The native type registered for `shape`, if any.
-    fn native_type(&self, shape: &'static Shape) -> Option<NativeTypeId>;
+    /// The registry, for converting registered types.
+    fn registry(&self) -> &Registry;
 }
 
-/// Converts a Rust value to a Xur value.
+/// Converts a Rust value to a Xur value, cloning it if it is of a
+/// registered type.
 pub fn to_value<T: Facet<'static>>(cx: &dyn ConvertCx, value: &T) -> RunResult<Value> {
     peek_to_value(cx, Peek::new(value))
+}
+
+/// Converts a Rust value to a Xur value, moving it into a native object if
+/// it is of a registered type.
+pub fn into_value<T: Facet<'static> + 'static>(cx: &dyn ConvertCx, value: T) -> RunResult<Value> {
+    match cx.registry().type_of_shape(T::SHAPE) {
+        Some(ty) => Ok(Value::Native(NativeObject::new(ty, Box::new(value)).into())),
+        None => to_value(cx, &value),
+    }
 }
 
 /// Converts a Xur value to a Rust value of type `T`, failing with a runtime
@@ -40,11 +50,18 @@ pub fn from_value<T: Facet<'static>>(cx: &dyn ConvertCx, value: &Value) -> RunRe
     heap_value.materialize::<T>().map_err(reflect_error)
 }
 
-fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, '_>) -> RunResult<Value> {
+pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value> {
+    let shape = peek.shape();
+    let registry = cx.registry();
+    if let Some(ty) = registry.type_of_shape(shape) {
+        let object = registry
+            .object_from_peek(ty, peek)
+            .ok_or_else(|| unsupported(shape))?;
+        return Ok(Value::Native(object.into()));
+    }
     if let Some(scalar) = peek.scalar_type() {
         return scalar_to_value(peek, scalar);
     }
-    let shape = peek.shape();
     let lang = cx.lang();
     match shape.def {
         Def::Option(_) => {
@@ -85,13 +102,7 @@ fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, '_>) -> RunResult<Value> {
                         .map(|field| Symbol::intern(field.name))
                         .zip(values)
                         .collect();
-                    Value::Record(
-                        Record {
-                            ty: cx.native_type(shape),
-                            fields,
-                        }
-                        .into(),
-                    )
+                    Value::Record(Record { fields }.into())
                 }
             })
         }
@@ -99,8 +110,8 @@ fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, '_>) -> RunResult<Value> {
     }
 }
 
-fn scalar_to_value(peek: Peek<'_, '_>, scalar: ScalarType) -> RunResult<Value> {
-    fn get<'a, T: Facet<'a> + Copy>(peek: Peek<'_, 'a>) -> RunResult<T> {
+fn scalar_to_value(peek: Peek<'_, 'static>, scalar: ScalarType) -> RunResult<Value> {
+    fn get<T: Facet<'static> + Copy>(peek: Peek<'_, 'static>) -> RunResult<T> {
         peek.get::<T>().copied().map_err(reflect_error)
     }
     fn int<T: TryInto<i64> + std::fmt::Display + Copy>(value: T) -> RunResult<Value> {
@@ -134,11 +145,19 @@ fn scalar_to_value(peek: Peek<'_, '_>, scalar: ScalarType) -> RunResult<Value> {
     })
 }
 
-type Builder = Partial<'static, false>;
+/// A value of some Rust type under construction.
+pub(crate) type Builder = Partial<'static, false>;
 
 /// Fills in the value under construction in `partial` from `value`.
 fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Builder> {
     let shape = partial.shape();
+    let registry = cx.registry();
+    if let Some(ty) = registry.type_of_shape(shape) {
+        return match value {
+            Value::Native(object) if object.ty == ty => registry.set_object(partial, object),
+            _ => Err(mismatch(shape, value)),
+        };
+    }
     if let Some(scalar) = ScalarType::try_from_shape(shape) {
         return set_scalar(partial, scalar, value);
     }
@@ -264,7 +283,7 @@ fn unsupported(shape: &Shape) -> RuntimeError {
     RuntimeError::new(format!("`{shape}` cannot be converted to a Xur value"))
 }
 
-fn reflect_error(error: impl std::fmt::Display) -> RuntimeError {
+pub(crate) fn reflect_error(error: impl std::fmt::Display) -> RuntimeError {
     RuntimeError::new(format!("conversion failed: {error}"))
 }
 
@@ -283,22 +302,30 @@ mod tests {
         label: String,
     }
 
-    struct Cx(LangItems);
+    #[derive(Facet, Debug, Clone, PartialEq)]
+    struct Label {
+        text: String,
+    }
+
+    /// Registers `Point`; `Label` stays unregistered.
+    struct Cx(LangItems, Registry);
 
     impl ConvertCx for Cx {
         fn lang(&self) -> &LangItems {
             &self.0
         }
 
-        fn native_type(&self, shape: &'static Shape) -> Option<NativeTypeId> {
-            (shape == Point::SHAPE).then_some(NativeTypeId(7))
+        fn registry(&self) -> &Registry {
+            &self.1
         }
     }
 
     fn cx() -> Cx {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
         let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader), &[]).unwrap();
-        Cx(LangItems::new(&program))
+        let mut registry = Registry::new();
+        registry.module("geo").ty::<Point>("Point");
+        Cx(LangItems::new(&program), registry)
     }
 
     fn round_trip<T: Facet<'static> + PartialEq + std::fmt::Debug>(value: T) -> Value {
@@ -342,16 +369,30 @@ mod tests {
     }
 
     #[test]
-    fn structs_become_records() {
-        let value = round_trip(Point {
+    fn registered_types_become_native_objects() {
+        let point = Point {
             x: 1.0,
             label: "p".into(),
-        });
+        };
+        let cx = cx();
+        let value = into_value(&cx, point.clone()).unwrap();
+        let Value::Native(object) = &value else {
+            panic!("expected a native object, found {value:?}");
+        };
+        assert_eq!(*object.borrow::<Point>().unwrap(), point);
+        assert_eq!(from_value::<Point>(&cx, &value).unwrap(), point);
+        // Nested in other data, they are cloned in and out.
+        let list = to_value(&cx, &vec![point.clone()]).unwrap();
+        assert_eq!(from_value::<Vec<Point>>(&cx, &list).unwrap(), [point]);
+    }
+
+    #[test]
+    fn other_structs_become_records() {
+        let value = round_trip(Label { text: "l".into() });
         let Value::Record(record) = value else {
             panic!("expected a record, found {value:?}");
         };
-        assert_eq!(record.ty, Some(NativeTypeId(7)));
-        assert_eq!(record.field(Symbol::intern("x")), Some(&Value::Float(1.0)));
+        assert_eq!(record.field(Symbol::intern("text")), Some(&Value::str("l")));
     }
 
     #[test]
