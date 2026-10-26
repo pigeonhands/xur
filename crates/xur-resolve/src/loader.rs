@@ -235,30 +235,7 @@ fn normalize(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Serves files from memory.
-    #[derive(Default)]
-    pub(crate) struct MemLoader(pub HashMap<PathBuf, String>);
-
-    impl MemLoader {
-        pub(crate) fn new(files: &[(&str, &str)]) -> Self {
-            Self(
-                files
-                    .iter()
-                    .map(|(path, src)| (PathBuf::from(path), (*src).to_owned()))
-                    .collect(),
-            )
-        }
-    }
-
-    impl FileLoader for MemLoader {
-        fn read_file(&self, path: &Path) -> io::Result<String> {
-            self.0
-                .get(path)
-                .cloned()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))
-        }
-    }
+    use crate::tests::MemLoader;
 
     fn load(files: &[(&str, &str)]) -> (Crate, Vec<String>) {
         let (krate, diags) = load_crate(Path::new(files[0].0), &MemLoader::new(files)).unwrap();
