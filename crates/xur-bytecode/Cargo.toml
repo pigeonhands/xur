@@ -1,0 +1,18 @@
+[package]
+name = "xur-bytecode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_bytecode"
+path = "src/lib.rs"
+
+[dependencies]
+xur-ast.workspace = true
+xur-resolve.workspace = true
+xur-span.workspace = true
+
+[dev-dependencies]
+xur-span.workspace = true

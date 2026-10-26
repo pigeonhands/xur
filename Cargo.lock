@@ -453,6 +453,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "xur-bytecode"
+version = "0.1.1"
+dependencies = [
+ "xur-ast",
+ "xur-resolve",
+ "xur-span",
+]
+
+[[package]]
 name = "xur-errors"
 version = "0.1.1"
 dependencies = [
