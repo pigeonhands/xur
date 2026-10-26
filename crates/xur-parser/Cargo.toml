@@ -1,0 +1,15 @@
+[package]
+name = "xur-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_parser"
+path = "src/lib.rs"
+
+[dependencies]
+xur-ast = { path = "../xur-ast" }
+strum = { version = "0.27", features = ["derive"] }
+unicode-ident = "1.0"

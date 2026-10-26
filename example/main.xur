@@ -1,0 +1,37 @@
+use std;
+
+const math = std::import("./math.xur"); // load a module
+
+#[repr(C)] // struct layout matches C ABI alignment & padding
+struct CPacked {
+    a: usize
+    b: u32
+}
+
+#[repr(packed)] // struct layout is packed with zero padding / 1-byte alignment
+struct ZeroPacked {
+    a: u32
+    b: u32
+}
+
+#[repr(allign(4))] // struct layout is packed with zero padding / 1-byte alignment
+#[endian(Little)]
+struct ZeroPacked {
+    a: u32
+    b: u32
+    #[field(offset=100)] c: u32 // at 100 bytes from start of struct
+}
+
+fn print_name<T>(s: T) {
+    std::io::print("Struct name: {}", std::any::type_name::<T>());
+}
+
+fn main() {
+    let io = std::io; // modules are values
+
+    io::println("Hello, World");
+    for i in 0..10 {
+        io::println("1 + {} = {}", i, math.add(1, i));
+    }
+    print_name::<ZeroPacked>();
+}
