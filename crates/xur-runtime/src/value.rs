@@ -3,14 +3,22 @@
 //! Xur is dynamically checked, so every value carries what it is. Lists and
 //! native objects are shared and mutable, like Python's objects; everything
 //! else is immutable. Cloning a value is always cheap.
+//!
+//! Values are `Send + Sync` so threads can share them: shared mutable values
+//! are behind a [`Mutex`].
 
 use std::any::Any;
-use std::cell::{Ref, RefCell, RefMut};
 use std::fmt;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use xur_resolve::{DefId, NativeFnId, NativeTypeId};
 use xur_span::Symbol;
+
+/// Locks `mutex`. A panic while it was held doesn't stop the program from
+/// using the value, as Xur values have no invariants a panic could break.
+pub fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -19,15 +27,15 @@ pub enum Value {
     Bool(bool),
     Int(i64),
     Float(f64),
-    Str(Rc<str>),
-    Tuple(Rc<[Value]>),
-    List(Rc<RefCell<Vec<Value>>>),
+    Str(Arc<str>),
+    Tuple(Arc<[Value]>),
+    List(Arc<Mutex<Vec<Value>>>),
     /// An instance of a struct or enum variant defined in Xur.
-    Adt(Rc<Adt>),
+    Adt(Arc<Adt>),
     /// A value of a registered Rust type, held as the Rust value itself.
-    Native(Rc<NativeObject>),
+    Native(Arc<NativeObject>),
     /// A value of an unregistered Rust struct, converted to named fields.
-    Record(Rc<Record>),
+    Record(Arc<Record>),
     /// A function defined in Xur, including those in `impl` blocks.
     Fn(DefId),
     /// The constructor of a tuple struct or tuple variant used as a
@@ -54,32 +62,30 @@ pub struct Adt {
 /// the change.
 pub struct NativeObject {
     pub ty: NativeTypeId,
-    value: RefCell<Box<dyn Any>>,
+    value: Mutex<Box<dyn Any + Send>>,
 }
 
 impl NativeObject {
-    pub fn new(ty: NativeTypeId, value: Box<dyn Any>) -> Self {
+    pub fn new(ty: NativeTypeId, value: Box<dyn Any + Send>) -> Self {
         Self {
             ty,
-            value: RefCell::new(value),
+            value: Mutex::new(value),
         }
     }
 
-    /// The Rust value, if it is a `T`. Fails if it is borrowed mutably.
-    pub fn borrow<T: 'static>(&self) -> Option<Ref<'_, T>> {
-        let value = self.value.try_borrow().ok()?;
-        Ref::filter_map(value, |value| value.downcast_ref()).ok()
+    /// Calls `f` with the Rust value, if it is a `T`.
+    pub fn with<T: 'static, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
+        lock(&self.value).downcast_ref().map(f)
     }
 
-    /// The Rust value mutably, if it is a `T`. Fails if it is borrowed.
-    pub fn borrow_mut<T: 'static>(&self) -> Option<RefMut<'_, T>> {
-        let value = self.value.try_borrow_mut().ok()?;
-        RefMut::filter_map(value, |value| value.downcast_mut()).ok()
+    /// Calls `f` with the Rust value mutably, if it is a `T`.
+    pub fn with_mut<T: 'static, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
+        lock(&self.value).downcast_mut().map(f)
     }
 
-    /// The Rust value, type-erased.
-    pub fn borrow_any(&self) -> Ref<'_, dyn Any> {
-        Ref::map(self.value.borrow(), |value| value.as_ref())
+    /// Calls `f` with the Rust value, type-erased.
+    pub fn with_any<R>(&self, f: impl FnOnce(&dyn Any) -> R) -> R {
+        f(lock(&self.value).as_ref())
     }
 }
 
@@ -118,7 +124,7 @@ impl Value {
     }
 
     pub fn list(items: Vec<Value>) -> Self {
-        Self::List(Rc::new(RefCell::new(items)))
+        Self::List(Arc::new(Mutex::new(items)))
     }
 
     pub fn tuple(items: Vec<Value>) -> Self {
@@ -126,7 +132,7 @@ impl Value {
     }
 
     pub fn adt(ctor: DefId, fields: Vec<Value>) -> Self {
-        Self::Adt(Rc::new(Adt { ctor, fields }))
+        Self::Adt(Arc::new(Adt { ctor, fields }))
     }
 
     /// How the kind of value is named in error messages.
@@ -161,11 +167,11 @@ impl PartialEq for Value {
             (Self::Float(a), Self::Float(b)) => a == b,
             (Self::Str(a), Self::Str(b)) => a == b,
             (Self::Tuple(a), Self::Tuple(b)) => a == b,
-            (Self::List(a), Self::List(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Self::List(a), Self::List(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
             (Self::Adt(a), Self::Adt(b)) => a.ctor == b.ctor && a.fields == b.fields,
             // Native objects are compared by identity here; the interpreter
             // compares their Rust values when the type supports it.
-            (Self::Native(a), Self::Native(b)) => Rc::ptr_eq(a, b),
+            (Self::Native(a), Self::Native(b)) => Arc::ptr_eq(a, b),
             (Self::Record(a), Self::Record(b)) => a == b,
             (Self::Fn(a), Self::Fn(b)) | (Self::Ctor(a), Self::Ctor(b)) => a == b,
             (Self::Module(a), Self::Module(b)) => a == b,
@@ -179,6 +185,12 @@ impl PartialEq for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn values_can_be_shared_between_threads() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Value>();
+    }
 
     #[test]
     fn equality_is_structural_and_kind_strict() {

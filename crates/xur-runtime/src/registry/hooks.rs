@@ -12,7 +12,7 @@ use crate::{RunResult, Value};
 pub(super) struct TypeHooks {
     /// Clones the value behind a peek, for a registered value nested inside
     /// another, like the elements of a `Vec<Point>`.
-    pub(super) clone_peek: fn(Peek<'_, 'static>) -> Option<Box<dyn Any>>,
+    pub(super) clone_peek: fn(Peek<'_, 'static>) -> Option<Box<dyn Any + Send>>,
     /// Writes a clone of the value into a builder for the type.
     pub(super) set: fn(Builder, &dyn Any) -> RunResult<Builder>,
     /// Reads a field by name.
@@ -22,7 +22,7 @@ pub(super) struct TypeHooks {
 }
 
 impl TypeHooks {
-    pub(super) fn new<T: Facet<'static> + Clone + 'static>() -> Self {
+    pub(super) fn new<T: Facet<'static> + Clone + Send + 'static>() -> Self {
         Self {
             clone_peek: clone_peek::<T>,
             set: set::<T>,
@@ -39,7 +39,9 @@ fn downcast<T: 'static>(value: &dyn Any) -> &T {
         .expect("type hooks are only used with their own type")
 }
 
-fn clone_peek<T: Facet<'static> + Clone>(peek: Peek<'_, 'static>) -> Option<Box<dyn Any>> {
+fn clone_peek<T: Facet<'static> + Clone + Send>(
+    peek: Peek<'_, 'static>,
+) -> Option<Box<dyn Any + Send>> {
     let value: &T = peek.get().ok()?;
     Some(Box::new(value.clone()))
 }

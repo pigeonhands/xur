@@ -78,7 +78,7 @@ fn registered_types_are_native_objects() {
     let Value::Native(object) = &point else {
         panic!("expected a native object, found {point:?}");
     };
-    assert_eq!(*object.borrow::<Point>().unwrap(), Point { x: 3.0, y: 4.0 });
+    assert_eq!(object.with(Point::clone), Some(Point { x: 3.0, y: 4.0 }));
     assert_eq!(
         cx.call(fn_id(&registry, "geo::Point::norm"), &[point]),
         Ok(Value::Float(5.0))
@@ -96,7 +96,7 @@ fn mutating_methods_change_the_object_in_place() {
     let Value::Native(object) = &alias else {
         unreachable!()
     };
-    assert_eq!(*object.borrow::<Point>().unwrap(), Point { x: 3.0, y: 6.0 });
+    assert_eq!(object.with(Point::clone), Some(Point { x: 3.0, y: 6.0 }));
 }
 
 #[test]

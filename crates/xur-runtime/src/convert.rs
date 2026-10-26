@@ -16,7 +16,7 @@
 use facet::{Def, Facet, Partial, Peek, ScalarType, Shape, StructKind, StructType, Type, UserType};
 use xur_span::Symbol;
 
-use crate::value::{Adt, NativeObject, Record};
+use crate::value::{Adt, NativeObject, Record, lock};
 use crate::{LangItems, Registry, RunResult, RuntimeError, Value};
 
 /// What conversions need to know about the running program.
@@ -34,7 +34,10 @@ pub fn to_value<T: Facet<'static>>(cx: &dyn ConvertCx, value: &T) -> RunResult<V
 
 /// Converts a Rust value to a Xur value, moving it into a native object if
 /// it is of a registered type.
-pub fn into_value<T: Facet<'static> + 'static>(cx: &dyn ConvertCx, value: T) -> RunResult<Value> {
+pub fn into_value<T: Facet<'static> + Send + 'static>(
+    cx: &dyn ConvertCx,
+    value: T,
+) -> RunResult<Value> {
     match cx.registry().type_of_shape(T::SHAPE) {
         Some(ty) => Ok(Value::Native(NativeObject::new(ty, Box::new(value)).into())),
         None => to_value(cx, &value),
@@ -178,7 +181,7 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
         (Def::Option(_) | Def::Result(_), _) => return Err(mismatch(shape, value)),
         (Def::List(_), Value::List(items)) => {
             let mut partial = partial.init_list().map_err(reflect_error)?;
-            for item in items.borrow().iter() {
+            for item in lock(items).iter() {
                 let element = partial.begin_list_item().map_err(reflect_error)?;
                 partial = build(cx, element, item)?.end().map_err(reflect_error)?;
             }
@@ -379,7 +382,7 @@ mod tests {
         let Value::Native(object) = &value else {
             panic!("expected a native object, found {value:?}");
         };
-        assert_eq!(*object.borrow::<Point>().unwrap(), point);
+        assert_eq!(object.with(Point::clone), Some(point.clone()));
         assert_eq!(from_value::<Point>(&cx, &value).unwrap(), point);
         // Nested in other data, they are cloned in and out.
         let list = to_value(&cx, &vec![point.clone()]).unwrap();

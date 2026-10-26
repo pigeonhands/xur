@@ -44,7 +44,10 @@ impl ModuleBuilder<'_> {
 
     /// Registers the Rust type `T` as `name`. Values of `T` passed to Xur
     /// become native objects holding the Rust value.
-    pub fn ty<T: Facet<'static> + Clone + 'static>(&mut self, name: &str) -> TypeBuilder<'_, T> {
+    pub fn ty<T: Facet<'static> + Clone + Send + 'static>(
+        &mut self,
+        name: &str,
+    ) -> TypeBuilder<'_, T> {
         let id = NativeTypeId(self.registry.types.len() as u32);
         self.registry.types.push(NativeType {
             name: name.to_owned(),

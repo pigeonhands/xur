@@ -142,17 +142,24 @@ impl Registry {
         object: &NativeObject,
         name: &str,
     ) -> Option<RunResult<Value>> {
-        (self.hooks(object.ty).field)(cx, &*object.borrow_any(), name)
+        object.with_any(|value| (self.hooks(object.ty).field)(cx, value, name))
     }
 
     /// Formats a native object with its `Display`, or else `Debug`.
     pub fn display(&self, object: &NativeObject) -> String {
-        (self.hooks(object.ty).display)(&*object.borrow_any())
+        object.with_any(self.hooks(object.ty).display)
     }
 
     /// Whether two native objects are equal by their Rust `PartialEq`.
     pub fn native_eq(&self, a: &NativeObject, b: &NativeObject) -> bool {
-        a.ty == b.ty && (self.hooks(a.ty).eq)(&*a.borrow_any(), &*b.borrow_any())
+        if a.ty != b.ty {
+            return false;
+        }
+        if std::ptr::eq(a, b) {
+            return true;
+        }
+        let eq = self.hooks(a.ty).eq;
+        a.with_any(|a| b.with_any(|b| eq(a, b)))
     }
 
     /// A native object holding a clone of the registered value behind `peek`.
@@ -167,7 +174,7 @@ impl Registry {
 
     /// Writes a clone of `object` into a builder for its type.
     pub(crate) fn set_object(&self, partial: Builder, object: &NativeObject) -> RunResult<Builder> {
-        (self.hooks(object.ty).set)(partial, &*object.borrow_any())
+        object.with_any(|value| (self.hooks(object.ty).set)(partial, value))
     }
 
     fn hooks(&self, ty: NativeTypeId) -> &TypeHooks {

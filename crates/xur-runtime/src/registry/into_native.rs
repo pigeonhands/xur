@@ -28,7 +28,7 @@ macro_rules! impl_into_native_fn {
         impl<F, R, $($arg),*> IntoNativeFn<fn($($arg),*) -> R> for F
         where
             F: Fn($($arg),*) -> R + 'static,
-            R: Facet<'static> + 'static,
+            R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*
         {
             fn into_native(self) -> (Signature, Box<CallFn>) {
@@ -55,34 +55,34 @@ macro_rules! impl_into_native_fn {
         impl<F, T, R, $($arg),*> IntoNativeMethod<T, fn($($arg),*) -> R> for F
         where
             F: Fn(&T, $($arg),*) -> R + 'static,
-            T: Facet<'static> + 'static,
-            R: Facet<'static> + 'static,
+            T: Facet<'static> + Send + 'static,
+            R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*
         {
             // Arguments are bound to variables named after their types.
             #[allow(non_snake_case)]
             fn into_native(self) -> (Signature, Box<CallFn>) {
-                impl_into_native_fn!(@method self, T, R, borrow, [&], $($arg),*)
+                impl_into_native_fn!(@method self, T, R, with, $($arg),*)
             }
         }
 
         impl<F, T, R, $($arg),*> IntoNativeMethodMut<T, fn($($arg),*) -> R> for F
         where
             F: Fn(&mut T, $($arg),*) -> R + 'static,
-            T: Facet<'static> + 'static,
-            R: Facet<'static> + 'static,
+            T: Facet<'static> + Send + 'static,
+            R: Facet<'static> + Send + 'static,
             $($arg: Facet<'static>,)*
         {
             // Arguments are bound to variables named after their types.
             #[allow(non_snake_case)]
             fn into_native(self) -> (Signature, Box<CallFn>) {
-                impl_into_native_fn!(@method self, T, R, borrow_mut, [&mut], $($arg),*)
+                impl_into_native_fn!(@method self, T, R, with_mut, $($arg),*)
             }
         }
     };
     // The body shared by `&self` and `&mut self` methods, which differ only
     // in how the receiver is borrowed.
-    (@method $f:ident, $ty:ident, $ret:ident, $borrow:ident, [$($recv:tt)*], $($arg:ident),*) => {{
+    (@method $f:ident, $ty:ident, $ret:ident, $with:ident, $($arg:ident),*) => {{
         let signature = Signature {
             params: vec![$ty::SHAPE, $($arg::SHAPE),*],
             ret: $ret::SHAPE,
@@ -104,16 +104,9 @@ macro_rules! impl_into_native_fn {
                     receiver.kind()
                 )));
             };
-            let result = {
-                #[allow(unused_mut)]
-                let mut this = object.$borrow::<$ty>().ok_or_else(|| {
-                    RuntimeError::new(format!(
-                        "expected `{}` that is not already in use",
-                        $ty::SHAPE
-                    ))
-                })?;
-                $f($($recv)* *this, $($arg),*)
-            };
+            let result = object.$with(|this| $f(this, $($arg),*)).ok_or_else(|| {
+                RuntimeError::new(format!("expected `{}`, found another native type", $ty::SHAPE))
+            })?;
             into_value(cx, result)
         };
         (signature, Box::new(call) as Box<CallFn>)
