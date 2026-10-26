@@ -29,7 +29,7 @@ impl<'r> TestCx<'r> {
         .unwrap();
         Self {
             registry,
-            lang: LangItems::new(&program),
+            lang: program.lang_items(),
             type_args: Vec::new(),
             stdout: Vec::new(),
         }

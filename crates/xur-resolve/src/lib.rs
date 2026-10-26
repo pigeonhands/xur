@@ -18,6 +18,7 @@ mod collect;
 mod def;
 mod ident;
 mod imports;
+mod lang;
 mod late;
 mod loader;
 mod names;
@@ -37,6 +38,7 @@ use xur_errors::Diag;
 use xur_span::{Ident, Symbol};
 
 pub use def::{DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
+pub use lang::LangItems;
 pub use loader::{Crate, LoadedModule, ModuleIdx};
 pub use names::{NameRef, names};
 pub use native::{

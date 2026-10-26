@@ -1,6 +1,6 @@
 //! Definitions the runtime itself needs to know, after rustc's lang items.
 
-use xur_resolve::{DefId, DefKind, Namespace, Program, Res};
+use crate::{DefId, DefKind, Namespace, Program, Res};
 use xur_span::Symbol;
 
 /// The prelude's `Option` and `Result` variants, which Rust's `Option` and
@@ -14,7 +14,7 @@ pub struct LangItems {
 }
 
 impl LangItems {
-    pub fn new(program: &Program) -> Self {
+    pub(crate) fn new(program: &Program) -> Self {
         let resolutions = program.resolutions();
         let prelude = resolutions.module_defs[program.krate.prelude.0];
         let variant = |name: &str| match resolutions.lookup(

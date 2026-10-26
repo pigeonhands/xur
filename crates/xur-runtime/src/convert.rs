@@ -333,7 +333,7 @@ mod tests {
         .unwrap();
         let mut registry = Registry::new();
         registry.module("geo").ty::<Point>("Point");
-        Cx(LangItems::new(&program), registry)
+        Cx(program.lang_items(), registry)
     }
 
     fn round_trip<T: Facet<'static> + PartialEq + std::fmt::Debug>(value: T) -> Value {

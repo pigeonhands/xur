@@ -7,7 +7,7 @@ use xur_span::FileLoader;
 use crate::NativeProvider;
 
 use crate::loader::{Loader, normalize};
-use crate::{Crate, ModuleIdx, Resolutions, resolve_modules};
+use crate::{Crate, LangItems, ModuleIdx, Resolutions, resolve_modules};
 
 /// A loaded, name-resolved program that can grow while it runs.
 ///
@@ -56,6 +56,11 @@ impl Program {
             loader,
         };
         Ok((program, diags))
+    }
+
+    /// The prelude definitions the language itself relies on.
+    pub fn lang_items(&self) -> LangItems {
+        LangItems::new(self)
     }
 
     pub fn resolutions(&self) -> &Resolutions {
