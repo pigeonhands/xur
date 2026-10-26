@@ -44,6 +44,7 @@ fn block_like_statement_ends_before_operator() {
     // As in Rust: an `if` statement followed by the expression `-1`.
     assert_eq!(block("{ if c { a } -1 }"), "{ if c { a } (-1) }");
     assert_eq!(block("{ { a } (1, 2) }"), "{ { a } (1, 2) }");
+    assert_eq!(block("{ { a } [1] }"), "{ { a } [1] }");
     assert_eq!(block("{ let x = { a } - 1; }"), "{ let x = ({ a } - 1); }");
 }
 
@@ -66,7 +67,7 @@ fn missing_semicolon_is_recovered() {
     let (block, errors) = block_with_errors("{ let x = 1 let y = 2; y }");
     assert_eq!(
         errors,
-        ["expected one of `(`, `.`, `;`, `?`, or an operator, found keyword `let`"]
+        ["expected one of `(`, `.`, `;`, `?`, `[`, or an operator, found keyword `let`"]
     );
     assert_eq!(block, "{ <err> y }");
 }

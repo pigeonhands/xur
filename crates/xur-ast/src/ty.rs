@@ -16,6 +16,8 @@ pub enum TyKind {
     Tuple(Vec<Ty>),
     /// `(T)`, kept so the tree records exactly what was written.
     Paren(Box<Ty>),
+    /// `[T]`, a list of `T`.
+    List(Box<Ty>),
     /// `_`, or no type written at all, as for the closure parameter in
     /// `|x| x + 1`.
     Infer,

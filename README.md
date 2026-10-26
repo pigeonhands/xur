@@ -176,12 +176,12 @@ file is reported in one run:
 
 ```console
 $ cargo run -- debug ast bad.xur
-Error: expected one of `(`, `.`, `;`, `?`, or an operator, found keyword `let`
+Error: expected one of `(`, `.`, `;`, `?`, `[`, or an operator, found keyword `let`
    ╭─[ bad.xur:2:14 ]
    │
  2 │     let x = 1
    │              │
-   │              ╰─ expected one of 5 possible tokens
+   │              ╰─ expected one of 6 possible tokens
  3 │     let y = x;
    │     ─┬─
    │      ╰─── unexpected token

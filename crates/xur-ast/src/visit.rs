@@ -173,12 +173,14 @@ pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: &Expr) {
             visitor.visit_expr(inner);
         }
         ExprKind::Field(receiver, _) => visitor.visit_expr(receiver),
-        ExprKind::Tuple(exprs) => {
+        ExprKind::Tuple(exprs) | ExprKind::List(exprs) => {
             for expr in exprs {
                 visitor.visit_expr(expr);
             }
         }
-        ExprKind::Binary(_, lhs, rhs) | ExprKind::Assign(lhs, rhs, _) => {
+        ExprKind::Binary(_, lhs, rhs)
+        | ExprKind::Assign(lhs, rhs, _)
+        | ExprKind::Index(lhs, rhs) => {
             visitor.visit_expr(lhs);
             visitor.visit_expr(rhs);
         }
@@ -269,7 +271,7 @@ pub fn walk_ty<V: Visitor>(visitor: &mut V, ty: &Ty) {
                 visitor.visit_ty(ty);
             }
         }
-        TyKind::Paren(ty) => visitor.visit_ty(ty),
+        TyKind::Paren(ty) | TyKind::List(ty) => visitor.visit_ty(ty),
         TyKind::Infer | TyKind::Err => {}
     }
 }

@@ -84,6 +84,7 @@ fn can_begin_expr(kind: TokenKind<'_>) -> bool {
         | TokenKind::FloatLit(_)
         | TokenKind::StringLit(_)
         | TokenKind::LParen
+        | TokenKind::LBracket
         | TokenKind::LBrace
         | TokenKind::Minus
         | TokenKind::Bang
@@ -287,11 +288,16 @@ impl Parser<'_> {
             } else if self.eat(TokenKind::Dot) {
                 self.parse_dot_suffix(expr)?
             } else if self.restrictions.stmt_expr && expr.is_block_like() {
-                // `if c {} (a, b)` is an `if` statement followed by a tuple.
+                // `if c {} (a, b)` is an `if` statement followed by a tuple,
+                // and `if c {} [a]` one followed by a list.
                 return Ok(expr);
             } else if self.eat(TokenKind::LParen) {
                 let args = self.parse_delimited(TokenKind::RParen, Self::parse_expr)?;
                 ExprKind::Call(Box::new(expr), args)
+            } else if self.eat(TokenKind::LBracket) {
+                let index = self.parse_expr()?;
+                self.expect(TokenKind::RBracket)?;
+                ExprKind::Index(Box::new(expr), Box::new(index))
             } else {
                 return Ok(expr);
             };
@@ -330,6 +336,10 @@ impl Parser<'_> {
         let kind = match self.token.kind {
             TokenKind::Ident(_) => ExprKind::Path(self.parse_path(PathStyle::Expr)?),
             TokenKind::LParen => self.parse_expr_paren_or_tuple()?,
+            TokenKind::LBracket => {
+                self.bump();
+                ExprKind::List(self.parse_delimited(TokenKind::RBracket, Self::parse_expr)?)
+            }
             TokenKind::LBrace => ExprKind::Block(Box::new(self.parse_block()?)),
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_expr_closure()?,
             TokenKind::Keyword(Keyword::If) => {

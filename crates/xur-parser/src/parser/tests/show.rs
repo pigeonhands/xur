@@ -62,6 +62,7 @@ impl Show for Ty {
             TyKind::Tuple(tys) if tys.len() == 1 => format!("({},)", tys[0].show()),
             TyKind::Tuple(tys) => format!("({})", list(tys)),
             TyKind::Paren(ty) => format!("({})", ty.show()),
+            TyKind::List(ty) => format!("[{}]", ty.show()),
             TyKind::Infer => "_".to_owned(),
             TyKind::Err => "<err>".to_owned(),
         }
@@ -96,6 +97,8 @@ impl Show for Expr {
             ExprKind::Paren(expr) => format!("({})", expr.show()),
             ExprKind::Tuple(exprs) if exprs.len() == 1 => format!("({},)", exprs[0].show()),
             ExprKind::Tuple(exprs) => format!("({})", list(exprs)),
+            ExprKind::List(exprs) => format!("[{}]", list(exprs)),
+            ExprKind::Index(list, index) => format!("{}[{}]", list.show(), index.show()),
             ExprKind::Unary(op, operand) => format!("({}{})", op.as_str(), operand.show()),
             ExprKind::Binary(op, lhs, rhs) => {
                 format!("({} {} {})", lhs.show(), op.kind, rhs.show())

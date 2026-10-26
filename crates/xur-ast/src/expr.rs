@@ -47,6 +47,8 @@ pub enum ExprKind {
     Paren(Box<Expr>),
     /// `(a, b)`; `()` is the unit value.
     Tuple(Vec<Expr>),
+    /// `[a, b, c]`
+    List(Vec<Expr>),
     /// `-x`, `!x`
     Unary(UnOp, Box<Expr>),
     /// `a + b`
@@ -63,6 +65,8 @@ pub enum ExprKind {
     Field(Box<Expr>, Ident),
     /// `expr?`
     Try(Box<Expr>),
+    /// `list[index]`
+    Index(Box<Expr>, Box<Expr>),
     /// `{ ... }`
     Block(Box<Block>),
     /// `if cond { ... } else ...`; the else branch is a block or another `if`.

@@ -30,6 +30,12 @@ fn tuple_and_paren_types() {
 }
 
 #[test]
+fn list_types() {
+    assert_eq!(ty("[u32]"), "[u32]");
+    assert_eq!(ty("[Result<T, E>]"), "[Result<T, E>]");
+}
+
+#[test]
 fn infer_type() {
     assert_eq!(ty("_"), "_");
 }

@@ -199,7 +199,7 @@ fn missing_operand() {
 fn unclosed_call() {
     assert_eq!(
         expr_errors("f(1 2)"),
-        ["expected one of `(`, `)`, `,`, `.`, `?`, or an operator, found `2`"]
+        ["expected one of `(`, `)`, `,`, `.`, `?`, `[`, or an operator, found `2`"]
     );
 }
 
@@ -207,7 +207,7 @@ fn unclosed_call() {
 fn match_arm_needs_comma() {
     assert_eq!(
         expr_errors("match x { A => 1 B => 2 }"),
-        ["expected one of `(`, `,`, `.`, `?`, `}`, or an operator, found `B`"]
+        ["expected one of `(`, `,`, `.`, `?`, `[`, `}`, or an operator, found `B`"]
     );
 }
 
@@ -217,4 +217,14 @@ fn generic_args_on_field() {
         expr_errors("a.b::<T>"),
         ["field expressions cannot have generic arguments"]
     );
+}
+
+#[test]
+fn lists_and_indexing() {
+    assert_eq!(expr("[]"), "[]");
+    assert_eq!(expr("[1, 2 + 3,]"), "[1, (2 + 3)]");
+    assert_eq!(expr("xs[0]"), "xs[0]");
+    assert_eq!(expr("xs[i + 1].add(2)"), "xs[(i + 1)].add(2)");
+    assert_eq!(expr("-xs[0]"), "(-xs[0])");
+    assert_eq!(expr("f()[0][1]"), "f()[0][1]");
 }
