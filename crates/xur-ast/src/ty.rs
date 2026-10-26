@@ -14,7 +14,10 @@ pub enum TyKind {
     Path(Path),
     /// `(A, B)`; `()` is the unit type.
     Tuple(Vec<Ty>),
-    /// No type was written, e.g. the closure parameter in `|x| x + 1`.
+    /// `(T)`, kept so the tree records exactly what was written.
+    Paren(Box<Ty>),
+    /// `_`, or no type written at all, as for the closure parameter in
+    /// `|x| x + 1`.
     Infer,
     /// A type that failed to parse; the error has already been reported.
     Err,
