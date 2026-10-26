@@ -462,6 +462,7 @@ dependencies = [
  "xur-ast",
  "xur-resolve",
  "xur-span",
+ "xur-std",
 ]
 
 [[package]]

@@ -220,3 +220,28 @@ fn insta_like(actual: Result<String, String>, expected: &str) {
         other => panic!("expected:\n{expected}\nactual:\n{other:?}"),
     }
 }
+
+#[test]
+fn option_and_result_methods_are_written_in_xur() {
+    let src = "
+        fn main() {
+            let some = Some(2);
+            let none: Option<i64> = None;
+            std::io::println(\"{} {} {}\", some.is_some(), none.unwrap_or(7), some.map(|x| x * 10));
+            let parsed = \"x\".parse_int();
+            std::io::println(\"{} {}\", parsed.is_err(), parsed.ok());
+        }";
+    assert_eq!(run(src), Ok("true 7 Some(20)\ntrue None\n".into()));
+}
+
+#[test]
+fn panics_stop_the_program() {
+    assert_eq!(
+        run("fn main() { let x: Option<i64> = None; x.unwrap(); }"),
+        Err("called `unwrap` on `None`".into())
+    );
+    assert_eq!(
+        run("fn main() { std::panic(\"bad {}\", 1); }"),
+        Err("bad 1".into())
+    );
+}

@@ -100,11 +100,13 @@ struct LazyNatives {
 
 impl crate::NativeProvider for LazyNatives {
     fn modules(&self) -> Vec<crate::NativeModule> {
-        vec![crate::NativeModule {
+        let mut modules = natives();
+        modules.push(crate::NativeModule {
             name: "lazy".to_owned(),
             lazy: true,
             ..Default::default()
-        }]
+        });
+        modules
     }
 
     fn expand(&self, path: &[String]) -> crate::NativeModule {

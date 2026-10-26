@@ -1,4 +1,6 @@
 // The prelude: names in scope in every module without a `use`.
+//
+// It relies on the native `std` module providing `panic`.
 
 pub enum Option<T> {
     Some(T)
@@ -14,3 +16,106 @@ pub use Option::Some;
 pub use Option::None;
 pub use Result::Ok;
 pub use Result::Err;
+
+impl<T> Option<T> {
+    pub fn is_some(self) -> bool {
+        match self {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    pub fn is_none(self) -> bool {
+        !self.is_some()
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Some(value) => value,
+            None => std::panic("called `unwrap` on `None`"),
+        }
+    }
+
+    pub fn expect(self, message: str) -> T {
+        match self {
+            Some(value) => value,
+            None => std::panic("{}", message),
+        }
+    }
+
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Some(value) => value,
+            None => default,
+        }
+    }
+
+    pub fn map(self, f: _) -> Option<_> {
+        match self {
+            Some(value) => Some(f(value)),
+            None => None,
+        }
+    }
+
+    pub fn ok_or(self, error: _) -> Result<T, _> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err(error),
+        }
+    }
+}
+
+impl<T, E> Result<T, E> {
+    pub fn is_ok(self) -> bool {
+        match self {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    pub fn is_err(self) -> bool {
+        !self.is_ok()
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Ok(value) => value,
+            Err(error) => std::panic("called `unwrap` on an `Err`: {}", error),
+        }
+    }
+
+    pub fn expect(self, message: str) -> T {
+        match self {
+            Ok(value) => value,
+            Err(error) => std::panic("{}: {}", message, error),
+        }
+    }
+
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Ok(value) => value,
+            Err(_) => default,
+        }
+    }
+
+    pub fn ok(self) -> Option<T> {
+        match self {
+            Ok(value) => Some(value),
+            Err(_) => None,
+        }
+    }
+
+    pub fn map(self, f: _) -> Result<_, E> {
+        match self {
+            Ok(value) => Ok(f(value)),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn map_err(self, f: _) -> Result<T, _> {
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err(f(error)),
+        }
+    }
+}

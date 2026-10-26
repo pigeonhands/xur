@@ -80,7 +80,7 @@ pub(crate) fn natives() -> Vec<NativeModule> {
     };
     let std = module(
         "std",
-        vec![f("import")],
+        vec![f("import"), f("panic")],
         vec![
             module("io", vec![f("print"), f("println")], Vec::new()),
             module("any", vec![f("type_name")], Vec::new()),

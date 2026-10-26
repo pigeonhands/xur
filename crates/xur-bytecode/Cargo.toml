@@ -15,4 +15,4 @@ xur-resolve.workspace = true
 xur-span.workspace = true
 
 [dev-dependencies]
-xur-span.workspace = true
+xur-std.workspace = true

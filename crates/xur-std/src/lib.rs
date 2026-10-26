@@ -23,7 +23,10 @@ pub fn registry() -> Registry {
 
 /// Registers `std` and its submodules in `registry`.
 pub fn register(registry: &Registry) {
-    registry.module("std").raw_function("import", import);
+    registry
+        .module("std")
+        .raw_function("import", import)
+        .raw_function("panic", panic);
     io::register(registry);
     any::register(registry);
     math::register(registry);
@@ -40,4 +43,13 @@ fn import(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             "`std::import` takes a single path string",
         )),
     }
+}
+
+/// `std::panic(format, args...)`: stops the program with a runtime error,
+/// formatted like `println`.
+fn panic(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let Some((Value::Str(template), args)) = args.split_first() else {
+        return Err(RuntimeError::new("`panic` takes a format string"));
+    };
+    Err(RuntimeError::new(fmt::format(cx, template, args)?))
 }

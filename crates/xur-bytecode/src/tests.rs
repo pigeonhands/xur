@@ -8,12 +8,8 @@ use crate::{ItemIndex, display_function, lower};
 /// The bytecode listing of function `name` in a program made of `src`.
 fn listing(src: &str, name: &str) -> String {
     let loader = MemoryFileLoader::new([("main.xur", src)]);
-    let (program, diags) = Program::load(
-        Path::new("main.xur"),
-        Box::new(loader),
-        Box::new(Vec::new()),
-    )
-    .unwrap();
+    let natives = Box::new(xur_std::registry());
+    let (program, diags) = Program::load(Path::new("main.xur"), Box::new(loader), natives).unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
     let resolutions = program.resolutions();
     let root = resolutions.module_defs[program.krate.root.0];
