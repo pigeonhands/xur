@@ -302,7 +302,7 @@ impl_into_native_fn!(A, B, C, D, E, G);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{TestCx, fn_id};
+    use crate::testing::{TestCx, fn_id};
 
     #[derive(Facet, Debug, Clone, PartialEq)]
     struct Point {

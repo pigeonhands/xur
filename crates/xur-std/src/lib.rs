@@ -1,11 +1,20 @@
-//! The `std` module, registered like any other native module.
+//! Xur's standard library, `std`.
+//!
+//! It is registered like any other native module, so embedders can run
+//! programs with a different standard library, or register more modules
+//! alongside it.
 
-use crate::registry::Context;
-use crate::{Registry, RunResult, RuntimeError, Value};
+use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
-/// A registry holding `std`. Embedders can register more modules into it.
-pub fn std_registry() -> Registry {
+/// A registry holding only `std`.
+pub fn registry() -> Registry {
     let mut registry = Registry::new();
+    register(&mut registry);
+    registry
+}
+
+/// Registers `std` and its submodules in `registry`.
+pub fn register(registry: &mut Registry) {
     registry.module("std").raw_function("import", import);
     registry
         .module("std::io")
@@ -21,7 +30,6 @@ pub fn std_registry() -> Registry {
         .function("abs", |x: f64| x.abs())
         .function("min", |a: i64, b: i64| a.min(b))
         .function("max", |a: i64, b: i64| a.max(b));
-    registry
 }
 
 /// `std::import(path)`: loads a module, which may be computed at runtime.
@@ -96,11 +104,11 @@ fn type_name(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{TestCx, fn_id};
+    use xur_runtime::testing::{TestCx, fn_id};
 
     #[test]
     fn println_formats_its_arguments() {
-        let registry = std_registry();
+        let registry = registry();
         let mut cx = TestCx::new(&registry);
         let println = fn_id(&registry, "std::io::println");
         let args = [
@@ -110,12 +118,12 @@ mod tests {
             Value::Int(3),
         ];
         assert_eq!(cx.call(println, &args), Ok(Value::Unit));
-        assert_eq!(cx.stdout(), "1 + 2 = {3}\n");
+        assert_eq!(cx.output(), "1 + 2 = {3}\n");
     }
 
     #[test]
     fn format_errors() {
-        let registry = std_registry();
+        let registry = registry();
         let mut cx = TestCx::new(&registry);
         let print = fn_id(&registry, "std::io::print");
         let error = |cx: &mut TestCx<'_>, args: &[Value]| cx.call(print, args).unwrap_err().message;
@@ -135,7 +143,7 @@ mod tests {
 
     #[test]
     fn type_name_uses_the_type_argument() {
-        let registry = std_registry();
+        let registry = registry();
         let mut cx = TestCx::new(&registry);
         cx.type_args = vec!["ZeroPacked".into()];
         assert_eq!(
@@ -146,7 +154,7 @@ mod tests {
 
     #[test]
     fn math_functions_are_ordinary_rust_functions() {
-        let registry = std_registry();
+        let registry = registry();
         let mut cx = TestCx::new(&registry);
         let sqrt = fn_id(&registry, "std::math::sqrt");
         assert_eq!(cx.call(sqrt, &[Value::Float(9.0)]), Ok(Value::Float(3.0)));

@@ -1,0 +1,16 @@
+[package]
+name = "xur-std"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_std"
+path = "src/lib.rs"
+
+[dependencies]
+xur-runtime.workspace = true
+
+[dev-dependencies]
+xur-runtime = { workspace = true, features = ["testing"] }

@@ -9,6 +9,10 @@ repository.workspace = true
 name = "xur_runtime"
 path = "src/lib.rs"
 
+[features]
+# A stand-in for the interpreter, for unit-testing native functions.
+testing = []
+
 [dependencies]
 xur-ast.workspace = true
 xur-errors.workspace = true

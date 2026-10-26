@@ -16,6 +16,7 @@ xur-errors = { path = "crates/xur-errors" }
 xur-parser = { path = "crates/xur-parser" }
 xur-resolve = { path = "crates/xur-resolve" }
 xur-runtime = { path = "crates/xur-runtime" }
+xur-std = { path = "crates/xur-std" }
 xur-span = { path = "crates/xur-span" }
 strum = { version = "0.27", features = ["derive"] }
 unicode-ident = "1.0"

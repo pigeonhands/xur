@@ -1,4 +1,5 @@
-//! A stand-in for the interpreter, for testing native functions alone.
+//! A stand-in for the interpreter, for unit-testing native functions
+//! without running a program. Enabled by the `testing` feature.
 
 use std::io::Write;
 use std::path::Path;
@@ -11,7 +12,7 @@ use crate::convert::ConvertCx;
 use crate::registry::Context;
 use crate::{LangItems, Registry, RunResult, RuntimeError, Value};
 
-pub(crate) struct TestCx<'r> {
+pub struct TestCx<'r> {
     pub registry: &'r Registry,
     pub lang: LangItems,
     pub type_args: Vec<String>,
@@ -19,7 +20,7 @@ pub(crate) struct TestCx<'r> {
 }
 
 impl<'r> TestCx<'r> {
-    pub(crate) fn new(registry: &'r Registry) -> Self {
+    pub fn new(registry: &'r Registry) -> Self {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
         let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader)).unwrap();
         Self {
@@ -30,12 +31,13 @@ impl<'r> TestCx<'r> {
         }
     }
 
-    pub(crate) fn call(&mut self, id: NativeFnId, args: &[Value]) -> RunResult<Value> {
+    pub fn call(&mut self, id: NativeFnId, args: &[Value]) -> RunResult<Value> {
         let registry = self.registry;
         registry.function(id).call(self, args)
     }
 
-    pub(crate) fn stdout(&self) -> &str {
+    /// Everything written to standard output so far.
+    pub fn output(&self) -> &str {
         std::str::from_utf8(&self.stdout).unwrap()
     }
 }
@@ -77,7 +79,7 @@ impl Context for TestCx<'_> {
 
 /// The id of the function at `path`, e.g. `std::io::println` or
 /// `geo::Point::new`.
-pub(crate) fn fn_id(registry: &Registry, path: &str) -> NativeFnId {
+pub fn fn_id(registry: &Registry, path: &str) -> NativeFnId {
     fn collect(module: &NativeModule, prefix: &str, out: &mut Vec<(String, NativeFnId)>) {
         let prefix = format!("{prefix}{}::", module.name);
         for f in &module.functions {
