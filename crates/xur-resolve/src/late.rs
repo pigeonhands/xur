@@ -17,9 +17,8 @@ use xur_errors::Diag;
 use xur_span::{Ident, Span, Symbol};
 
 use crate::Resolver;
-use crate::def::{Builtin, DefData, DefId, DefKind, Namespace, Res};
+use crate::def::{DefData, DefId, DefKind, Namespace, Res};
 use crate::ident::{Lookup, undeclared_module};
-use crate::loader::as_std_import;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RibKind {
@@ -275,13 +274,15 @@ impl LateResolver<'_, '_> {
         }
     }
 
-    /// `const m = std::import("m.xur")` at the top level: only the callee
-    /// needs resolving, and this is the one place the call is allowed.
-    fn resolve_import_const(&mut self, expr: &Expr) {
-        if let ExprKind::Call(callee, _) = &expr.kind
-            && let ExprKind::Path(path) = &callee.kind
-        {
-            self.resolve_path(path, Namespace::Value);
+    /// The module `expr` statically evaluates to: a path naming a module,
+    /// or `std::import` with a literal path.
+    fn static_module(&self, expr: &Expr) -> Option<DefId> {
+        match &expr.kind {
+            ExprKind::Path(path) => match self.r.res.get(&path.id) {
+                Some(&Res::Def(DefKind::Mod, module)) => Some(module),
+                _ => None,
+            },
+            _ => self.r.static_import_target(expr),
         }
     }
 }
@@ -306,11 +307,7 @@ impl Visitor for LateResolver<'_, '_> {
                 if let Some(ty) = &konst.ty {
                     this.visit_ty(ty);
                 }
-                if top_level && as_std_import(&konst.expr).is_some() {
-                    this.resolve_import_const(&konst.expr);
-                } else {
-                    this.visit_expr(&konst.expr);
-                }
+                this.visit_expr(&konst.expr);
             }),
             ItemKind::Fn(func) => self.with_ribs(RibKind::Item, |this| {
                 this.declare_generics(item, &func.generics);
@@ -349,11 +346,11 @@ impl Visitor for LateResolver<'_, '_> {
         }
         self.resolve_pattern(&local.pat);
 
-        // `let io = std::io;` makes `io` usable as a path prefix.
+        // `let io = std::io;` or `let m = std::import("m.xur");` makes the
+        // local usable as a path prefix.
         if let PatKind::Ident(ident) = local.pat.kind
             && let Some(init) = &local.init
-            && let ExprKind::Path(path) = &init.kind
-            && let Some(&Res::Def(DefKind::Mod, module)) = self.r.res.get(&path.id)
+            && let Some(module) = self.static_module(init)
             && let Some(binding) = self
                 .value_ribs
                 .last_mut()
@@ -368,24 +365,6 @@ impl Visitor for LateResolver<'_, '_> {
             ExprKind::Path(path) => {
                 self.resolve_path(path, Namespace::Value);
                 visit::walk_path(self, path);
-            }
-            ExprKind::Call(callee, _) => {
-                visit::walk_expr(self, expr);
-                if let ExprKind::Path(path) = &callee.kind
-                    && let Some(Res::Def(DefKind::Builtin(Builtin::Import), _)) =
-                        self.r.res.get(&path.id)
-                {
-                    self.r.report(
-                        Diag::error(
-                            "`std::import` can only initialise a top-level `const`",
-                            expr.span,
-                        )
-                        .with_label(
-                            expr.span,
-                            "write `const name = std::import(\"path\");` at the top level",
-                        ),
-                    );
-                }
             }
             ExprKind::ForLoop { pat, iter, body } => {
                 self.visit_expr(iter);

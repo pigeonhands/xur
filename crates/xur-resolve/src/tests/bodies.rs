@@ -144,11 +144,33 @@ fn duplicate_bindings_in_a_pattern() {
 }
 
 #[test]
-fn std_import_only_initialises_top_level_consts() {
+fn imports_are_ordinary_calls() {
+    let resolved = resolve_files(&[
+        (
+            "main.xur",
+            "fn load(path: str) {\n    let mods = [std::import(path), std::import(\"shapes.xur\")];\n    mods[0].area();\n}",
+        ),
+        ("shapes.xur", "pub fn area() {}"),
+    ]);
+    resolved.assert_no_errors();
     assert_eq!(
-        resolve_src("fn f() { let m = std::import(\"m.xur\"); }").errors,
-        ["`std::import` can only initialise a top-level `const`"]
+        resolved.res_of("std::import"),
+        "builtin function std::import"
     );
+    assert_eq!(resolved.res_of_nth("mods", 1), "local mods at main.xur:2:9");
+}
+
+#[test]
+fn a_local_initialised_with_a_literal_import_prefixes_paths() {
+    let resolved = resolve_files(&[
+        (
+            "main.xur",
+            "fn f() {\n    let shapes = std::import(\"shapes.xur\");\n    shapes::area();\n}",
+        ),
+        ("shapes.xur", "pub fn area() {}"),
+    ]);
+    resolved.assert_no_errors();
+    assert_eq!(resolved.res_of("shapes::area"), "function shapes::area");
 }
 
 #[test]

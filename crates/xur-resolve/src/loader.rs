@@ -1,15 +1,20 @@
 //! Loading every module reachable from the root file.
 //!
-//! A file becomes a module when it is imported with
-//! `const name = std::import("path");`. Paths are relative to the importing
-//! file, and each file is loaded once however often it is imported, so
-//! import cycles are fine.
+//! `std::import(path)` is an ordinary function returning a module value, so
+//! it can be called anywhere with any string. Calls whose path is a string
+//! literal are found here and their files loaded ahead of time: missing
+//! files are reported before the program runs, and the module's names can
+//! be resolved statically. Other calls load their module at runtime.
+//!
+//! Paths are relative to the importing file, and each file is loaded once
+//! however often it is imported, so import cycles are fine.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-use xur_ast::{Expr, ExprKind, ItemKind, Lit, LitKind, Module, NodeId, NodeIdGen};
+use xur_ast::visit::{self, Visitor};
+use xur_ast::{Expr, ExprKind, Lit, LitKind, Module, NodeId, NodeIdGen};
 use xur_errors::Diag;
 use xur_parser::parse_file;
 use xur_span::{FileLoader, SourceMap, Span, Symbol};
@@ -41,32 +46,69 @@ pub struct LoadedModule {
     pub name: Symbol,
     pub path: PathBuf,
     pub ast: Module,
-    /// `const` items initialised with `std::import`, and the module each loads.
+    /// The module loaded by each `std::import` call with a literal path,
+    /// keyed by the node id of the call's `std::import` path.
     pub imports: HashMap<NodeId, ModuleIdx>,
 }
 
-/// If `expr` is a call to `std::import`, returns its arguments.
+/// A `std::import("path")` call with a literal path.
+struct Import {
+    /// The node id of the call's `std::import` path.
+    callee: NodeId,
+    path: PathBuf,
+    /// The span of the path literal.
+    span: Span,
+}
+
+/// If `expr` is `std::import("path")` with a literal path, returns the node
+/// id of its `std::import` path, the path and the literal's span.
 ///
-/// Imports are recognised by their syntax, since the loader must find them
+/// Imports are recognised by their syntax, since files must be loaded
 /// before names can be resolved.
-pub(crate) fn as_std_import(expr: &Expr) -> Option<&[Expr]> {
+pub(crate) fn static_import(expr: &Expr) -> Option<(NodeId, Symbol, Span)> {
     let ExprKind::Call(callee, args) = &expr.kind else {
         return None;
     };
     let ExprKind::Path(path) = &callee.kind else {
         return None;
     };
-    let names: Vec<_> = path
-        .segments
-        .iter()
-        .map(|segment| {
-            segment
-                .args
-                .is_none()
-                .then_some(segment.ident.name.as_str())
-        })
-        .collect();
-    (names == [Some("std"), Some("import")]).then_some(args.as_slice())
+    let is_std_import = matches!(
+        path.segments.as_slice(),
+        [std, import]
+            if std.ident.name.as_str() == "std"
+                && import.ident.name.as_str() == "import"
+                && std.args.is_none()
+                && import.args.is_none()
+    );
+    match args.as_slice() {
+        [
+            Expr {
+                kind:
+                    ExprKind::Lit(Lit {
+                        kind: LitKind::Str(relative),
+                        span,
+                    }),
+                ..
+            },
+        ] if is_std_import => Some((path.id, *relative, *span)),
+        _ => None,
+    }
+}
+
+/// Collects the literal-path imports in a module, with paths as written.
+struct ImportFinder(Vec<Import>);
+
+impl Visitor for ImportFinder {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if let Some((callee, path, span)) = static_import(expr) {
+            self.0.push(Import {
+                callee,
+                path: PathBuf::from(path.as_str()),
+                span,
+            });
+        }
+        visit::walk_expr(self, expr);
+    }
 }
 
 /// Loads and parses `root` and, transitively, every module it imports.
@@ -104,7 +146,7 @@ pub fn load_crate(root: &Path, loader: &dyn FileLoader) -> io::Result<(Crate, Ve
                     loaded
                 }
             };
-            builder.modules[idx.0].imports.insert(import.item, target);
+            builder.modules[idx.0].imports.insert(import.callee, target);
         }
     }
 
@@ -115,15 +157,6 @@ pub fn load_crate(root: &Path, loader: &dyn FileLoader) -> io::Result<(Crate, Ve
         prelude,
     };
     Ok((krate, builder.diags))
-}
-
-/// A `const name = std::import("path");` item found in a module.
-struct Import {
-    item: NodeId,
-    /// The imported file, relative to the working directory.
-    path: PathBuf,
-    /// The span of the path literal.
-    span: Span,
 }
 
 struct Builder<'a> {
@@ -170,38 +203,20 @@ impl Builder<'_> {
         }
     }
 
-    /// The top-level `std::import` consts of module `idx`.
-    fn find_imports(&mut self, idx: ModuleIdx) -> Vec<Import> {
+    /// The literal-path `std::import` calls anywhere in module `idx`.
+    fn find_imports(&self, idx: ModuleIdx) -> Vec<Import> {
         let module = &self.modules[idx.0];
-        let dir = module.path.parent().unwrap_or(Path::new("")).to_owned();
-        let mut imports = Vec::new();
-        for item in &module.ast.items {
-            let ItemKind::Const(konst) = &item.kind else {
-                continue;
-            };
-            let Some(args) = as_std_import(&konst.expr) else {
-                continue;
-            };
-            if let [arg] = args
-                && let ExprKind::Lit(Lit {
-                    kind: LitKind::Str(relative),
-                    span,
-                }) = arg.kind
-            {
-                imports.push(Import {
-                    item: item.id,
-                    path: normalize(&dir.join(relative.as_str())),
-                    span,
-                });
-            } else {
-                let span = konst.expr.span;
-                self.diags.push(
-                    Diag::error("`std::import` takes a single string literal", span)
-                        .with_label(span, "expected a path such as `\"./math.xur\"`"),
-                );
-            }
-        }
-        imports
+        let dir = module.path.parent().unwrap_or(Path::new(""));
+        let mut finder = ImportFinder(Vec::new());
+        finder.visit_module(&module.ast);
+        finder
+            .0
+            .into_iter()
+            .map(|import| Import {
+                path: normalize(&dir.join(&import.path)),
+                ..import
+            })
+            .collect()
     }
 }
 
@@ -290,9 +305,23 @@ mod tests {
     }
 
     #[test]
-    fn import_needs_a_string_literal() {
-        let (_, diags) = load(&[("main.xur", "const m = std::import(path);")]);
-        assert_eq!(diags, ["`std::import` takes a single string literal"]);
+    fn literal_imports_anywhere_are_loaded() {
+        let (krate, diags) = load(&[
+            (
+                "main.xur",
+                r#"fn f() { let mods = [std::import("m.xur")]; }"#,
+            ),
+            ("m.xur", ""),
+        ]);
+        assert_eq!(diags, Vec::<String>::new());
+        assert_eq!(names(&krate), ["prelude", "main", "m"]);
+    }
+
+    #[test]
+    fn dynamic_imports_are_left_for_runtime() {
+        let (krate, diags) = load(&[("main.xur", "fn f(path: str) { std::import(path); }")]);
+        assert_eq!(diags, Vec::<String>::new());
+        assert!(krate.module(krate.root).imports.is_empty());
     }
 
     #[test]

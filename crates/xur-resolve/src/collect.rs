@@ -1,11 +1,12 @@
 //! Declaring items in scopes (rustc's `build_reduced_graph`).
 
-use xur_ast::{Item, ItemKind, VariantData, Visibility};
+use xur_ast::{Expr, Item, ItemKind, VariantData, Visibility};
 use xur_errors::Diag;
 use xur_span::Ident;
 
 use crate::def::{DefData, DefId, DefKind, Namespace, Res};
 use crate::imports::Import;
+use crate::loader::static_import;
 use crate::scope::{Binding, Vis};
 use crate::{Resolver, create_scoped_def};
 
@@ -45,8 +46,8 @@ impl<'a> Resolver<'a> {
         let mut names = Vec::new();
         match &item.kind {
             ItemKind::Use(_) => {}
-            ItemKind::Const(konst) => match self.import_target(item) {
-                // `const math = std::import(...)` names a module, which is
+            ItemKind::Const(konst) => match self.static_import_target(&konst.expr) {
+                // `const math = std::import("...")` names a module, which is
                 // both a value and a path prefix.
                 Some(target) => {
                     let res = Res::Def(DefKind::Mod, target);
@@ -114,12 +115,13 @@ impl<'a> Resolver<'a> {
         Res::Def(kind, def)
     }
 
-    /// The module that a `const name = std::import(...)` item loads.
-    fn import_target(&self, item: &Item) -> Option<DefId> {
+    /// The module `expr` loads, if it is `std::import` with a literal path.
+    pub(crate) fn static_import_target(&self, expr: &Expr) -> Option<DefId> {
+        let (callee, _, _) = static_import(expr)?;
         self.krate
             .modules
             .iter()
-            .find_map(|module| module.imports.get(&item.id))
+            .find_map(|module| module.imports.get(&callee))
             .map(|&idx| self.module_def(idx))
     }
 
