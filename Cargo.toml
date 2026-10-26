@@ -12,6 +12,7 @@ repository = "https://github.com/pigeonhands/xur"
 
 [workspace.dependencies]
 xur-ast = { path = "crates/xur-ast" }
+xur-errors = { path = "crates/xur-errors" }
 xur-parser = { path = "crates/xur-parser" }
 xur-span = { path = "crates/xur-span" }
 strum = { version = "0.27", features = ["derive"] }

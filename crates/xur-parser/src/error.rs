@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use xur_errors::Diag;
 use xur_span::Span;
 
 /// What went wrong while lexing.
@@ -21,4 +22,16 @@ pub enum LexErrorKind {
 pub struct LexError {
     pub kind: LexErrorKind,
     pub span: Span,
+}
+
+impl From<LexError> for Diag {
+    fn from(error: LexError) -> Self {
+        let label = match error.kind {
+            LexErrorKind::UnexpectedChar(_) => "not valid in Xur source",
+            LexErrorKind::UnterminatedString => "missing closing `\"`",
+            LexErrorKind::UnterminatedBlockComment => "comment is never closed",
+            LexErrorKind::IntTooLarge => "does not fit in 64 bits",
+        };
+        Diag::error(error.kind.to_string(), error.span).with_label(error.span, label)
+    }
 }

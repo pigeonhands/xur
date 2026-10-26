@@ -4,6 +4,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Result, bail};
+use xur_errors::Diag;
 use xur_parser::{Lexer, Token};
 use xur_span::LineIndex;
 
@@ -26,7 +27,7 @@ fn tokens(path: &Path) -> Result<()> {
     ignore_broken_pipe(write_token_table(&mut out, &file.text, &tokens))?;
 
     if !errors.is_empty() {
-        diagnostics::report_lex_errors(&file, &errors)?;
+        diagnostics::emit(&file, errors.iter().copied().map(Diag::from))?;
         bail!(
             "could not lex `{}` due to {} error(s)",
             file.name,

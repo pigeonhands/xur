@@ -259,6 +259,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "clap",
+ "xur-errors",
  "xur-parser",
  "xur-span",
 ]
@@ -268,6 +269,14 @@ name = "xur-ast"
 version = "0.1.1"
 
 [[package]]
+name = "xur-errors"
+version = "0.1.1"
+dependencies = [
+ "ariadne",
+ "xur-span",
+]
+
+[[package]]
 name = "xur-parser"
 version = "0.1.1"
 dependencies = [
@@ -275,6 +284,7 @@ dependencies = [
  "thiserror",
  "unicode-ident",
  "xur-ast",
+ "xur-errors",
  "xur-span",
 ]
 

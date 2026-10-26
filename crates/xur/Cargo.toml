@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 xur-parser.workspace = true
 xur-span.workspace = true
+xur-errors.workspace = true
 anyhow.workspace = true
 ariadne.workspace = true
 clap.workspace = true
