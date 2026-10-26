@@ -156,3 +156,49 @@ fn node_ids_continue_across_files() {
     let (second, _) = parse_module("fn b() {}", &mut ids);
     assert_ne!(first.items[0].id, second.items[0].id);
 }
+
+#[test]
+fn visitor_reaches_every_path() {
+    use xur_ast::visit::{self, Visitor};
+
+    #[derive(Default)]
+    struct Paths(Vec<String>);
+    impl Visitor for Paths {
+        fn visit_path(&mut self, path: &xur_ast::Path) {
+            self.0.push(path.show());
+            visit::walk_path(self, path);
+        }
+    }
+
+    let (module, _) = parse_module_fresh(
+        "use std;\n\
+         fn f<T>(x: Vec<T>) -> Result<u32, E> {\n\
+             let y: u32 = g::<T>(x);\n\
+             match y { Ok(v) => v.m::<W>(), A::B => |c: C| c }\n\
+         }",
+    );
+    let mut paths = Paths::default();
+    paths.visit_module(&module);
+    assert_eq!(
+        paths.0,
+        [
+            "std",
+            "Vec<T>",
+            "T",
+            "Result<u32, E>",
+            "u32",
+            "E",
+            "u32",
+            "g<T>",
+            "T",
+            "x",
+            "y",
+            "Ok",
+            "v",
+            "W",
+            "A::B",
+            "C",
+            "c"
+        ]
+    );
+}

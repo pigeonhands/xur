@@ -19,6 +19,7 @@ mod pat;
 mod path;
 mod stmt;
 mod ty;
+pub mod visit;
 
 pub use attr::{Attribute, MetaItem, MetaItemInner, MetaItemKind};
 pub use expr::{Arm, Closure, Expr, ExprKind, MethodCall, RangeLimits};
