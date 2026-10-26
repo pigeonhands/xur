@@ -24,4 +24,9 @@ pub enum DebugCommand {
         /// The `.xur` file to lex.
         file: PathBuf,
     },
+    /// Print the syntax tree the parser produces for a source file.
+    Ast {
+        /// The `.xur` file to parse.
+        file: PathBuf,
+    },
 }

@@ -15,6 +15,7 @@ use crate::source::SourceFile;
 pub fn run(command: DebugCommand) -> Result<()> {
     match command {
         DebugCommand::Tokens { file } => tokens(&file),
+        DebugCommand::Ast { file } => ast(&file),
     }
 }
 
@@ -26,15 +27,31 @@ fn tokens(path: &Path) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
     ignore_broken_pipe(write_token_table(&mut out, &file.text, &tokens))?;
 
-    if !errors.is_empty() {
-        diagnostics::emit(&file, errors.iter().copied().map(Diag::from))?;
-        bail!(
-            "could not lex `{}` due to {} error(s)",
-            file.name,
-            errors.len()
-        );
+    let diags: Vec<_> = errors.into_iter().map(Diag::from).collect();
+    fail_on_errors(&file, diags, "lex")
+}
+
+/// Prints the module's syntax tree, like rustc's `-Zunpretty=ast-tree`.
+/// The tree is printed even when there are errors, with `Err` nodes where
+/// parsing failed.
+fn ast(path: &Path) -> Result<()> {
+    let file = SourceFile::load(path)?;
+    let (module, diags) = xur_parser::parse_module(&file.text);
+
+    let mut out = BufWriter::new(io::stdout().lock());
+    ignore_broken_pipe(writeln!(out, "{module:#?}").and_then(|()| out.flush()))?;
+
+    fail_on_errors(&file, diags, "parse")
+}
+
+/// Reports `diags`, failing if there were any.
+fn fail_on_errors(file: &SourceFile, diags: Vec<Diag>, stage: &str) -> Result<()> {
+    if diags.is_empty() {
+        return Ok(());
     }
-    Ok(())
+    let count = diags.len();
+    diagnostics::emit(file, diags)?;
+    bail!("could not {stage} `{}` due to {count} error(s)", file.name)
 }
 
 fn write_token_table(out: &mut impl Write, src: &str, tokens: &[Token<'_>]) -> io::Result<()> {
