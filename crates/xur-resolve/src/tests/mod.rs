@@ -4,37 +4,11 @@ mod imports;
 mod items;
 mod program;
 
-use std::collections::HashMap;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use xur_span::FileLoader;
+use xur_span::MemoryFileLoader;
 
 use crate::{Program, names};
-
-/// Serves files from memory.
-#[derive(Default)]
-pub(crate) struct MemLoader(HashMap<PathBuf, String>);
-
-impl MemLoader {
-    pub(crate) fn new(files: &[(&str, &str)]) -> Self {
-        Self(
-            files
-                .iter()
-                .map(|(path, src)| (PathBuf::from(path), (*src).to_owned()))
-                .collect(),
-        )
-    }
-}
-
-impl FileLoader for MemLoader {
-    fn read_file(&self, path: &Path) -> io::Result<String> {
-        self.0
-            .get(path)
-            .cloned()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))
-    }
-}
 
 /// A program loaded from memory and resolved. The first file is the root.
 pub(crate) struct Resolved {
@@ -43,7 +17,7 @@ pub(crate) struct Resolved {
 }
 
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
-    let loader = Box::new(MemLoader::new(files));
+    let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
     let (program, diags) = Program::load(Path::new(files[0].0), loader).expect("root exists");
     let errors = diags.into_iter().map(|d| d.message).collect();
     Resolved { program, errors }

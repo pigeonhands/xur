@@ -10,3 +10,8 @@ name = "xur_runtime"
 path = "src/lib.rs"
 
 [dependencies]
+xur-ast.workspace = true
+xur-errors.workspace = true
+xur-resolve.workspace = true
+xur-span.workspace = true
+facet.workspace = true

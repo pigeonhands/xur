@@ -8,6 +8,8 @@ mod source_map;
 mod span;
 mod symbol;
 
-pub use source_map::{FileLoader, LineCol, RealFileLoader, SourceFile, SourceMap};
+pub use source_map::{
+    FileLoader, LineCol, MemoryFileLoader, RealFileLoader, SourceFile, SourceMap,
+};
 pub use span::Span;
 pub use symbol::{Ident, Symbol};

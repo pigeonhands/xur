@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use super::{MemLoader, resolve_files};
+use xur_span::MemoryFileLoader;
+
+use super::resolve_files;
 use crate::{Program, Res};
 
 const FILES: &[(&str, &str)] = &[
@@ -17,8 +19,11 @@ const FILES: &[(&str, &str)] = &[
 ];
 
 fn load() -> Program {
-    let (program, diags) =
-        Program::load(Path::new("main.xur"), Box::new(MemLoader::new(FILES))).unwrap();
+    let (program, diags) = Program::load(
+        Path::new("main.xur"),
+        Box::new(MemoryFileLoader::new(FILES.iter().copied())),
+    )
+    .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
     program
 }
@@ -74,7 +79,13 @@ fn importing_a_missing_file_fails() {
 
 #[test]
 fn missing_root_fails() {
-    assert!(Program::load(Path::new("nope.xur"), Box::new(MemLoader::new(FILES))).is_err());
+    assert!(
+        Program::load(
+            Path::new("nope.xur"),
+            Box::new(MemoryFileLoader::new(FILES.iter().copied()))
+        )
+        .is_err()
+    );
     // A program whose root exists loads, whatever its imports.
     resolve_files(FILES).assert_no_errors();
 }

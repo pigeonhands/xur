@@ -4,9 +4,10 @@
 //! positions, so a [`Span`] identifies its file as well as its location and
 //! spans from different files never collide.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::Span;
@@ -94,6 +95,33 @@ pub struct RealFileLoader;
 impl FileLoader for RealFileLoader {
     fn read_file(&self, path: &Path) -> io::Result<String> {
         std::fs::read_to_string(path)
+    }
+}
+
+/// Serves files from memory, for tests and for embedding scripts that
+/// aren't on disk.
+#[derive(Debug, Default)]
+pub struct MemoryFileLoader {
+    files: HashMap<PathBuf, String>,
+}
+
+impl MemoryFileLoader {
+    pub fn new<'a>(files: impl IntoIterator<Item = (&'a str, &'a str)>) -> Self {
+        Self {
+            files: files
+                .into_iter()
+                .map(|(path, src)| (PathBuf::from(path), src.to_owned()))
+                .collect(),
+        }
+    }
+}
+
+impl FileLoader for MemoryFileLoader {
+    fn read_file(&self, path: &Path) -> io::Result<String> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))
     }
 }
 

@@ -21,6 +21,7 @@ mod imports;
 mod late;
 mod loader;
 mod names;
+mod native;
 mod program;
 mod scope;
 mod std_lib;
@@ -38,6 +39,7 @@ use xur_span::Ident;
 pub use def::{Builtin, DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
 pub use loader::{Crate, LoadedModule, ModuleIdx};
 pub use names::{NameRef, names};
+pub use native::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId};
 pub use program::Program;
 
 use imports::Import;
@@ -87,6 +89,12 @@ impl Resolutions {
     /// are written without a module prefix.
     pub fn def_path(&self, id: DefId) -> String {
         format_def_path(&self.defs, &self.unnamed_modules, id)
+    }
+
+    /// The binding of `name` in namespace `ns` declared directly in the
+    /// module or type `scope`.
+    pub fn lookup(&self, scope: DefId, ns: Namespace, name: xur_span::Symbol) -> Option<Res> {
+        Some(self.scopes.get(&scope)?.get(ns, name)?.res)
     }
 
     /// The function `name` declared in an `impl` block for the struct or

@@ -265,10 +265,10 @@ pub(crate) fn normalize(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::Program;
-    use crate::tests::MemLoader;
+    use xur_span::MemoryFileLoader;
 
     fn load(files: &[(&str, &str)]) -> (Crate, Vec<String>) {
-        let loader = Box::new(MemLoader::new(files));
+        let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
         let (program, diags) = Program::load(Path::new(files[0].0), loader).unwrap();
         (
             program.krate,
