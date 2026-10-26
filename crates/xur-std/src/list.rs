@@ -7,7 +7,7 @@ use xur_runtime::{BuiltinType, Context, Registry, RunResult, RuntimeError, Value
 
 type List = Arc<Mutex<Vec<Value>>>;
 
-pub(crate) fn register(registry: &mut Registry) {
+pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::List)
         .raw_function("len", |_, args| {

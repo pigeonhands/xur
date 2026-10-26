@@ -9,6 +9,7 @@ use crate::{RunResult, Value};
 
 /// Operations on values of one registered type, instantiated where the type
 /// is still known (in [`ModuleBuilder::ty`]) and used where it is erased.
+#[derive(Clone, Copy)]
 pub(super) struct TypeHooks {
     /// Clones the value behind a peek, for a registered value nested inside
     /// another, like the elements of a `Vec<Point>`.

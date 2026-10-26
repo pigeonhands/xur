@@ -2,7 +2,7 @@
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
-pub(crate) fn register(registry: &mut Registry) {
+pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::any")
         .raw_function("type_name", type_name);

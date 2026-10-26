@@ -85,7 +85,7 @@ impl SourceFile {
 
 /// Reads source files; abstracted so tests can supply files from memory
 /// (rustc's `FileLoader`).
-pub trait FileLoader {
+pub trait FileLoader: Send + Sync {
     fn read_file(&self, path: &Path) -> io::Result<String>;
 }
 

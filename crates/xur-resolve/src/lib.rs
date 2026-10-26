@@ -121,7 +121,7 @@ impl Resolutions {
 /// `resolutions` was last updated.
 fn resolve_modules(
     krate: &Crate,
-    natives: &mut dyn NativeProvider,
+    natives: &dyn NativeProvider,
     resolutions: Resolutions,
     new: Range<usize>,
 ) -> (Resolutions, Vec<Diag>) {
@@ -137,7 +137,7 @@ fn resolve_modules(
 
 struct Resolver<'a> {
     krate: &'a Crate,
-    natives: &'a mut dyn NativeProvider,
+    natives: &'a dyn NativeProvider,
     defs: Definitions,
     /// The names declared in each module and enum.
     scopes: HashMap<DefId, Scope>,
@@ -156,11 +156,7 @@ struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// Picks up resolution where `resolutions` left off.
-    fn resume(
-        krate: &'a Crate,
-        natives: &'a mut dyn NativeProvider,
-        resolutions: Resolutions,
-    ) -> Self {
+    fn resume(krate: &'a Crate, natives: &'a dyn NativeProvider, resolutions: Resolutions) -> Self {
         let Resolutions {
             defs,
             res,

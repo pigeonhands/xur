@@ -33,6 +33,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use facet::{Peek, Shape};
 use xur_resolve::{
@@ -84,7 +85,7 @@ impl NativeFn {
     }
 }
 
-struct NativeType {
+pub(super) struct NativeType {
     name: String,
     shape: &'static Shape,
     functions: Vec<NativeFnDecl>,
@@ -104,9 +105,19 @@ struct ModuleData {
 }
 
 /// Every native function and type, organised into modules.
+///
+/// A registry is shared by every thread of a running program and by name
+/// resolution, which may expand lazy modules while a native function runs,
+/// so it is internally locked: each operation holds the lock only briefly,
+/// and functions are handed out as `Arc`s to call without it.
 #[derive(Default)]
 pub struct Registry {
-    fns: Vec<NativeFn>,
+    inner: RwLock<Inner>,
+}
+
+#[derive(Default)]
+struct Inner {
+    fns: Vec<Arc<NativeFn>>,
     /// Methods of built-in values, such as `list.push`.
     builtin_methods: HashMap<(BuiltinType, String), NativeFnId>,
     types: Vec<NativeType>,
@@ -120,14 +131,17 @@ impl Registry {
         Self::default()
     }
 
+    fn read(&self) -> RwLockReadGuard<'_, Inner> {
+        self.inner.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, Inner> {
+        self.inner.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// The module at `path`, such as `std::io`, created if needed.
-    pub fn module(&mut self, path: &str) -> ModuleBuilder<'_> {
-        let mut names = path.split("::");
-        let root = names.next().expect("split yields at least one item");
-        let mut module = self.child(None, root);
-        for name in names {
-            module = self.child(Some(module), name);
-        }
+    pub fn module(&self, path: &str) -> ModuleBuilder<'_> {
+        let module = self.write().module_at(path);
         ModuleBuilder::new(self, module)
     }
 
@@ -135,35 +149,46 @@ impl Registry {
     /// the first time a program looks inside it, so large modules that a
     /// program doesn't use cost nothing.
     pub fn lazy_module(
-        &mut self,
+        &self,
         path: &str,
         init: impl FnOnce(&mut ModuleBuilder<'_>) + Send + Sync + 'static,
     ) {
-        let module = self.module(path).module;
-        self.modules[module].init = Some(Box::new(init));
+        let mut inner = self.write();
+        let module = inner.module_at(path);
+        inner.modules[module].init = Some(Box::new(init));
     }
 
     /// Methods of the built-in type `ty`, such as `list.push(x)`.
-    pub fn builtin(&mut self, ty: BuiltinType) -> BuiltinBuilder<'_> {
+    pub fn builtin(&self, ty: BuiltinType) -> BuiltinBuilder<'_> {
         BuiltinBuilder::new(self, ty)
     }
 
     /// The method `name` of the built-in type `ty`.
     pub fn builtin_method(&self, ty: BuiltinType, name: &str) -> Option<NativeFnId> {
-        self.builtin_methods.get(&(ty, name.to_owned())).copied()
+        self.read()
+            .builtin_methods
+            .get(&(ty, name.to_owned()))
+            .copied()
     }
 
-    pub fn function(&self, id: NativeFnId) -> &NativeFn {
-        &self.fns[id.0 as usize]
+    /// The function `name` registered for the native type `ty`.
+    pub fn type_function(&self, ty: NativeTypeId, name: &str) -> Option<NativeFnId> {
+        let inner = self.read();
+        let functions = &inner.types[ty.0 as usize].functions;
+        functions.iter().find(|f| f.name == name).map(|f| f.id)
     }
 
-    pub fn type_name(&self, id: NativeTypeId) -> &str {
-        &self.types[id.0 as usize].name
+    pub fn function(&self, id: NativeFnId) -> Arc<NativeFn> {
+        Arc::clone(&self.read().fns[id.0 as usize])
+    }
+
+    pub fn type_name(&self, id: NativeTypeId) -> String {
+        self.read().types[id.0 as usize].name.clone()
     }
 
     /// The native type registered for `shape`, if any.
     pub fn type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
-        let index = self.types.iter().position(|ty| ty.shape == shape)?;
+        let index = self.read().types.iter().position(|ty| ty.shape == shape)?;
         Some(NativeTypeId(index as u32))
     }
 
@@ -174,7 +199,8 @@ impl Registry {
         object: &NativeObject,
         name: &str,
     ) -> Option<RunResult<Value>> {
-        object.with_any(|value| (self.hooks(object.ty).field)(cx, value, name))
+        let field = self.hooks(object.ty).field;
+        object.with_any(|value| field(cx, value, name))
     }
 
     /// Formats a native object with its `Display`, or else `Debug`.
@@ -206,16 +232,76 @@ impl Registry {
 
     /// Writes a clone of `object` into a builder for its type.
     pub(crate) fn set_object(&self, partial: Builder, object: &NativeObject) -> RunResult<Builder> {
-        object.with_any(|value| (self.hooks(object.ty).set)(partial, value))
+        let set = self.hooks(object.ty).set;
+        object.with_any(|value| set(partial, value))
     }
 
-    fn hooks(&self, ty: NativeTypeId) -> &TypeHooks {
-        &self.types[ty.0 as usize].hooks
+    fn hooks(&self, ty: NativeTypeId) -> TypeHooks {
+        self.read().types[ty.0 as usize].hooks
     }
 
     /// The registered modules as name resolution sees them.
     pub fn decls(&self) -> Vec<NativeModule> {
-        self.roots.iter().map(|&module| self.decl(module)).collect()
+        let inner = self.read();
+        inner
+            .roots
+            .iter()
+            .map(|&module| inner.decl(module))
+            .collect()
+    }
+
+    /// Registers the contents of the lazy module at `path`, if not yet
+    /// registered, and describes it.
+    pub fn expand(&self, path: &[String]) -> NativeModule {
+        let (module, init) = {
+            let mut inner = self.write();
+            let module = inner
+                .find(path)
+                .unwrap_or_else(|| panic!("no native module `{}`", path.join("::")));
+            (module, inner.modules[module].init.take())
+        };
+        // The initializer registers through the builder, which locks.
+        if let Some(init) = init {
+            init(&mut ModuleBuilder::new(self, module));
+        }
+        self.read().decl(module)
+    }
+
+    pub(super) fn add_fn(
+        &self,
+        name: &str,
+        signature: Option<Signature>,
+        call: Box<CallFn>,
+    ) -> NativeFnDecl {
+        self.write().add_fn(name, signature, call)
+    }
+
+    fn with_inner<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
+        f(&mut self.write())
+    }
+}
+
+impl Inner {
+    fn module_at(&mut self, path: &str) -> usize {
+        let mut names = path.split("::");
+        let root = names.next().expect("split yields at least one item");
+        let mut module = self.child(None, root);
+        for name in names {
+            module = self.child(Some(module), name);
+        }
+        module
+    }
+
+    fn find(&self, path: &[String]) -> Option<usize> {
+        let mut module: Option<usize> = None;
+        for name in path {
+            let siblings = match module {
+                Some(parent) => &self.modules[parent].children,
+                None => &self.roots,
+            };
+            module = Some(*siblings.iter().find(|&&m| self.modules[m].name == *name)?);
+        }
+        module
     }
 
     fn decl(&self, module: usize) -> NativeModule {
@@ -282,11 +368,11 @@ impl Registry {
         call: Box<CallFn>,
     ) -> NativeFnDecl {
         let id = NativeFnId(self.fns.len() as u32);
-        self.fns.push(NativeFn {
+        self.fns.push(Arc::new(NativeFn {
             name: name.to_owned(),
             signature,
             call,
-        });
+        }));
         NativeFnDecl {
             name: name.to_owned(),
             id,
@@ -299,22 +385,7 @@ impl NativeProvider for Registry {
         self.decls()
     }
 
-    fn expand(&mut self, path: &[String]) -> NativeModule {
-        let mut module: Option<usize> = None;
-        for name in path {
-            let siblings = match module {
-                Some(parent) => &self.modules[parent].children,
-                None => &self.roots,
-            };
-            module = siblings
-                .iter()
-                .copied()
-                .find(|&m| self.modules[m].name == *name);
-        }
-        let module = module.unwrap_or_else(|| panic!("no native module `{}`", path.join("::")));
-        if let Some(init) = self.modules[module].init.take() {
-            init(&mut ModuleBuilder::new(self, module));
-        }
-        self.decl(module)
+    fn expand(&self, path: &[String]) -> NativeModule {
+        Registry::expand(self, path)
     }
 }

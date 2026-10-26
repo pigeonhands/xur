@@ -10,12 +10,12 @@ use crate::{BuiltinType, RunResult, Value};
 
 /// Adds items to one module of a [`Registry`].
 pub struct ModuleBuilder<'r> {
-    registry: &'r mut Registry,
+    registry: &'r Registry,
     pub(super) module: usize,
 }
 
 impl<'r> ModuleBuilder<'r> {
-    pub(super) fn new(registry: &'r mut Registry, module: usize) -> Self {
+    pub(super) fn new(registry: &'r Registry, module: usize) -> Self {
         Self { registry, module }
     }
 }
@@ -26,7 +26,9 @@ impl ModuleBuilder<'_> {
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
         let decl = self.registry.add_fn(name, Some(signature), call);
-        self.registry.modules[self.module].functions.push(decl);
+        let module = self.module;
+        self.registry
+            .with_inner(|inner| inner.modules[module].functions.push(decl));
         self
     }
 
@@ -38,7 +40,9 @@ impl ModuleBuilder<'_> {
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let decl = self.registry.add_fn(name, None, Box::new(f));
-        self.registry.modules[self.module].functions.push(decl);
+        let module = self.module;
+        self.registry
+            .with_inner(|inner| inner.modules[module].functions.push(decl));
         self
     }
 
@@ -48,14 +52,18 @@ impl ModuleBuilder<'_> {
         &mut self,
         name: &str,
     ) -> TypeBuilder<'_, T> {
-        let id = NativeTypeId(self.registry.types.len() as u32);
-        self.registry.types.push(NativeType {
-            name: name.to_owned(),
-            shape: T::SHAPE,
-            functions: Vec::new(),
-            hooks: TypeHooks::new::<T>(),
+        let module = self.module;
+        let id = self.registry.with_inner(|inner| {
+            let id = NativeTypeId(inner.types.len() as u32);
+            inner.types.push(NativeType {
+                name: name.to_owned(),
+                shape: T::SHAPE,
+                functions: Vec::new(),
+                hooks: TypeHooks::new::<T>(),
+            });
+            inner.modules[module].types.push(id);
+            id
         });
-        self.registry.modules[self.module].types.push(id);
         TypeBuilder {
             registry: self.registry,
             ty: id,
@@ -66,7 +74,7 @@ impl ModuleBuilder<'_> {
 
 /// Adds functions to the registered native type `T`.
 pub struct TypeBuilder<'r, T> {
-    registry: &'r mut Registry,
+    registry: &'r Registry,
     ty: NativeTypeId,
     _ty: PhantomData<T>,
 }
@@ -98,19 +106,21 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
 
     fn add(&mut self, name: &str, signature: Signature, call: Box<CallFn>) -> &mut Self {
         let decl = self.registry.add_fn(name, Some(signature), call);
-        self.registry.types[self.ty.0 as usize].functions.push(decl);
+        let ty = self.ty;
+        self.registry
+            .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
         self
     }
 }
 
 /// Adds methods to a built-in type, like `list` or `str`.
 pub struct BuiltinBuilder<'r> {
-    registry: &'r mut Registry,
+    registry: &'r Registry,
     ty: BuiltinType,
 }
 
 impl<'r> BuiltinBuilder<'r> {
-    pub(super) fn new(registry: &'r mut Registry, ty: BuiltinType) -> Self {
+    pub(super) fn new(registry: &'r Registry, ty: BuiltinType) -> Self {
         Self { registry, ty }
     }
 
@@ -133,9 +143,9 @@ impl<'r> BuiltinBuilder<'r> {
 
     fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, call);
+        let key = (self.ty, name.to_owned());
         self.registry
-            .builtin_methods
-            .insert((self.ty, name.to_owned()), decl.id);
+            .with_inner(|inner| inner.builtin_methods.insert(key, decl.id));
         self
     }
 }

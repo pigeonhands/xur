@@ -1,7 +1,5 @@
 use facet::Facet;
 
-use xur_resolve::NativeProvider;
-
 use super::*;
 use crate::testing::{TestCx, fn_id};
 
@@ -12,7 +10,7 @@ struct Point {
 }
 
 fn registry() -> Registry {
-    let mut registry = Registry::new();
+    let registry = Registry::new();
     registry
         .module("geo::shapes")
         .function("double", |x: i64| x * 2)
@@ -133,7 +131,7 @@ fn bad_calls_are_runtime_errors() {
 
 #[test]
 fn lazy_modules_are_registered_when_expanded() {
-    let mut registry = Registry::new();
+    let registry = Registry::new();
     registry.lazy_module("big::part", |m| {
         m.function("answer", || 42i64);
     });
@@ -145,4 +143,10 @@ fn lazy_modules_are_registered_when_expanded() {
     assert!(!expanded.lazy);
     assert_eq!(expanded.functions[0].name, "answer");
     assert!(!registry.decls()[0].modules[0].lazy);
+}
+
+#[test]
+fn registries_can_be_shared_between_threads() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Registry>();
 }

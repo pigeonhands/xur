@@ -13,12 +13,25 @@ pub struct NativeTypeId(pub u32);
 
 /// Supplies the native modules: their declarations up front, and the
 /// contents of lazy modules once a program looks inside them.
-pub trait NativeProvider {
+///
+/// Providers are shared with a running program, which may import modules,
+/// and so expand lazy native modules, from any thread.
+pub trait NativeProvider: Send + Sync {
     fn modules(&self) -> Vec<NativeModule>;
 
     /// The contents of the lazy module at `path` (such as `["std", "net"]`),
     /// which is now needed. Its own submodules may be lazy in turn.
-    fn expand(&mut self, path: &[String]) -> NativeModule;
+    fn expand(&self, path: &[String]) -> NativeModule;
+}
+
+impl<T: NativeProvider + ?Sized> NativeProvider for std::sync::Arc<T> {
+    fn modules(&self) -> Vec<NativeModule> {
+        (**self).modules()
+    }
+
+    fn expand(&self, path: &[String]) -> NativeModule {
+        (**self).expand(path)
+    }
 }
 
 /// Native modules that are all declared up front.
@@ -27,7 +40,7 @@ impl NativeProvider for Vec<NativeModule> {
         self.clone()
     }
 
-    fn expand(&mut self, path: &[String]) -> NativeModule {
+    fn expand(&self, path: &[String]) -> NativeModule {
         panic!("`{}` was not declared lazy", path.join("::"))
     }
 }

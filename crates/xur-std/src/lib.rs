@@ -16,13 +16,13 @@ use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 /// A registry holding only `std`.
 pub fn registry() -> Registry {
-    let mut registry = Registry::new();
-    register(&mut registry);
+    let registry = Registry::new();
+    register(&registry);
     registry
 }
 
 /// Registers `std` and its submodules in `registry`.
-pub fn register(registry: &mut Registry) {
+pub fn register(registry: &Registry) {
     registry.module("std").raw_function("import", import);
     io::register(registry);
     any::register(registry);

@@ -32,7 +32,7 @@ impl Program {
     pub fn load(
         root: &Path,
         file_loader: Box<dyn FileLoader>,
-        mut natives: Box<dyn NativeProvider>,
+        natives: Box<dyn NativeProvider>,
     ) -> io::Result<(Self, Vec<Diag>)> {
         let src = file_loader.read_file(root)?;
         let mut loader = Loader::new(file_loader);
@@ -44,7 +44,7 @@ impl Program {
         let resolutions = Resolutions::new(&natives.modules());
         let (resolutions, resolve_diags) = resolve_modules(
             &krate,
-            natives.as_mut(),
+            natives.as_ref(),
             resolutions,
             0..krate.modules.len(),
         );
@@ -90,7 +90,7 @@ impl Program {
             .expect("resolutions are only taken while resolving");
         let (resolutions, resolve_diags) = resolve_modules(
             &self.krate,
-            self.natives.as_mut(),
+            self.natives.as_ref(),
             resolutions,
             first_new..self.krate.modules.len(),
         );

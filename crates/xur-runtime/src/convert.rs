@@ -331,7 +331,7 @@ mod tests {
             Box::new(Vec::new()),
         )
         .unwrap();
-        let mut registry = Registry::new();
+        let registry = Registry::new();
         registry.module("geo").ty::<Point>("Point");
         Cx(program.lang_items(), registry)
     }

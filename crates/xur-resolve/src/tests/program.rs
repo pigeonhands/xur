@@ -107,7 +107,7 @@ impl crate::NativeProvider for LazyNatives {
         }]
     }
 
-    fn expand(&mut self, path: &[String]) -> crate::NativeModule {
+    fn expand(&self, path: &[String]) -> crate::NativeModule {
         assert_eq!(path, ["lazy"]);
         self.expansions
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);

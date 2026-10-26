@@ -2,7 +2,7 @@
 
 use xur_runtime::Registry;
 
-pub(crate) fn register(registry: &mut Registry) {
+pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::math")
         .function("sqrt", |x: f64| x.sqrt())

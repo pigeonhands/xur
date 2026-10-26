@@ -2,7 +2,7 @@
 
 use xur_runtime::{BuiltinType, Registry};
 
-pub(crate) fn register(registry: &mut Registry) {
+pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::Int)
         .function("abs", |x: i64| x.abs())

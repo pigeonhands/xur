@@ -3,7 +3,7 @@
 
 use xur_runtime::{BuiltinType, Registry};
 
-pub(crate) fn register(registry: &mut Registry) {
+pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::Str)
         .function("len", |s: String| s.chars().count() as i64)
