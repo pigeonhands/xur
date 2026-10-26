@@ -10,3 +10,4 @@ name = "xur_ast"
 path = "src/lib.rs"
 
 [dependencies]
+xur-span.workspace = true

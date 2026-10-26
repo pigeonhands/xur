@@ -267,6 +267,9 @@ dependencies = [
 [[package]]
 name = "xur-ast"
 version = "0.1.1"
+dependencies = [
+ "xur-span",
+]
 
 [[package]]
 name = "xur-errors"

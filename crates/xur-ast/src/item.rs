@@ -1,0 +1,129 @@
+use xur_span::{Ident, Span};
+
+use crate::{Attribute, Block, Expr, Pat, Path, Ty};
+
+/// A whole source file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Module {
+    pub items: Vec<Item>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Item {
+    pub attrs: Vec<Attribute>,
+    pub vis: Visibility,
+    pub kind: ItemKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility {
+    /// `pub`, with the keyword's span.
+    Public(Span),
+    /// No visibility was written.
+    Inherited,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ItemKind {
+    /// `use std;`
+    Use(UseTree),
+    /// `const name: ty = expr;`
+    Const(Box<ConstItem>),
+    /// `fn name<T>(params) -> ret { body }`
+    Fn(Box<Fn>),
+    /// `struct Name<T> { fields }`
+    Struct(Ident, Generics, VariantData),
+    /// `enum Name<T> { variants }`
+    Enum(Ident, Generics, EnumDef),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UseTree {
+    pub path: Path,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConstItem {
+    pub ident: Ident,
+    /// Unlike Rust, the type may be left for inference: `const math = ...;`.
+    pub ty: Option<Ty>,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fn {
+    pub ident: Ident,
+    pub generics: Generics,
+    pub decl: FnDecl,
+    pub body: Box<Block>,
+}
+
+/// The parameters and return type of a function or closure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FnDecl {
+    pub inputs: Vec<Param>,
+    pub output: FnRetTy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Param {
+    pub pat: Pat,
+    pub ty: Ty,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FnRetTy {
+    /// No `-> ty` was written; the span is where it would go.
+    Default(Span),
+    Ty(Box<Ty>),
+}
+
+/// `<T, U>` on a declaration. Empty, with an empty span, when absent.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Generics {
+    pub params: Vec<GenericParam>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenericParam {
+    pub ident: Ident,
+}
+
+/// The fields of a struct or enum variant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariantData {
+    /// `{ a: u32 b: u32 }`
+    Struct(Vec<FieldDef>),
+    /// `(u32, u32)`
+    Tuple(Vec<FieldDef>),
+    /// No fields.
+    Unit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldDef {
+    pub attrs: Vec<Attribute>,
+    pub vis: Visibility,
+    /// `None` for tuple fields.
+    pub ident: Option<Ident>,
+    pub ty: Ty,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDef {
+    pub variants: Vec<Variant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Variant {
+    pub attrs: Vec<Attribute>,
+    pub ident: Ident,
+    pub data: VariantData,
+    pub span: Span,
+}
