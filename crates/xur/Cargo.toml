@@ -6,3 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+xur-parser.workspace = true
+anyhow.workspace = true
+ariadne.workspace = true
+clap.workspace = true
