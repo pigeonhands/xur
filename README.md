@@ -4,9 +4,9 @@ Xur is a small, expression-oriented programming language with Rust-like
 syntax, modules that are ordinary values, and explicit control over data
 layout.
 
-> **Status:** early development. Source files can be lexed and parsed into a
-> syntax tree (`xur debug tokens`, `xur debug ast`); name resolution, type
-> checking and the runtime are still to come.
+> **Status:** early development. Programs can be lexed, parsed and have
+> their names resolved across modules (`xur debug tokens`, `xur debug ast`,
+> `xur debug resolve`); type checking and the runtime are still to come.
 
 ## A taste of Xur
 
@@ -156,6 +156,20 @@ Module {
 ...
 ```
 
+`resolve` loads the whole program, following `std::import`, and shows what
+every name refers to:
+
+```console
+$ cargo run -- debug resolve example/main.xur
+...
+example/main.xur:50:9  io                           new local
+example/main.xur:50:14 std::io                      module std::io
+example/main.xur:52:5  io::println                  builtin function std::io::println
+...
+example/main.xur:69:13 math::MathError::DivideByZero variant math::MathError::DivideByZero
+...
+```
+
 Errors are shown as annotated source snippets and the command exits
 non-zero. Like rustc, the parser recovers from errors, so every mistake in a
 file is reported in one run:
@@ -183,9 +197,10 @@ The compiler is structured after rustc, whose crates these mirror:
 | --------------------- | -------------------------------------------------------- | --------------- |
 | `crates/xur`          | The `xur` command-line tool                              | `rustc_driver`  |
 | `crates/xur-parser`   | Lexer and recursive-descent parser                       | `rustc_parse`   |
+| `crates/xur-resolve`  | Module loading (`std::import`) and name resolution       | `rustc_resolve` |
 | `crates/xur-ast`      | Syntax tree types                                        | `rustc_ast`     |
 | `crates/xur-errors`   | Diagnostics and their rendering                          | `rustc_errors`  |
-| `crates/xur-span`     | Source spans, line/column lookup and interned symbols    | `rustc_span`    |
+| `crates/xur-span`     | Source map, spans and interned symbols                   | `rustc_span`    |
 | `crates/xur-runtime`  | Runtime (planned)                                        |                 |
 
 ## Development
