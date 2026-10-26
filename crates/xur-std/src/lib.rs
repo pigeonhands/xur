@@ -12,6 +12,8 @@ mod list;
 mod math;
 mod num;
 mod str;
+mod sync;
+mod thread;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
@@ -30,6 +32,8 @@ pub fn register(registry: &Registry) {
         .raw_function("panic", panic);
     io::register(registry);
     fs::register(registry);
+    thread::register(registry);
+    sync::register(registry);
     any::register(registry);
     math::register(registry);
     list::register(registry);
@@ -44,6 +48,15 @@ fn import(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         _ => Err(RuntimeError::new(
             "`std::import` takes a single path string",
         )),
+    }
+}
+
+/// `Some(value)` or `None`, as Xur values.
+fn option(cx: &dyn Context, value: Option<Value>) -> Value {
+    let lang = cx.lang();
+    match value {
+        Some(value) => Value::adt(lang.some, vec![value]),
+        None => Value::adt(lang.none, Vec::new()),
     }
 }
 

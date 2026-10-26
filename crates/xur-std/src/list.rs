@@ -3,7 +3,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Context, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
+
+use crate::option;
 
 type List = Arc<Mutex<Vec<Value>>>;
 
@@ -150,14 +152,6 @@ fn position(index: i64, limit: usize, len: usize) -> RunResult<usize> {
                 "index {index} is out of range for a list of length {len}"
             ))
         })
-}
-
-fn option(cx: &dyn Context, value: Option<Value>) -> Value {
-    let lang = cx.lang();
-    match value {
-        Some(value) => Value::adt(lang.some, vec![value]),
-        None => Value::adt(lang.none, Vec::new()),
-    }
 }
 
 #[cfg(test)]

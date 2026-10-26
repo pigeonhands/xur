@@ -271,3 +271,30 @@ fn files() {
         Ok("[\"one\", \"two\"]\ntrue [\"notes.txt\"]\ntrue\n".into())
     );
 }
+
+#[test]
+fn threads_and_channels() {
+    let src = "
+        fn main() {
+            let (sender, receiver) = std::sync::channel();
+            let workers = [];
+            for i in 1..4 {
+                workers.push(std::thread::spawn(|| {
+                    sender.send(i * i).unwrap();
+                    i
+                }));
+            }
+            let joined = 0;
+            for worker in workers { joined = joined + worker.join(); }
+            let received = 0;
+            for _ in 0..3 { received = received + receiver.recv().unwrap(); }
+            std::io::println(\"{} {} {}\", joined, received, receiver.try_recv());
+        }";
+    assert_eq!(run(src), Ok("6 14 None\n".into()));
+}
+
+#[test]
+fn errors_in_threads_reach_the_joiner() {
+    let src = "fn main() { std::thread::spawn(|| 1 / 0).join(); }";
+    assert_eq!(run(src), Err("attempt to divide by zero".into()));
+}
