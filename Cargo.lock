@@ -514,6 +514,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "xur-vm"
+version = "0.1.1"
+dependencies = [
+ "xur-ast",
+ "xur-bytecode",
+ "xur-errors",
+ "xur-resolve",
+ "xur-runtime",
+ "xur-span",
+ "xur-std",
+]
+
+[[package]]
 name = "yansi"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

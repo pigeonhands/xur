@@ -40,7 +40,7 @@ pub fn add(a: u32, b: u32) -> u32 {
     a + b // the last expression is the return value
 }
 
-fn print_name<T>(s: T) {
+fn print_name<T>() {
     std::io::print("Struct name: {}", std::any::type_name::<T>());
 }
 

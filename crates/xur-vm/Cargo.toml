@@ -1,0 +1,21 @@
+[package]
+name = "xur-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_vm"
+path = "src/lib.rs"
+
+[dependencies]
+xur-ast.workspace = true
+xur-bytecode.workspace = true
+xur-errors.workspace = true
+xur-resolve.workspace = true
+xur-runtime.workspace = true
+xur-span.workspace = true
+
+[dev-dependencies]
+xur-std.workspace = true
