@@ -115,7 +115,7 @@ fn modules_are_values() {
     assert_eq!(resolved.res_of("std::io"), "module std::io");
     assert_eq!(
         resolved.res_of("io::println"),
-        "builtin function std::io::println"
+        "native function std::io::println"
     );
 }
 
@@ -155,7 +155,7 @@ fn imports_are_ordinary_calls() {
     resolved.assert_no_errors();
     assert_eq!(
         resolved.res_of("std::import"),
-        "builtin function std::import"
+        "native function std::import"
     );
     assert_eq!(resolved.res_of_nth("mods", 1), "local mods at main.xur:2:9");
 }
@@ -188,4 +188,21 @@ fn examples_resolve_cleanly() {
         ("math.xur", include_str!("../../../../example/math.xur")),
     ])
     .assert_no_errors();
+}
+
+#[test]
+fn native_types_and_their_functions() {
+    let resolved = resolve_src(
+        "use geo::Point;\nfn f(p: Point) -> f64 { let q = geo::Point::new(1.0, 2.0); Point::norm(q) }",
+    );
+    resolved.assert_no_errors();
+    assert_eq!(resolved.res_of("Point"), "native type geo::Point");
+    assert_eq!(
+        resolved.res_of("geo::Point::new"),
+        "native function geo::Point::new"
+    );
+    assert_eq!(
+        resolved.res_of("Point::norm"),
+        "native function geo::Point::norm"
+    );
 }

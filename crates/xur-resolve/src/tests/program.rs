@@ -2,7 +2,7 @@ use std::path::Path;
 
 use xur_span::MemoryFileLoader;
 
-use super::resolve_files;
+use super::{natives, resolve_files};
 use crate::{Program, Res};
 
 const FILES: &[(&str, &str)] = &[
@@ -22,6 +22,7 @@ fn load() -> Program {
     let (program, diags) = Program::load(
         Path::new("main.xur"),
         Box::new(MemoryFileLoader::new(FILES.iter().copied())),
+        &natives(),
     )
     .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
@@ -82,7 +83,8 @@ fn missing_root_fails() {
     assert!(
         Program::load(
             Path::new("nope.xur"),
-            Box::new(MemoryFileLoader::new(FILES.iter().copied()))
+            Box::new(MemoryFileLoader::new(FILES.iter().copied())),
+            &natives(),
         )
         .is_err()
     );

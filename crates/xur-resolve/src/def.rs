@@ -3,6 +3,8 @@
 use std::fmt;
 
 use xur_ast::NodeId;
+
+use crate::native::{NativeFnId, NativeTypeId};
 use xur_span::{Span, Symbol};
 
 /// Identifies a definition: a module, item, enum variant, type parameter
@@ -25,7 +27,10 @@ pub enum DefKind {
     Enum,
     Variant,
     TyParam,
-    Builtin(Builtin),
+    /// A function implemented in Rust.
+    NativeFn(NativeFnId),
+    /// A type implemented in Rust; its functions are in its scope.
+    NativeType(NativeTypeId),
 }
 
 impl DefKind {
@@ -39,28 +44,19 @@ impl DefKind {
             Self::Enum => "enum",
             Self::Variant => "variant",
             Self::TyParam => "type parameter",
-            Self::Builtin(_) => "builtin function",
+            Self::NativeFn(_) => "native function",
+            Self::NativeType(_) => "native type",
         }
     }
 
     /// Whether names can be looked up inside a definition of this kind, as
     /// in `math::div`, `Shape::Rect` or `Point::new`.
     pub fn has_scope(self) -> bool {
-        matches!(self, Self::Mod | Self::Enum | Self::Struct)
+        matches!(
+            self,
+            Self::Mod | Self::Enum | Self::Struct | Self::NativeType(_)
+        )
     }
-}
-
-/// Functions provided by the implementation rather than written in Xur.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Builtin {
-    /// `std::import`
-    Import,
-    /// `std::io::print`
-    Print,
-    /// `std::io::println`
-    Println,
-    /// `std::any::type_name`
-    TypeName,
 }
 
 /// The built-in primitive types.

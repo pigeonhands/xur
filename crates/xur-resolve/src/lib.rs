@@ -22,9 +22,9 @@ mod late;
 mod loader;
 mod names;
 mod native;
+mod natives;
 mod program;
 mod scope;
-mod std_lib;
 
 #[cfg(test)]
 mod tests;
@@ -34,9 +34,9 @@ use std::ops::Range;
 
 use xur_ast::NodeId;
 use xur_errors::Diag;
-use xur_span::Ident;
+use xur_span::{Ident, Symbol};
 
-pub use def::{Builtin, DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
+pub use def::{DefData, DefId, DefKind, Definitions, Namespace, PrimTy, Res};
 pub use loader::{Crate, LoadedModule, ModuleIdx};
 pub use names::{NameRef, names};
 pub use native::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId};
@@ -63,15 +63,16 @@ pub struct Resolutions {
     unnamed_modules: Vec<DefId>,
     /// The names declared in each module and enum.
     scopes: HashMap<DefId, Scope>,
-    std: DefId,
+    /// The top-level native modules, such as `std`, by name.
+    native_roots: HashMap<Symbol, DefId>,
 }
 
 impl Resolutions {
-    /// Resolutions with nothing but the built-in `std` modules.
-    fn new() -> Self {
+    /// Resolutions with nothing but the native modules `natives`.
+    fn new(natives: &[NativeModule]) -> Self {
         let mut defs = Definitions::default();
         let mut scopes = HashMap::new();
-        let std = std_lib::build(&mut defs, &mut scopes);
+        let native_roots = natives::declare(&mut defs, &mut scopes, natives);
         Self {
             defs,
             res: HashMap::new(),
@@ -80,7 +81,7 @@ impl Resolutions {
             module_defs: Vec::new(),
             unnamed_modules: Vec::new(),
             scopes,
-            std,
+            native_roots,
         }
     }
 
@@ -93,15 +94,16 @@ impl Resolutions {
 
     /// The binding of `name` in namespace `ns` declared directly in the
     /// module or type `scope`.
-    pub fn lookup(&self, scope: DefId, ns: Namespace, name: xur_span::Symbol) -> Option<Res> {
+    pub fn lookup(&self, scope: DefId, ns: Namespace, name: Symbol) -> Option<Res> {
         Some(self.scopes.get(&scope)?.get(ns, name)?.res)
     }
 
-    /// The function `name` declared in an `impl` block for the struct or
-    /// enum `ty`, for dispatching `value.name()` at runtime.
-    pub fn assoc_fn(&self, ty: DefId, name: xur_span::Symbol) -> Option<DefId> {
+    /// The function `name` of the struct, enum or native type `ty`: from an
+    /// `impl` block, or registered with a native type. For dispatching
+    /// `value.name()` at runtime.
+    pub fn assoc_fn(&self, ty: DefId, name: Symbol) -> Option<Res> {
         match self.scopes.get(&ty)?.get(Namespace::Value, name)?.res {
-            Res::Def(DefKind::Fn, def) => Some(def),
+            res @ Res::Def(DefKind::Fn | DefKind::NativeFn(_), _) => Some(res),
             _ => None,
         }
     }
@@ -133,7 +135,7 @@ struct Resolver<'a> {
     locals: HashMap<NodeId, Ident>,
     node_defs: HashMap<NodeId, DefId>,
     module_defs: Vec<DefId>,
-    std: DefId,
+    native_roots: HashMap<Symbol, DefId>,
     /// `use` declarations not yet resolved.
     pending_imports: Vec<Import<'a>>,
     /// What the type of each `impl` block resolved to, by the impl item.
@@ -152,7 +154,7 @@ impl<'a> Resolver<'a> {
             module_defs,
             unnamed_modules: _,
             scopes,
-            std,
+            native_roots,
         } = resolutions;
         Self {
             krate,
@@ -162,7 +164,7 @@ impl<'a> Resolver<'a> {
             locals,
             node_defs,
             module_defs,
-            std,
+            native_roots,
             pending_imports: Vec::new(),
             impl_self_tys: HashMap::new(),
             diags: Vec::new(),
@@ -219,7 +221,7 @@ impl<'a> Resolver<'a> {
             module_defs: self.module_defs,
             unnamed_modules,
             scopes: self.scopes,
-            std: self.std,
+            native_roots: self.native_roots,
         };
         (resolutions, self.diags)
     }

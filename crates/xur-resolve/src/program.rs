@@ -4,6 +4,8 @@ use std::path::Path;
 use xur_errors::Diag;
 use xur_span::FileLoader;
 
+use crate::NativeModule;
+
 use crate::loader::{Loader, normalize};
 use crate::{Crate, ModuleIdx, Resolutions, resolve_modules};
 
@@ -21,11 +23,16 @@ pub struct Program {
 }
 
 impl Program {
-    /// Loads and resolves the program rooted at `root`.
+    /// Loads and resolves the program rooted at `root`, with the native
+    /// modules `natives` (such as `std`) available by name.
     ///
     /// Fails only if `root` itself cannot be read; everything else wrong
     /// with the program is returned as diagnostics.
-    pub fn load(root: &Path, file_loader: Box<dyn FileLoader>) -> io::Result<(Self, Vec<Diag>)> {
+    pub fn load(
+        root: &Path,
+        file_loader: Box<dyn FileLoader>,
+        natives: &[NativeModule],
+    ) -> io::Result<(Self, Vec<Diag>)> {
         let src = file_loader.read_file(root)?;
         let mut loader = Loader::new(file_loader);
         let mut diags = Vec::new();
@@ -34,7 +41,7 @@ impl Program {
         debug_assert_eq!(root, krate.root);
 
         let (resolutions, resolve_diags) =
-            resolve_modules(&krate, Resolutions::new(), 0..krate.modules.len());
+            resolve_modules(&krate, Resolutions::new(natives), 0..krate.modules.len());
         diags.extend(resolve_diags);
         let program = Self {
             krate,

@@ -22,7 +22,7 @@ pub struct TestCx<'r> {
 impl<'r> TestCx<'r> {
     pub fn new(registry: &'r Registry) -> Self {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
-        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader)).unwrap();
+        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader), &[]).unwrap();
         Self {
             registry,
             lang: LangItems::new(&program),

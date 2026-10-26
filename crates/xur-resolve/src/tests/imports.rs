@@ -10,7 +10,7 @@ fn std_imports() {
     assert_eq!(resolved.res_of("std::io"), "module std::io");
     assert_eq!(
         resolved.res_of("std::io::println"),
-        "builtin function std::io::println"
+        "native function std::io::println"
     );
 }
 
@@ -37,7 +37,7 @@ fn imports_may_depend_on_later_imports() {
     resolved.assert_no_errors();
     assert_eq!(
         resolved.res_of("io::println"),
-        "builtin function std::io::println"
+        "native function std::io::println"
     );
 }
 

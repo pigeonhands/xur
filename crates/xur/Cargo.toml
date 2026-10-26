@@ -9,6 +9,7 @@ repository.workspace = true
 xur-ast.workspace = true
 xur-parser.workspace = true
 xur-resolve.workspace = true
+xur-std.workspace = true
 xur-span.workspace = true
 xur-errors.workspace = true
 anyhow.workspace = true

@@ -297,7 +297,7 @@ mod tests {
 
     fn cx() -> Cx {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
-        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader)).unwrap();
+        let (program, _) = Program::load(Path::new("main.xur"), Box::new(loader), &[]).unwrap();
         Cx(LangItems::new(&program))
     }
 

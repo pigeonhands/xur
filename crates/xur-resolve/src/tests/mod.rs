@@ -8,7 +8,7 @@ use std::path::Path;
 
 use xur_span::MemoryFileLoader;
 
-use crate::{Program, names};
+use crate::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId, Program, names};
 
 /// A program loaded from memory and resolved. The first file is the root.
 pub(crate) struct Resolved {
@@ -18,7 +18,8 @@ pub(crate) struct Resolved {
 
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
     let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
-    let (program, diags) = Program::load(Path::new(files[0].0), loader).expect("root exists");
+    let (program, diags) =
+        Program::load(Path::new(files[0].0), loader, &natives()).expect("root exists");
     let errors = diags.into_iter().map(|d| d.message).collect();
     Resolved { program, errors }
 }
@@ -35,7 +36,7 @@ impl Resolved {
 
     /// Describes what the first path or identifier pattern written exactly
     /// as `text` (in any module but the prelude) resolved to, e.g.
-    /// "builtin function std::io::println".
+    /// "native function std::io::println".
     pub(crate) fn res_of(&self, text: &str) -> String {
         self.res_of_nth(text, 0)
     }
@@ -59,4 +60,39 @@ impl Resolved {
             Some(&res) => resolutions.describe(res, source_map),
         }
     }
+}
+
+/// Native modules like the runtime's `std`, plus `geo` with a native type.
+pub(crate) fn natives() -> Vec<NativeModule> {
+    let mut next = 0;
+    let mut f = |name: &str| {
+        next += 1;
+        NativeFnDecl {
+            name: name.to_owned(),
+            id: NativeFnId(next),
+        }
+    };
+    let module = |name: &str, functions, modules| NativeModule {
+        name: name.to_owned(),
+        functions,
+        types: Vec::new(),
+        modules,
+    };
+    let std = module(
+        "std",
+        vec![f("import")],
+        vec![
+            module("io", vec![f("print"), f("println")], Vec::new()),
+            module("any", vec![f("type_name")], Vec::new()),
+        ],
+    );
+    let geo = NativeModule {
+        types: vec![NativeTypeDecl {
+            name: "Point".to_owned(),
+            id: NativeTypeId(0),
+            functions: vec![f("new"), f("norm")],
+        }],
+        ..module("geo", Vec::new(), Vec::new())
+    };
+    vec![std, geo]
 }

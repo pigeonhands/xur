@@ -15,8 +15,8 @@ pub(crate) type Lookup<T> = Result<T, Option<Diag>>;
 
 impl Resolver<'_> {
     /// Looks `name` up as written at the top level of `module`: the module's
-    /// own items, then the prelude, then built-in names (`std` and the
-    /// primitive types).
+    /// own items, then the prelude, then built-in names (native modules such
+    /// as `std`, and the primitive types).
     pub(crate) fn lookup_in_module(
         &self,
         module: DefId,
@@ -61,8 +61,8 @@ impl Resolver<'_> {
             vis: Vis::Public,
             span: None,
         };
-        if name.as_str() == "std" {
-            return Some(builtin(Res::Def(DefKind::Mod, self.std)));
+        if let Some(&module) = self.native_roots.get(&name) {
+            return Some(builtin(Res::Def(DefKind::Mod, module)));
         }
         PrimTy::from_name(name).map(|ty| builtin(Res::PrimTy(ty)))
     }
