@@ -9,9 +9,11 @@
 //!   node in the tree.
 
 mod expected;
+mod expr;
 mod lit;
 mod pat;
 mod path;
+mod stmt;
 mod ty;
 
 #[cfg(test)]
@@ -22,7 +24,7 @@ use xur_span::{Ident, Span, Symbol};
 
 use self::expected::Expected;
 use crate::lexer::Lexer;
-use crate::token::{Token, TokenKind};
+use crate::token::{Keyword, Token, TokenKind};
 
 pub use self::path::PathStyle;
 
@@ -43,6 +45,20 @@ pub struct Parser<'src> {
     /// Everything checked for since the last `bump`.
     expected: Vec<Expected>,
     diags: Vec<Diag>,
+    restrictions: Restrictions,
+}
+
+/// Context that changes how an expression is parsed (rustc's
+/// `Restrictions`).
+#[derive(Debug, Clone, Copy, Default)]
+struct Restrictions {
+    /// Parsing an expression statement: a block-like expression such as `if`
+    /// ends the statement, so `if c {} -1` is two statements, not a
+    /// subtraction.
+    stmt_expr: bool,
+    /// Parsing the head of an `if`, `while`, `match` or `for`, where a `{`
+    /// begins the body: `for i in 0.. {}` is an open-ended range.
+    before_block: bool,
 }
 
 impl<'src> Parser<'src> {
@@ -59,6 +75,7 @@ impl<'src> Parser<'src> {
             prev_token: Token::new(TokenKind::Eof, Span::default()),
             expected: Vec::new(),
             diags: lex_errors.into_iter().map(Diag::from).collect(),
+            restrictions: Restrictions::default(),
         }
     }
 
@@ -95,6 +112,14 @@ impl<'src> Parser<'src> {
         self.tokens[index].kind
     }
 
+    /// Runs `parse` with `restrictions` in effect.
+    fn with_res<T>(&mut self, restrictions: Restrictions, parse: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.restrictions, restrictions);
+        let result = parse(self);
+        self.restrictions = saved;
+        result
+    }
+
     /// Whether the current token is `kind`; if not, `kind` is recorded as
     /// expected.
     fn check(&mut self, kind: TokenKind<'static>) -> bool {
@@ -120,6 +145,10 @@ impl<'src> Parser<'src> {
         } else {
             Err(self.unexpected())
         }
+    }
+
+    fn eat_keyword(&mut self, keyword: Keyword) -> bool {
+        self.eat(TokenKind::Keyword(keyword))
     }
 
     /// Consumes the current token if it is `kind`, without recording it as

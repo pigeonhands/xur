@@ -14,6 +14,8 @@ pub(super) enum Expected {
     Lit,
     Type,
     Pat,
+    Expr,
+    Operator,
 }
 
 impl fmt::Display for Expected {
@@ -24,6 +26,8 @@ impl fmt::Display for Expected {
             Self::Lit => f.write_str("literal"),
             Self::Type => f.write_str("type"),
             Self::Pat => f.write_str("pattern"),
+            Self::Expr => f.write_str("expression"),
+            Self::Operator => f.write_str("an operator"),
         }
     }
 }

@@ -34,7 +34,10 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_opt_generic_args(&mut self, style: PathStyle) -> PResult<Option<GenericArgs>> {
+    pub(super) fn parse_opt_generic_args(
+        &mut self,
+        style: PathStyle,
+    ) -> PResult<Option<GenericArgs>> {
         let has_args = match style {
             PathStyle::Type => self.check(TokenKind::Lt),
             PathStyle::Expr => {

@@ -1,6 +1,8 @@
+mod expr;
 mod lit;
 mod pat;
 mod show;
+mod stmt;
 mod ty;
 
 use super::{PResult, Parser};
