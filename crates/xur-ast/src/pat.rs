@@ -21,8 +21,10 @@ pub enum PatKind {
     Path(Path),
     /// `Ok(value)`, `Shape::Rect(w, h)`
     TupleStruct(Path, Vec<Pat>),
-    /// `(a, b)`
+    /// `(a, b)`; `()` matches the unit value.
     Tuple(Vec<Pat>),
+    /// `(pat)`, kept so the tree records exactly what was written.
+    Paren(Box<Pat>),
     /// A pattern that failed to parse; the error has already been reported.
     Err,
 }

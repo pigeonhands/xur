@@ -10,6 +10,7 @@
 
 mod expected;
 mod lit;
+mod pat;
 mod path;
 mod ty;
 
@@ -119,6 +120,17 @@ impl<'src> Parser<'src> {
         } else {
             Err(self.unexpected())
         }
+    }
+
+    /// Consumes the current token if it is `kind`, without recording it as
+    /// expected. Used for tokens that begin a category already named in the
+    /// error, so it reads "expected type" rather than listing `(`, `_`, ...
+    fn eat_noexpect(&mut self, kind: TokenKind<'static>) -> bool {
+        let found = self.token.kind == kind;
+        if found {
+            self.bump();
+        }
+        found
     }
 
     /// Records that a whole category of syntax would have been accepted here.

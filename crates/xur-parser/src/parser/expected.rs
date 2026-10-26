@@ -13,6 +13,7 @@ pub(super) enum Expected {
     Ident,
     Lit,
     Type,
+    Pat,
 }
 
 impl fmt::Display for Expected {
@@ -22,6 +23,7 @@ impl fmt::Display for Expected {
             Self::Ident => f.write_str("identifier"),
             Self::Lit => f.write_str("literal"),
             Self::Type => f.write_str("type"),
+            Self::Pat => f.write_str("pattern"),
         }
     }
 }

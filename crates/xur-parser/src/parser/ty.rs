@@ -7,7 +7,7 @@ use crate::token::TokenKind;
 impl Parser<'_> {
     pub fn parse_ty(&mut self) -> PResult<Ty> {
         let lo = self.token.span;
-        let kind = if self.eat(TokenKind::LParen) {
+        let kind = if self.eat_noexpect(TokenKind::LParen) {
             let (mut tys, trailing_comma) =
                 self.parse_comma_seq(TokenKind::RParen, Self::parse_ty)?;
             if tys.len() == 1 && !trailing_comma {
@@ -15,7 +15,7 @@ impl Parser<'_> {
             } else {
                 TyKind::Tuple(tys)
             }
-        } else if self.eat(TokenKind::Underscore) {
+        } else if self.eat_noexpect(TokenKind::Underscore) {
             TyKind::Infer
         } else if matches!(self.token.kind, TokenKind::Ident(_)) {
             TyKind::Path(self.parse_path(PathStyle::Type)?)

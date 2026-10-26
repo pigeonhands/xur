@@ -60,7 +60,7 @@ fn module_paths_take_no_generic_args() {
 fn missing_type() {
     assert_eq!(
         parse_errors(";", Parser::parse_ty),
-        ["expected one of `(`, `_`, or type, found `;`"]
+        ["expected type, found `;`"]
     );
 }
 

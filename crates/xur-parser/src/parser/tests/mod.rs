@@ -1,4 +1,5 @@
 mod lit;
+mod pat;
 mod show;
 mod ty;
 

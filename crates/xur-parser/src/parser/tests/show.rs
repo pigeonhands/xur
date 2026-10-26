@@ -1,6 +1,6 @@
 //! Compact, source-like rendering of AST nodes for test assertions.
 
-use xur_ast::{GenericArgs, Lit, LitKind, Path, Ty, TyKind};
+use xur_ast::{GenericArgs, Lit, LitKind, Pat, PatKind, Path, Ty, TyKind};
 
 pub(super) trait Show {
     fn show(&self) -> String;
@@ -57,6 +57,22 @@ impl Show for Ty {
             TyKind::Paren(ty) => format!("({})", ty.show()),
             TyKind::Infer => "_".to_owned(),
             TyKind::Err => "<err>".to_owned(),
+        }
+    }
+}
+
+impl Show for Pat {
+    fn show(&self) -> String {
+        match &self.kind {
+            PatKind::Wild => "_".to_owned(),
+            PatKind::Ident(ident) => ident.to_string(),
+            PatKind::Lit(lit) => lit.show(),
+            PatKind::Path(path) => path.show(),
+            PatKind::TupleStruct(path, fields) => format!("{}({})", path.show(), list(fields)),
+            PatKind::Tuple(pats) if pats.len() == 1 => format!("({},)", pats[0].show()),
+            PatKind::Tuple(pats) => format!("({})", list(pats)),
+            PatKind::Paren(pat) => format!("({})", pat.show()),
+            PatKind::Err => "<err>".to_owned(),
         }
     }
 }
