@@ -1,0 +1,16 @@
+// The prelude: names in scope in every module without a `use`.
+
+pub enum Option<T> {
+    Some(T)
+    None
+}
+
+pub enum Result<T, E> {
+    Ok(T)
+    Err(E)
+}
+
+pub use Option::Some;
+pub use Option::None;
+pub use Result::Ok;
+pub use Result::Err;

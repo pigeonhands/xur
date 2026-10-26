@@ -293,6 +293,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "xur-resolve"
+version = "0.1.1"
+dependencies = [
+ "xur-ast",
+ "xur-errors",
+ "xur-parser",
+ "xur-span",
+]
+
+[[package]]
 name = "xur-runtime"
 version = "0.1.1"
 

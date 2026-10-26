@@ -1,0 +1,16 @@
+[package]
+name = "xur-resolve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_resolve"
+path = "src/lib.rs"
+
+[dependencies]
+xur-ast.workspace = true
+xur-errors.workspace = true
+xur-parser.workspace = true
+xur-span.workspace = true

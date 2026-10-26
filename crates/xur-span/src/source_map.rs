@@ -5,6 +5,8 @@
 //! spans from different files never collide.
 
 use std::fmt;
+use std::io;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::Span;
@@ -77,6 +79,21 @@ impl SourceFile {
             line: line as u32 + 1,
             col: col as u32 + 1,
         }
+    }
+}
+
+/// Reads source files; abstracted so tests can supply files from memory
+/// (rustc's `FileLoader`).
+pub trait FileLoader {
+    fn read_file(&self, path: &Path) -> io::Result<String>;
+}
+
+/// Reads files from disk.
+pub struct RealFileLoader;
+
+impl FileLoader for RealFileLoader {
+    fn read_file(&self, path: &Path) -> io::Result<String> {
+        std::fs::read_to_string(path)
     }
 }
 
