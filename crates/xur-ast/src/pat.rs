@@ -1,9 +1,10 @@
 use xur_span::{Ident, Span};
 
-use crate::{Lit, Path};
+use crate::{Lit, NodeId, Path};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pat {
+    pub id: NodeId,
     pub kind: PatKind,
     pub span: Span,
 }

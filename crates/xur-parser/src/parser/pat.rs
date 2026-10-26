@@ -26,6 +26,7 @@ impl Parser<'_> {
             return Err(self.unexpected());
         };
         Ok(Pat {
+            id: self.next_id(),
             kind,
             span: lo.to(self.prev_token.span),
         })

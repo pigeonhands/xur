@@ -20,7 +20,7 @@ mod ty;
 #[cfg(test)]
 mod tests;
 
-use xur_ast::Module;
+use xur_ast::{Module, NodeId, NodeIdGen};
 use xur_errors::Diag;
 use xur_span::{Ident, Span, Symbol};
 
@@ -32,10 +32,12 @@ pub use self::path::PathStyle;
 
 /// Lexes and parses a whole source file, returning the module (complete
 /// even if there were errors, with `Err` nodes where parsing failed) and
-/// every diagnostic.
-pub fn parse_module(src: &str) -> (Module, Vec<Diag>) {
+/// every diagnostic. Node ids are taken from `ids`.
+pub fn parse_module(src: &str, ids: &mut NodeIdGen) -> (Module, Vec<Diag>) {
     let mut parser = Parser::new(src);
+    parser.ids = std::mem::take(ids);
     let module = parser.parse_module();
+    *ids = std::mem::take(&mut parser.ids);
     (module, parser.finish())
 }
 
@@ -57,6 +59,7 @@ pub struct Parser<'src> {
     expected: Vec<Expected>,
     diags: Vec<Diag>,
     restrictions: Restrictions,
+    ids: NodeIdGen,
 }
 
 /// Context that changes how an expression is parsed (rustc's
@@ -87,6 +90,7 @@ impl<'src> Parser<'src> {
             expected: Vec::new(),
             diags: lex_errors.into_iter().map(Diag::from).collect(),
             restrictions: Restrictions::default(),
+            ids: NodeIdGen::default(),
         }
     }
 
@@ -103,6 +107,10 @@ impl<'src> Parser<'src> {
     /// Errors unless all input has been consumed.
     pub fn expect_end(&mut self) -> PResult<()> {
         self.expect(TokenKind::Eof)
+    }
+
+    fn next_id(&mut self) -> NodeId {
+        self.ids.next_id()
     }
 
     fn report(&mut self, diag: Diag) {

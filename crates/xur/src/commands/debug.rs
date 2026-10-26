@@ -4,6 +4,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Result, bail};
+use xur_ast::NodeIdGen;
 use xur_errors::Diag;
 use xur_parser::{Lexer, Token};
 use xur_span::LineIndex;
@@ -36,7 +37,7 @@ fn tokens(path: &Path) -> Result<()> {
 /// parsing failed.
 fn ast(path: &Path) -> Result<()> {
     let file = SourceFile::load(path)?;
-    let (module, diags) = xur_parser::parse_module(&file.text);
+    let (module, diags) = xur_parser::parse_module(&file.text, &mut NodeIdGen::default());
 
     let mut out = BufWriter::new(io::stdout().lock());
     ignore_broken_pipe(writeln!(out, "{module:#?}").and_then(|()| out.flush()))?;

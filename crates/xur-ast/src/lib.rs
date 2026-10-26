@@ -13,6 +13,7 @@ mod attr;
 mod expr;
 mod item;
 mod lit;
+mod node_id;
 mod op;
 mod pat;
 mod path;
@@ -26,6 +27,7 @@ pub use item::{
     Module, Param, UseTree, Variant, VariantData, Visibility,
 };
 pub use lit::{Lit, LitKind};
+pub use node_id::{NodeId, NodeIdGen};
 pub use op::{BinOp, BinOpKind, Fixity, Precedence, UnOp};
 pub use pat::{Pat, PatKind};
 pub use path::{GenericArgs, Path, PathSegment};

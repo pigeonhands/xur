@@ -1,6 +1,6 @@
 use xur_span::{Ident, Span};
 
-use crate::{Attribute, Block, Expr, Pat, Path, Ty};
+use crate::{Attribute, Block, Expr, NodeId, Pat, Path, Ty};
 
 /// A whole source file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,6 +11,7 @@ pub struct Module {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
+    pub id: NodeId,
     pub attrs: Vec<Attribute>,
     pub vis: Visibility,
     pub kind: ItemKind,
@@ -91,6 +92,7 @@ pub struct Generics {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericParam {
+    pub id: NodeId,
     pub ident: Ident,
 }
 
@@ -122,6 +124,7 @@ pub struct EnumDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variant {
+    pub id: NodeId,
     pub attrs: Vec<Attribute>,
     pub ident: Ident,
     pub data: VariantData,

@@ -86,6 +86,7 @@ impl Parser<'_> {
             }
         };
         Ok(Item {
+            id: self.next_id(),
             attrs,
             vis,
             kind,
@@ -227,6 +228,7 @@ impl Parser<'_> {
         }
         let params = self.parse_delimited(TokenKind::Gt, |this| {
             Ok(GenericParam {
+                id: this.next_id(),
                 ident: this.parse_ident()?,
             })
         })?;
@@ -314,6 +316,7 @@ impl Parser<'_> {
             VariantData::Unit
         };
         Ok(Variant {
+            id: self.next_id(),
             attrs,
             ident,
             data,

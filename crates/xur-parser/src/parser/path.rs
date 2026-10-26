@@ -29,6 +29,7 @@ impl Parser<'_> {
             }
         }
         Ok(Path {
+            id: self.next_id(),
             segments,
             span: lo.to(self.prev_token.span),
         })

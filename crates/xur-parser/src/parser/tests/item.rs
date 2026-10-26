@@ -2,7 +2,13 @@ use xur_ast::ItemKind;
 
 use super::show::Show;
 use super::{parse_errors, parse_ok};
+use xur_ast::NodeIdGen;
+
 use crate::parser::{Parser, parse_module};
+
+fn parse_module_fresh(src: &str) -> (xur_ast::Module, Vec<xur_errors::Diag>) {
+    parse_module(src, &mut NodeIdGen::default())
+}
 
 fn item(src: &str) -> String {
     parse_ok(src, Parser::parse_item).show()
@@ -100,7 +106,7 @@ fn expected_item() {
 
 #[test]
 fn broken_items_are_skipped() {
-    let (module, diags) = parse_module(
+    let (module, diags) = parse_module_fresh(
         "fn ok() {}\nfn broken(a u32) { if x { fn inner() {} } }\nstruct AlsoOk;\npub pub fn f() {}",
     );
     let names: Vec<_> = module
@@ -118,7 +124,7 @@ fn broken_items_are_skipped() {
 
 #[test]
 fn lex_and_parse_errors_are_both_reported() {
-    let (_, diags) = parse_module("fn f() { let s = \"\\q\"; $ }");
+    let (_, diags) = parse_module_fresh("fn f() { let s = \"\\q\"; $ }");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert_eq!(
         messages,
@@ -134,11 +140,19 @@ fn examples_parse_cleanly() {
         let path = entry.expect("read example entry").path();
         if path.extension().is_some_and(|ext| ext == "xur") {
             let src = std::fs::read_to_string(&path).expect("read example file");
-            let (module, diags) = parse_module(&src);
+            let (module, diags) = parse_module_fresh(&src);
             assert!(diags.is_empty(), "errors in {path:?}: {diags:#?}");
             assert!(!module.items.is_empty());
             count += 1;
         }
     }
     assert!(count > 0, "no examples found in {dir}");
+}
+
+#[test]
+fn node_ids_continue_across_files() {
+    let mut ids = NodeIdGen::default();
+    let (first, _) = parse_module("fn a() {}", &mut ids);
+    let (second, _) = parse_module("fn b() {}", &mut ids);
+    assert_ne!(first.items[0].id, second.items[0].id);
 }

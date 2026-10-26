@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+xur-ast.workspace = true
 xur-parser.workspace = true
 xur-span.workspace = true
 xur-errors.workspace = true

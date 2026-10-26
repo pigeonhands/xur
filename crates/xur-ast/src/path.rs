@@ -1,22 +1,16 @@
 use xur_span::{Ident, Span};
 
-use crate::Ty;
+use crate::{NodeId, Ty};
 
 /// `std::io::println`, `Result<u32, MathError>`, `type_name::<T>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
+    pub id: NodeId,
     pub segments: Vec<PathSegment>,
     pub span: Span,
 }
 
 impl Path {
-    pub fn from_ident(ident: Ident) -> Self {
-        Self {
-            segments: vec![PathSegment { ident, args: None }],
-            span: ident.span,
-        }
-    }
-
     /// The identifier if this path is a single segment without generic args.
     pub fn as_ident(&self) -> Option<Ident> {
         match self.segments.as_slice() {
