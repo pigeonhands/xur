@@ -4,8 +4,9 @@ Xur is a small, expression-oriented programming language with Rust-like
 syntax, modules that are ordinary values, and explicit control over data
 layout.
 
-> **Status:** early development. The lexer and the `xur debug tokens` command
-> work; the parser, AST and runtime are still to come.
+> **Status:** early development. Source files can be lexed and parsed into a
+> syntax tree (`xur debug tokens`, `xur debug ast`); name resolution, type
+> checking and the runtime are still to come.
 
 ## A taste of Xur
 
@@ -126,6 +127,9 @@ There are complete programs in [`example/`](example).
 
 ## Using the CLI
 
+`xur debug` shows the output of individual compiler stages. `tokens` prints
+what the lexer produces:
+
 ```console
 $ cargo run -- debug tokens example/math.xur
 1:1      pub        pub
@@ -135,29 +139,54 @@ $ cargo run -- debug tokens example/math.xur
 ...
 ```
 
-Lex errors are shown as annotated source snippets, and the command exits
-non-zero:
+`ast` prints the syntax tree (spans are byte ranges):
 
 ```console
-$ cargo run -- debug tokens bad.xur
-Error: unterminated string literal
-   ╭─[ bad.xur:2:9 ]
+$ cargo run -- debug ast add.xur
+Module {
+    items: [
+        Item {
+            attrs: [],
+            vis: Public(
+                0..3,
+            ),
+            kind: Fn(
+                Fn {
+                    ident: "add"@7..10,
+...
+```
+
+Errors are shown as annotated source snippets and the command exits
+non-zero. Like rustc, the parser recovers from errors, so every mistake in a
+file is reported in one run:
+
+```console
+$ cargo run -- debug ast bad.xur
+Error: expected one of `(`, `.`, `;`, `?`, or an operator, found keyword `let`
+   ╭─[ bad.xur:2:14 ]
    │
- 2 │ let s = "oops
-   │         ──┬──
-   │           ╰──── missing closing `"`
+ 2 │     let x = 1
+   │              │
+   │              ╰─ expected one of 5 possible tokens
+ 3 │     let y = x;
+   │     ─┬─
+   │      ╰─── unexpected token
 ───╯
-error: could not lex `bad.xur` due to 1 error(s)
+error: could not parse `bad.xur` due to 1 error(s)
 ```
 
 ## Workspace layout
 
-| Crate                 | Purpose                                       |
-| --------------------- | --------------------------------------------- |
-| `crates/xur`          | The `xur` command-line tool                   |
-| `crates/xur-parser`   | Lexer (and later the parser)                  |
-| `crates/xur-ast`      | Syntax tree types (planned)                   |
-| `crates/xur-runtime`  | Runtime (planned)                             |
+The compiler is structured after rustc, whose crates these mirror:
+
+| Crate                 | Purpose                                                  | rustc analogue  |
+| --------------------- | -------------------------------------------------------- | --------------- |
+| `crates/xur`          | The `xur` command-line tool                              | `rustc_driver`  |
+| `crates/xur-parser`   | Lexer and recursive-descent parser                       | `rustc_parse`   |
+| `crates/xur-ast`      | Syntax tree types                                        | `rustc_ast`     |
+| `crates/xur-errors`   | Diagnostics and their rendering                          | `rustc_errors`  |
+| `crates/xur-span`     | Source spans, line/column lookup and interned symbols    | `rustc_span`    |
+| `crates/xur-runtime`  | Runtime (planned)                                        |                 |
 
 ## Development
 
