@@ -6,6 +6,7 @@ use xur_span::Ident;
 
 use crate::def::{DefData, DefId, DefKind, Namespace, Res};
 use crate::imports::Import;
+use crate::loader::ModuleIdx;
 use crate::loader::static_import;
 use crate::scope::{Binding, Vis};
 use crate::{Resolver, create_scoped_def};
@@ -13,9 +14,10 @@ use crate::{Resolver, create_scoped_def};
 impl<'a> Resolver<'a> {
     /// Declares every module's top-level items in the module's scope, and
     /// queues its `use` declarations.
-    pub(crate) fn collect_items(&mut self) {
+    pub(crate) fn collect_items(&mut self, modules: &[ModuleIdx]) {
         let krate = self.krate;
-        for (module, loaded) in self.module_defs.clone().into_iter().zip(&krate.modules) {
+        for &idx in modules {
+            let (module, loaded) = (self.module_def(idx), krate.module(idx));
             for item in &loaded.ast.items {
                 let vis = vis(item.vis);
                 if let ItemKind::Use(tree) = &item.kind {

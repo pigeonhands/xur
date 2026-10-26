@@ -36,6 +36,24 @@ pub struct Crate {
 }
 
 impl Crate {
+    /// A crate containing only the prelude, ready for its root module to be
+    /// added next.
+    pub(crate) fn with_prelude(loader: &mut Loader, diags: &mut Vec<Diag>) -> Self {
+        let mut krate = Self {
+            source_map: SourceMap::new(),
+            modules: Vec::new(),
+            prelude: ModuleIdx(0),
+            root: ModuleIdx(1),
+        };
+        // The angle brackets keep the prelude's path from clashing with a
+        // real file.
+        let path = PathBuf::from("<prelude>");
+        let prelude = loader.add_tree(&mut krate, path, PRELUDE.to_owned(), diags);
+        debug_assert_eq!(prelude, krate.prelude);
+        krate.modules[prelude.0].name = Symbol::intern("prelude");
+        krate
+    }
+
     pub fn module(&self, idx: ModuleIdx) -> &LoadedModule {
         &self.modules[idx.0]
     }
@@ -45,7 +63,7 @@ pub struct LoadedModule {
     /// The file stem, e.g. `math` for `math.xur`.
     pub name: Symbol,
     pub path: PathBuf,
-    pub ast: Module,
+    pub ast: &'static Module,
     /// The module loaded by each `std::import` call with a literal path,
     /// keyed by the node id of the call's `std::import` path.
     pub imports: HashMap<NodeId, ModuleIdx>,
@@ -111,124 +129,120 @@ impl Visitor for ImportFinder {
     }
 }
 
-/// Loads and parses `root` and, transitively, every module it imports.
-///
-/// Fails only if `root` itself cannot be read; problems with imported files
-/// and syntax errors are returned as diagnostics.
-pub fn load_crate(root: &Path, loader: &dyn FileLoader) -> io::Result<(Crate, Vec<Diag>)> {
-    let root_src = loader.read_file(root)?;
-    let mut builder = Builder {
-        loader,
-        source_map: SourceMap::new(),
-        modules: Vec::new(),
-        by_path: HashMap::new(),
-        ids: NodeIdGen::default(),
-        diags: Vec::new(),
-    };
-    let prelude = builder.add_module(
-        Symbol::intern("prelude"),
-        PathBuf::from("<prelude>"),
-        PRELUDE.to_owned(),
-    );
-    let root = normalize(root);
-    let root = builder.add_module(module_name(&root), root, root_src);
+/// Loads files into a [`Crate`], remembering which are already loaded.
+pub(crate) struct Loader {
+    file_loader: Box<dyn FileLoader>,
+    by_path: HashMap<PathBuf, ModuleIdx>,
+    ids: NodeIdGen,
+}
 
-    let mut pending = vec![root];
-    while let Some(idx) = pending.pop() {
-        for import in builder.find_imports(idx) {
-            let target = match builder.by_path.get(&import.path) {
-                Some(&loaded) => loaded,
-                None => {
-                    let Some(loaded) = builder.load(&import) else {
-                        continue;
-                    };
-                    pending.push(loaded);
-                    loaded
-                }
-            };
-            builder.modules[idx.0].imports.insert(import.callee, target);
+impl Loader {
+    pub(crate) fn new(file_loader: Box<dyn FileLoader>) -> Self {
+        Self {
+            file_loader,
+            by_path: HashMap::new(),
+            ids: NodeIdGen::default(),
         }
     }
 
-    let krate = Crate {
-        source_map: builder.source_map,
-        modules: builder.modules,
-        root,
-        prelude,
-    };
-    Ok((krate, builder.diags))
-}
+    pub(crate) fn read(&self, path: &Path) -> io::Result<String> {
+        self.file_loader.read_file(path)
+    }
 
-struct Builder<'a> {
-    loader: &'a dyn FileLoader,
-    source_map: SourceMap,
-    modules: Vec<LoadedModule>,
-    by_path: HashMap<PathBuf, ModuleIdx>,
-    ids: NodeIdGen,
-    diags: Vec<Diag>,
-}
+    /// The module already loaded from `path`, which must be normalised.
+    pub(crate) fn loaded(&self, path: &Path) -> Option<ModuleIdx> {
+        self.by_path.get(path).copied()
+    }
 
-impl Builder<'_> {
-    fn add_module(&mut self, name: Symbol, path: PathBuf, src: String) -> ModuleIdx {
-        let file = self.source_map.add_file(path.display().to_string(), src);
-        let (ast, diags) = parse_file(&file, &mut self.ids);
-        self.diags.extend(diags);
+    /// Adds the module at `path` with source `src` and, transitively, every
+    /// not yet loaded module it imports with a literal path.
+    pub(crate) fn add_tree(
+        &mut self,
+        krate: &mut Crate,
+        path: PathBuf,
+        src: String,
+        diags: &mut Vec<Diag>,
+    ) -> ModuleIdx {
+        let first = self.add_module(krate, path, src, diags);
+        let mut pending = vec![first];
+        while let Some(idx) = pending.pop() {
+            for import in find_imports(krate.module(idx)) {
+                let target = match self.loaded(&import.path) {
+                    Some(loaded) => loaded,
+                    None => match self.read(&import.path) {
+                        Ok(src) => {
+                            let loaded = self.add_module(krate, import.path, src, diags);
+                            pending.push(loaded);
+                            loaded
+                        }
+                        Err(error) => {
+                            let message =
+                                format!("couldn't read `{}`: {error}", import.path.display());
+                            diags.push(
+                                Diag::error(message, import.span)
+                                    .with_label(import.span, "imported here"),
+                            );
+                            continue;
+                        }
+                    },
+                };
+                krate.modules[idx.0].imports.insert(import.callee, target);
+            }
+        }
+        first
+    }
 
-        let idx = ModuleIdx(self.modules.len());
-        self.modules.push(LoadedModule {
-            name,
+    /// Parses `src` as the module at `path`. The AST is allocated for the
+    /// rest of the process, as rustc arena-allocates its ASTs, so that later
+    /// stages can hold references into it while more modules are loaded.
+    fn add_module(
+        &mut self,
+        krate: &mut Crate,
+        path: PathBuf,
+        src: String,
+        diags: &mut Vec<Diag>,
+    ) -> ModuleIdx {
+        let file = krate.source_map.add_file(path.display().to_string(), src);
+        let (ast, parse_diags) = parse_file(&file, &mut self.ids);
+        diags.extend(parse_diags);
+
+        let idx = ModuleIdx(krate.modules.len());
+        krate.modules.push(LoadedModule {
+            name: module_name(&path),
             path: path.clone(),
-            ast,
+            ast: Box::leak(Box::new(ast)),
             imports: HashMap::new(),
         });
         self.by_path.insert(path, idx);
         idx
     }
+}
 
-    /// Reads and parses the module at `path`, reporting failure at the
-    /// import that asked for it.
-    fn load(&mut self, import: &Import) -> Option<ModuleIdx> {
-        match self.loader.read_file(&import.path) {
-            Ok(src) => {
-                let name = module_name(&import.path);
-                Some(self.add_module(name, import.path.clone(), src))
-            }
-            Err(error) => {
-                let message = format!("couldn't read `{}`: {error}", import.path.display());
-                self.diags.push(
-                    Diag::error(message, import.span).with_label(import.span, "imported here"),
-                );
-                None
-            }
-        }
-    }
-
-    /// The literal-path `std::import` calls anywhere in module `idx`.
-    fn find_imports(&self, idx: ModuleIdx) -> Vec<Import> {
-        let module = &self.modules[idx.0];
-        let dir = module.path.parent().unwrap_or(Path::new(""));
-        let mut finder = ImportFinder(Vec::new());
-        finder.visit_module(&module.ast);
-        finder
-            .0
-            .into_iter()
-            .map(|import| Import {
-                path: normalize(&dir.join(&import.path)),
-                ..import
-            })
-            .collect()
-    }
+/// The literal-path `std::import` calls anywhere in `module`, with paths
+/// relative to the working directory.
+fn find_imports(module: &LoadedModule) -> Vec<Import> {
+    let dir = module.path.parent().unwrap_or(Path::new(""));
+    let mut finder = ImportFinder(Vec::new());
+    finder.visit_module(module.ast);
+    finder
+        .0
+        .into_iter()
+        .map(|import| Import {
+            path: normalize(&dir.join(&import.path)),
+            ..import
+        })
+        .collect()
 }
 
 /// A module is named after its file: `math` for `lib/math.xur`.
-fn module_name(path: &Path) -> Symbol {
+pub(crate) fn module_name(path: &Path) -> Symbol {
     let stem = path.file_stem().unwrap_or(path.as_os_str());
     Symbol::intern(&stem.to_string_lossy())
 }
 
 /// Removes `.` and `..` components without touching the file system, so
 /// the same file imported by different relative paths is loaded once.
-fn normalize(path: &Path) -> PathBuf {
+pub(crate) fn normalize(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -250,11 +264,16 @@ fn normalize(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Program;
     use crate::tests::MemLoader;
 
     fn load(files: &[(&str, &str)]) -> (Crate, Vec<String>) {
-        let (krate, diags) = load_crate(Path::new(files[0].0), &MemLoader::new(files)).unwrap();
-        (krate, diags.into_iter().map(|d| d.message).collect())
+        let loader = Box::new(MemLoader::new(files));
+        let (program, diags) = Program::load(Path::new(files[0].0), loader).unwrap();
+        (
+            program.krate,
+            diags.into_iter().map(|d| d.message).collect(),
+        )
     }
 
     fn names(krate: &Crate) -> Vec<&str> {

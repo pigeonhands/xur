@@ -19,6 +19,7 @@ use xur_span::{Ident, Span, Symbol};
 use crate::Resolver;
 use crate::def::{DefData, DefId, DefKind, Namespace, Res};
 use crate::ident::{Lookup, undeclared_module};
+use crate::loader::ModuleIdx;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RibKind {
@@ -54,9 +55,10 @@ impl Rib {
 
 impl Resolver<'_> {
     /// Resolves the names used inside every module's items.
-    pub(crate) fn resolve_bodies(&mut self) {
+    pub(crate) fn resolve_bodies(&mut self, modules: &[ModuleIdx]) {
         let krate = self.krate;
-        for (module, loaded) in self.module_defs.clone().into_iter().zip(&krate.modules) {
+        for &idx in modules {
+            let (module, loaded) = (self.module_def(idx), krate.module(idx));
             let mut late = LateResolver {
                 r: self,
                 module,
@@ -65,7 +67,7 @@ impl Resolver<'_> {
                 pat_bindings: HashMap::new(),
                 top_level: true,
             };
-            late.visit_module(&loaded.ast);
+            late.visit_module(loaded.ast);
         }
     }
 }

@@ -158,7 +158,7 @@ impl Resolver<'_> {
 
     pub(crate) fn def_path(&self, def: DefId) -> String {
         let unnamed = [self.module_def(self.krate.root), self.prelude()];
-        format_def_path(&self.defs, unnamed, def)
+        format_def_path(&self.defs, &unnamed, def)
     }
 }
 

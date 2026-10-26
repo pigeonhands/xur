@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use xur_ast::NodeIdGen;
 use xur_errors::Diag;
 use xur_parser::{Lexer, Token};
-use xur_resolve::{Crate, Res, Resolutions};
+use xur_resolve::{Crate, Program, Res, Resolutions};
 use xur_span::{RealFileLoader, SourceFile, SourceMap};
 
 use crate::cli::DebugCommand;
@@ -51,13 +51,12 @@ fn ast(path: &Path) -> Result<()> {
 /// Loads the program rooted at `path` and prints, for each module, every
 /// path and identifier pattern with what it resolves to.
 fn resolve(path: &Path) -> Result<()> {
-    let (krate, mut diags) = xur_resolve::load_crate(path, &RealFileLoader)
+    let (program, diags) = Program::load(path, Box::new(RealFileLoader))
         .with_context(|| format!("failed to read `{}`", path.display()))?;
-    let (resolutions, resolve_diags) = xur_resolve::resolve(&krate);
-    diags.extend(resolve_diags);
+    let krate = &program.krate;
 
     let mut out = BufWriter::new(io::stdout().lock());
-    ignore_broken_pipe(write_resolutions(&mut out, &krate, &resolutions))?;
+    ignore_broken_pipe(write_resolutions(&mut out, krate, program.resolutions()))?;
 
     let root = &krate.module(krate.root).path.display().to_string();
     fail_on_errors(&krate.source_map, root, diags, "resolve")
@@ -84,7 +83,7 @@ fn write_resolutions(
     let source_map = &krate.source_map;
     let prelude = krate.module(krate.prelude);
     for module in krate.modules.iter().filter(|m| !std::ptr::eq(*m, prelude)) {
-        for name in xur_resolve::names(&module.ast) {
+        for name in xur_resolve::names(module.ast) {
             let position = source_map.describe_pos(name.span);
             let text = source_map.slice(name.span);
             let meaning = match resolutions.res.get(&name.id) {

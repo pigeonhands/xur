@@ -1,6 +1,7 @@
 mod bodies;
 mod imports;
 mod items;
+mod program;
 
 use std::collections::HashMap;
 use std::io;
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use xur_span::FileLoader;
 
-use crate::{Crate, Resolutions, load_crate, names, resolve};
+use crate::{Program, names};
 
 /// Serves files from memory.
 #[derive(Default)]
@@ -36,25 +37,15 @@ impl FileLoader for MemLoader {
 
 /// A program loaded from memory and resolved. The first file is the root.
 pub(crate) struct Resolved {
-    krate: Crate,
-    resolutions: Resolutions,
+    pub program: Program,
     pub errors: Vec<String>,
 }
 
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
-    let loader = MemLoader::new(files);
-    let (krate, load_diags) = load_crate(Path::new(files[0].0), &loader).expect("root exists");
-    let (resolutions, diags) = resolve(&krate);
-    let errors = load_diags
-        .into_iter()
-        .chain(diags)
-        .map(|d| d.message)
-        .collect();
-    Resolved {
-        krate,
-        resolutions,
-        errors,
-    }
+    let loader = Box::new(MemLoader::new(files));
+    let (program, diags) = Program::load(Path::new(files[0].0), loader).expect("root exists");
+    let errors = diags.into_iter().map(|d| d.message).collect();
+    Resolved { program, errors }
 }
 
 /// Resolves a program consisting of a single file.
@@ -76,20 +67,21 @@ impl Resolved {
 
     /// Like [`Self::res_of`], for the `n`th (from 0) occurrence of `text`.
     pub(crate) fn res_of_nth(&self, text: &str, n: usize) -> String {
-        let source_map = &self.krate.source_map;
-        let prelude = self.krate.module(self.krate.prelude);
-        let name = self
-            .krate
+        let krate = &self.program.krate;
+        let source_map = &krate.source_map;
+        let prelude = krate.module(krate.prelude);
+        let name = krate
             .modules
             .iter()
             .filter(|module| !std::ptr::eq(*module, prelude))
-            .flat_map(|module| names(&module.ast))
+            .flat_map(|module| names(module.ast))
             .filter(|name| source_map.slice(name.span) == text)
             .nth(n)
             .unwrap_or_else(|| panic!("no occurrence {n} of `{text}`"));
-        match self.resolutions.res.get(&name.id) {
+        let resolutions = self.program.resolutions();
+        match resolutions.res.get(&name.id) {
             None => "unresolved".to_owned(),
-            Some(&res) => self.resolutions.describe(res, source_map),
+            Some(&res) => resolutions.describe(res, source_map),
         }
     }
 }
