@@ -26,6 +26,10 @@ use xur_span::Symbol;
 
 use interp::Interp;
 
+/// The stack of threads a program spawns. Deep recursion in Xur recurses
+/// in the interpreter too.
+pub const THREAD_STACK_SIZE: usize = 64 << 20;
+
 /// A loaded program, ready to run.
 pub struct Vm {
     shared: Arc<Shared>,

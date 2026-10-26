@@ -1,11 +1,13 @@
 //! What native functions can ask of the interpreter.
 
 use std::path::Path;
-use std::sync::PoisonError;
+use std::sync::{Arc, PoisonError};
+use std::thread::{self, JoinHandle};
 
 use xur_resolve::LangItems;
 use xur_runtime::convert::ConvertCx;
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value, lock};
+use xur_span::Span;
 
 use crate::interp::Interp;
 
@@ -57,6 +59,25 @@ impl Context for Interp<'_> {
 
     fn type_args(&self) -> &[String] {
         &self.native_type_args
+    }
+
+    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value> {
+        self.call_value(callee, args, Vec::new(), Span::default())
+    }
+
+    /// Runs `f` on a new thread, with its own interpreter over the shared
+    /// program.
+    fn spawn(&mut self, f: Value) -> RunResult<JoinHandle<RunResult<Value>>> {
+        let shared = Arc::clone(self.shared);
+        let module = self.module;
+        thread::Builder::new()
+            .stack_size(crate::THREAD_STACK_SIZE)
+            .spawn(move || {
+                let mut interp = Interp::new(&shared);
+                interp.module = module;
+                interp.call_value(&f, Vec::new(), Vec::new(), Span::default())
+            })
+            .map_err(|error| RuntimeError::new(format!("couldn't spawn a thread: {error}")))
     }
 
     fn print(&mut self, text: &str) -> RunResult<()> {

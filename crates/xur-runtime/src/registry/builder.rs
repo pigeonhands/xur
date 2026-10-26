@@ -87,6 +87,21 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         self.add(name, signature, call)
     }
 
+    /// Registers a function working on Xur values directly, with the
+    /// object first when called as a method. For methods taking or
+    /// returning arbitrary Xur values, like a channel's `send`.
+    pub fn raw_function(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        let decl = self.registry.add_fn(name, None, Box::new(f));
+        let ty = self.ty;
+        self.registry
+            .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
+        self
+    }
+
     /// Registers a method taking `&self`: `value.name(args)` in Xur.
     pub fn method<Marker>(&mut self, name: &str, f: impl IntoNativeMethod<T, Marker>) -> &mut Self {
         let (signature, call) = f.into_native();

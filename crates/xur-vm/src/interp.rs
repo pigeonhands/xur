@@ -15,7 +15,7 @@ const MAX_DEPTH: usize = 10_000;
 
 /// One thread's interpreter.
 pub(crate) struct Interp<'s> {
-    pub(crate) shared: &'s Shared,
+    pub(crate) shared: &'s Arc<Shared>,
     /// The module of the function running, for module-relative imports.
     pub(crate) module: Option<ModuleIdx>,
     /// The type arguments of the native function being called.
@@ -45,7 +45,7 @@ impl Frame<'_> {
 }
 
 impl<'s> Interp<'s> {
-    pub(crate) fn new(shared: &'s Shared) -> Self {
+    pub(crate) fn new(shared: &'s Arc<Shared>) -> Self {
         Self {
             shared,
             module: None,

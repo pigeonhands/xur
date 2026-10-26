@@ -33,6 +33,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::thread::JoinHandle;
 
 use facet::{Peek, Shape};
 use xur_resolve::{
@@ -60,6 +61,11 @@ pub trait Context: ConvertCx {
     fn type_args(&self) -> &[String];
     /// Writes `text` to the program's standard output.
     fn print(&mut self, text: &str) -> RunResult<()>;
+    /// Calls a function, closure or constructor value.
+    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value>;
+    /// Calls `f`, a function or closure taking no arguments, on a new
+    /// thread; joining the thread gives its result.
+    fn spawn(&mut self, f: Value) -> RunResult<JoinHandle<RunResult<Value>>>;
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;

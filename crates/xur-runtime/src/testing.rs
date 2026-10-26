@@ -79,6 +79,19 @@ impl Context for TestCx<'_> {
         self.stdout.extend_from_slice(text.as_bytes());
         Ok(())
     }
+
+    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value> {
+        match callee {
+            Value::NativeFn(id) => self.call(*id, &args),
+            _ => Err(RuntimeError::new(
+                "only native functions can be called in tests",
+            )),
+        }
+    }
+
+    fn spawn(&mut self, _f: Value) -> RunResult<std::thread::JoinHandle<RunResult<Value>>> {
+        Err(RuntimeError::new("cannot spawn threads in tests"))
+    }
 }
 
 /// The id of the function at `path`, e.g. `std::io::println` or
