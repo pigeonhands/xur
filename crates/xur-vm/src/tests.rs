@@ -805,3 +805,25 @@ fn std_re_reports_bad_input() {
         Ok("Err(\"no flag `NOPE`\")\n".into())
     );
 }
+
+#[test]
+fn tuple_fields_are_read_and_assigned_by_number() {
+    let src = r#"
+        struct P { pair: (i64, (i64, i64)) }
+        fn main() {
+            let t = ((1, 2), (3, (4, 5)));
+            let p = P { pair: (1, (2, 3)) };
+            p.pair.1.0 = 20;
+            t.0 = 9;
+            std::io::println("{} {} {} {}", t.0, t.1.1.0, p, p.pair.1);
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok("9 4 P { pair: (1, (20, 3)) } (20, 3)\n".into())
+    );
+    assert_eq!(
+        run("fn main() { (1, 2).2; }"),
+        Err("no field `2` on tuple".into())
+    );
+}

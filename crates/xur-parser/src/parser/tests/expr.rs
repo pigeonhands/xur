@@ -253,3 +253,12 @@ fn no_struct_literals_before_blocks() {
         "if ((P { x: 1 }).x == 1) { 2 }"
     );
 }
+
+#[test]
+fn tuple_fields() {
+    assert_eq!(expr("t.0"), "t.0");
+    assert_eq!(expr("t.0.1"), "t.0.1");
+    assert_eq!(expr("a.b.10.c"), "a.b.10.c");
+    assert_eq!(expr("t.1.len()"), "t.1.len()");
+    assert_eq!(expr_errors("t.01"), ["expected identifier, found `01`"]);
+}

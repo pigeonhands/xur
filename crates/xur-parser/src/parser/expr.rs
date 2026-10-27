@@ -12,7 +12,7 @@ use xur_ast::{
     Param, Path, PathSegment, Precedence, RangeLimits, StructExpr, Ty, TyKind, UnOp,
 };
 use xur_errors::Diag;
-use xur_span::Span;
+use xur_span::{Ident, Span, Symbol};
 
 use super::expected::Expected;
 use super::{PResult, Parser, PathStyle, Restrictions};
@@ -306,8 +306,12 @@ impl Parser<'_> {
         }
     }
 
-    /// `.field` or `.method::<T>(args)`, after the `.`.
+    /// `.field`, `.0` or `.method::<T>(args)`, after the `.`.
     fn parse_dot_suffix(&mut self, receiver: Expr) -> PResult<ExprKind> {
+        let receiver = match self.parse_tuple_field(receiver) {
+            Ok(kind) => return Ok(kind),
+            Err(receiver) => receiver,
+        };
         let ident = self.parse_ident()?;
         let args = self.parse_opt_generic_args(PathStyle::Expr)?;
         if self.eat(TokenKind::LParen) {
@@ -326,6 +330,34 @@ impl Parser<'_> {
             );
         }
         Ok(ExprKind::Field(Box::new(receiver), ident))
+    }
+
+    /// `.0`, the element of a tuple by number, or `.0.1`, which the lexer
+    /// sees as the float `0.1` and is split in two, as rustc does. Gives the
+    /// receiver back if the next token is not one.
+    fn parse_tuple_field(&mut self, receiver: Expr) -> Result<ExprKind, Expr> {
+        let span = self.token.span;
+        let field = |text: &str, start: usize| {
+            let end = start + text.len();
+            Ident::new(Symbol::intern(text), Span::new(start, end))
+        };
+        let kind = match self.token.kind {
+            TokenKind::IntLit(text) if is_tuple_index(text) => {
+                ExprKind::Field(Box::new(receiver), field(text, span.start))
+            }
+            TokenKind::FloatLit(text) => match text.split_once('.') {
+                Some((first, second)) if is_tuple_index(first) && is_tuple_index(second) => {
+                    let first = field(first, span.start);
+                    let inner_span = receiver.span.to(first.span);
+                    let inner = mk_expr(ExprKind::Field(Box::new(receiver), first), inner_span);
+                    ExprKind::Field(Box::new(inner), field(second, first.span.end + 1))
+                }
+                _ => return Err(receiver),
+            },
+            _ => return Err(receiver),
+        };
+        self.bump();
+        Ok(kind)
     }
 
     /// Literals, paths, and expressions introduced by a token or keyword.
@@ -568,4 +600,12 @@ impl Parser<'_> {
             span: lo.to(self.prev_token.span),
         })
     }
+}
+
+/// Whether `text` numbers a tuple's element: decimal digits, without a
+/// suffix or leading zeros.
+fn is_tuple_index(text: &str) -> bool {
+    !text.is_empty()
+        && text.bytes().all(|b| b.is_ascii_digit())
+        && (text == "0" || !text.starts_with('0'))
 }

@@ -122,7 +122,8 @@ impl Interp<'_> {
         }
     }
 
-    /// A copy of the struct or record `base` with `field` set to `value`.
+    /// A copy of the struct, record or tuple `base` with `field` set to
+    /// `value`.
     pub(crate) fn set_field(&self, base: &Value, field: Symbol, value: Value) -> RunResult<Value> {
         let missing = || {
             RuntimeError::new(format!(
@@ -144,6 +145,12 @@ impl Interp<'_> {
                     ..Record::clone(record)
                 };
                 return Ok(Value::Record(record.into()));
+            }
+            Value::Tuple(items) => {
+                let index: usize = field.as_str().parse().map_err(|_| missing())?;
+                let mut items = items.to_vec();
+                *items.get_mut(index).ok_or_else(missing)? = value;
+                return Ok(Value::tuple(items));
             }
             _ => return Err(missing()),
         };
