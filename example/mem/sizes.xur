@@ -30,7 +30,7 @@ struct Aligned {
     x: u8
 }
 
-fn main() {
+fn main() -> Result<()> {
     io::println("Point:   size={}, align={}", mem::size_of::<Point>(), mem::align_of::<Point>());
     io::println("Packed:  size={}, align={}", mem::size_of::<Packed>(), mem::align_of::<Packed>());
     io::println("Padded:  size={}, align={}", mem::size_of::<Padded>(), mem::align_of::<Padded>());
@@ -46,4 +46,6 @@ fn main() {
     io::println("size_of_val(Point {{ x: 1, y: 2 }}) = {}", mem::size_of_val(p));
 
     io::println("ok");
+
+    Ok(())
 }

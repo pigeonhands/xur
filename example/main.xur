@@ -2,6 +2,8 @@ use std::io;
 use std::fs;
 use std::cli;
 use std::path;
+use std::sync;
+use std::thread;
 
 fn run_example(p: str) -> Result<()> {
     let module = std::try_import(p)?;
@@ -9,8 +11,90 @@ fn run_example(p: str) -> Result<()> {
     main()
 }
 
+fn all_examples() -> [str] {
+    // Categories skipped: interactive input, network listeners,
+    // or external targets (reverse-engineering tools).
+    let skip = ["cli", "net", "re"];
+    let entries = fs::read_dir("example").unwrap();
+    let folders = entries.filter(|e| !e.ends_with(".xur"));
+    let examples = [];
+    for folder in folders {
+        if skip.contains(folder) {
+            continue;
+        }
+        let dir = path::join("example", folder);
+        let files = fs::read_dir(dir).unwrap();
+        for file in files.filter(|e| e.ends_with(".xur")) {
+            examples = examples + [path::join(folder, file)];
+        }
+    }
+    examples
+}
+
+fn test_all() {
+    let examples = all_examples();
+    let (tx, rx) = sync::channel();
+
+    let skipped = 0;
+    let runnable = [];
+    for example in examples {
+        match std::try_import(example) {
+            Err(e) => {
+                io::println("  skip  {}  {}", example, e);
+                skipped = skipped + 1;
+            }
+            Ok(module) => {
+                match module.get_method("main") {
+                    Err(_) => {
+                        io::println("  skip  {}  no main", example);
+                        skipped = skipped + 1;
+                    }
+                    Ok(main) => {
+                        runnable = runnable + [(example, main)];
+                    }
+                }
+            }
+        }
+    }
+
+    for (example, main) in runnable {
+        thread::spawn(|| {
+            let result = main();
+            tx.send((example, result)).unwrap();
+        });
+    }
+
+    let passed = 0;
+    let failed = 0;
+    for _ in runnable {
+        let (name, result) = rx.recv().unwrap();
+        match result {
+            Ok(_) => {
+                io::println("  ok    {}", name);
+                passed = passed + 1;
+            }
+            Err(e) => {
+                io::println("  FAIL  {}  {}", name, e);
+                failed = failed + 1;
+            }
+        }
+    }
+
+    io::println("");
+    io::println("{} passed, {} failed, {} skipped, {} total",
+        passed, failed, skipped, passed + failed + skipped);
+    if failed > 0 {
+        std::panic("{} example(s) failed", failed);
+    }
+}
+
 fn main() -> Result<()> {
     let args = std::argv();
+
+    if args.len() == 2 && args[1] == "--test-all" {
+        test_all();
+        return Ok(());
+    }
 
     if args.len() == 2 {
         let [_, example] = args;
@@ -18,7 +102,7 @@ fn main() -> Result<()> {
     }
 
     if args.len() > 2 {
-        io::eprintln("usage: xur run example [<example>]");
+        io::eprintln("usage: xur run example [<example>] [--test-all]");
         return Err("bad usage");
     }
 
