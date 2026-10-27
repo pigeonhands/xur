@@ -1,0 +1,31 @@
+[package]
+name = "xur-stub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared library that embeds the Xur VM — load via LD_PRELOAD or inject into a process"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xur-resolve.workspace = true
+xur-runtime.workspace = true
+xur-std.workspace = true
+xur-vm.workspace = true
+xur-span.workspace = true
+ctor = "0.4"
+facet.workspace = true
+hao-il2cpp-runtime = { workspace = true, optional = true }
+hao-il2cpp-unity = { workspace = true, optional = true }
+hao-godot = { workspace = true, optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+[features]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot"]
+il2cpp-runtime = ["dep:hao-il2cpp-runtime"]
+il2cpp-unity = ["dep:hao-il2cpp-unity"]
+godot = ["dep:hao-godot"]
+egui = ["hao-il2cpp-unity/egui", "dep:tracing", "dep:tracing-subscriber"]
