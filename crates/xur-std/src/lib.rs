@@ -13,6 +13,7 @@ mod list;
 mod math;
 mod net;
 mod num;
+mod re;
 mod reflect;
 mod str;
 mod sync;
@@ -40,6 +41,7 @@ pub fn register(registry: &Registry) {
     net::register(registry);
     any::register(registry);
     reflect::register(registry);
+    re::register(registry);
     math::register(registry);
     list::register(registry);
     bytes::register(registry);

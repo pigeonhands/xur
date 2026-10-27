@@ -382,7 +382,7 @@ fn unsupported(shape: &Shape) -> RuntimeError {
     RuntimeError::new(format!("`{shape}` cannot be converted to a Xur value"))
 }
 
-pub(crate) fn reflect_error(error: impl std::fmt::Display) -> RuntimeError {
+pub fn reflect_error(error: impl std::fmt::Display) -> RuntimeError {
     RuntimeError::new(format!("conversion failed: {error}"))
 }
 

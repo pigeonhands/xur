@@ -248,7 +248,7 @@ Rust functions and types reach Xur through a `Registry`, using
   lazy modules are only built when a program first uses them.
 
 `std` (`xur-std`) is written entirely this way, as an ordinary client of
-the registry: `io`, `fs`, `net`, `thread`, `sync`, `math`, `any`, `reflect`, and
+the registry: `io`, `fs`, `net`, `thread`, `sync`, `math`, `any`, `reflect`, `mem`, `re`, and
 methods for lists, strings and numbers.
 
 ## Diagnostics (`xur-errors`)

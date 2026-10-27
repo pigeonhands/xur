@@ -1,0 +1,56 @@
+// Reverse engineering with `std::re`: building a Windows DLL from scratch,
+// then reading it back the way a disassembler or loader would, and looking
+// inside a Linux executable.
+//
+// Run it:
+//
+//     xur run example/re.xur
+//
+// The DLL is written to `demo.dll` in the current directory and removed at
+// the end. The ELF part reads the running `xur` binary itself.
+
+use std::io;
+use std::re;
+use std::re::pe;
+use std::re::elf;
+
+fn main() {
+    // A 64-bit DLL with one function, `answer`, that returns 42:
+    //     mov eax, 42 ; ret
+    let def = pe::ImageDef::new_dll("Amd64");
+    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"]).unwrap();
+    let code = b"\xb8\x2a\x00\x00\x00\xc3";
+    let answer = def.add_section(".text", flags, code);
+    def.add_exports("demo.dll", [("answer", answer)]);
+    std::fs::write_bytes("demo.dll", def.write().unwrap()).unwrap();
+
+    // Reading it back as a PE file: headers, sections and their flags.
+    let file = pe::File::open("demo.dll").unwrap();
+    io::println("{}", file);
+    let coff = file.coff_header();
+    io::println("machine: {}, characteristics: {}", coff.machine, pe::file_characteristics_names(coff.characteristics));
+    let windows = file.optional_header().unwrap().windows_specific_fields;
+    io::println("fields: {}", std::reflect::type_name(std::reflect::get(windows, "0")));
+    for name in file.section_names() {
+        let section = file.section(name).unwrap();
+        io::println("  {} at {}: {}", name, section.row.virtual_address.to_hex(), pe::section_flags_names(section.row.characteristics));
+    }
+
+    // Reading it as a loaded image, by virtual address: find the export and
+    // disassemble (well, dump) its code.
+    let image = re::Image::open("demo.dll").unwrap();
+    io::println("{} based at {}", image, image.image_base().unwrap().to_hex());
+    for export in image.exports().unwrap() {
+        let address = std::reflect::get(export.location, "0");
+        let bytes = image.bytes(address, code.len()).unwrap();
+        io::println("  {} at {}: {}", export.name.unwrap(), address.to_hex(), bytes.to_hex());
+    }
+    std::fs::remove("demo.dll").unwrap();
+
+    // The running xur executable, as an ELF file.
+    let exe = elf::File::open("/proc/self/exe").unwrap();
+    let header = exe.header();
+    io::println("xur: {} {}, {}-bit: {}", header.file_type, header.machine, if exe.is_64() { 64 } else { 32 }, std::reflect::variant(header.machine).unwrap());
+    let text = exe.section(".text").unwrap();
+    io::println(".text holds code: {}, flags {}", text.data.len() > 0, elf::section_flags_names(text.header.flags));
+}

@@ -281,6 +281,11 @@ impl Registry {
         self.write().converters.push((shape, convert));
     }
 
+    /// Whether a conversion is registered for `shape`.
+    pub fn has_converter(&self, shape: &'static Shape) -> bool {
+        self.converter_of(shape).is_some()
+    }
+
     /// The conversion registered for `shape`, if any.
     pub(crate) fn converter_of(&self, shape: &'static Shape) -> Option<Converter> {
         let inner = self.read();

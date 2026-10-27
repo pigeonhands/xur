@@ -19,6 +19,11 @@ impl<'r> ModuleBuilder<'r> {
         Self { registry, module }
     }
 
+    /// The registry being filled in.
+    pub fn registry(&self) -> &'r Registry {
+        self.registry
+    }
+
     /// The submodule `name` of this module, created if needed. A lazy
     /// module can fill in submodules as well as itself.
     pub fn submodule(&self, name: &str) -> ModuleBuilder<'r> {

@@ -26,6 +26,7 @@ There are complete programs in [`example/`](example):
 | [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
 | [`reflect.xur`](example/reflect.xur)       | listing fields and calling methods by name        |
 | [`layout.xur`](example/layout.xur)         | structs as bytes: padding, packing, byte order    |
+| [`re.xur`](example/re.xur)                 | building a DLL, then reading it and an ELF back   |
 
 ## A taste of Xur
 
@@ -223,6 +224,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
+| `std::re`     | PE and ELF files with [pewter](https://docs.rs/pewter): `Image`, `pe::File`, `pe::ImageDef`, `elf::File`, and every structure inside as typed records |
 | `std::mem`    | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>(data)`, `to_bytes(v)` |
 | `std::reflect`| `fields`, `get`, `set`, `methods`, `call` of any value; `layout::<T>()`, `Layout` |
 

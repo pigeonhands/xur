@@ -781,3 +781,27 @@ fn structs_know_their_bytes() {
         Err("field `name`: `str` has no layout".into())
     );
 }
+
+// The example also reads the running executable as an ELF file.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn the_re_example_runs() {
+    let output = run_files(&[("example/re.xur", include_str!("../../../example/re.xur"))]);
+    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nfields: OptionalHeaderWindowsSpecificFields64\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn ElfMachine::X86_64, 64-bit: X86_64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+}
+
+#[test]
+fn std_re_reports_bad_input() {
+    assert_eq!(
+        run("fn main() { std::io::println(\"{}\", std::re::Image::parse(b\"nope\").is_err()); }"),
+        Ok("true\n".into())
+    );
+    assert_eq!(
+        run("fn main() { std::re::pe::ImageDef::new_dll(\"Vax\"); }"),
+        Err("unknown machine; try \"Amd64\" or \"I386\"".into())
+    );
+    assert_eq!(
+        run("fn main() { std::io::println(\"{}\", std::re::pe::section_flags([\"NOPE\"])); }"),
+        Ok("Err(\"no flag `NOPE`\")\n".into())
+    );
+}

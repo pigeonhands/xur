@@ -29,5 +29,7 @@ anyhow = "1.0"
 ariadne = "0.5"
 clap = { version = "4.5", features = ["derive"] }
 facet = { version = "=0.50.0-rc.7", features = ["reflect"] }
+pewter = { version = "0.0.9", features = ["reflect"] }
+bitflags = "2.13"
 cranelift-jit = "0.137"
 cranelift-module = "0.137"
