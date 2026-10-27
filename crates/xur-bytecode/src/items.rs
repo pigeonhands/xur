@@ -83,6 +83,14 @@ impl ItemIndex {
         }
     }
 
+    /// The attributes on the struct or variant `def`.
+    pub fn attrs(&self, def: DefId) -> Option<&'static [Attribute]> {
+        match self.get(def)? {
+            ItemRef::Ctor { attrs, .. } => Some(attrs),
+            _ => None,
+        }
+    }
+
     /// Every indexed definition.
     pub fn iter(&self) -> impl Iterator<Item = (DefId, ItemRef)> + '_ {
         self.items.iter().map(|(&def, &item)| (def, item))

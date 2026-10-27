@@ -172,6 +172,18 @@ impl Shared {
         xur_bytecode::rt_type(program.resolutions(), ty)
     }
 
+    /// The attributes on the struct or variant `def`.
+    fn ctor_attrs(&self, def: DefId) -> Option<&'static [xur_ast::Attribute]> {
+        let items = self.items.read().unwrap_or_else(PoisonError::into_inner);
+        items.attrs(def)
+    }
+
+    /// The DefId of the `Option` enum (parent of `None` and `Some`).
+    fn option_def(&self) -> DefId {
+        let program = self.program();
+        program.resolutions().defs.get(self.lang.none).parent.unwrap()
+    }
+
     /// The bytecode of the function or constant `def`, lowered on first use.
     fn code(&self, def: DefId) -> RunResult<Arc<Function>> {
         if let Some(function) = self

@@ -1,0 +1,30 @@
+// Struct coercion: JSON records are coerced into typed structs.
+// Missing fields with Option types are filled with None.
+//
+//     xur run example/json_coerce.xur
+
+struct User {
+    name: str
+    email: Option<str>
+    age: Option<u32>
+}
+
+fn main() -> Result<(), str> {
+    let io = std::io;
+
+    // All fields present — Option fields are wrapped in Some.
+    let full: User = std::json::parse("{\"name\": \"Alice\", \"email\": \"alice@example.com\", \"age\": 30}")?;
+    io::println("full:    name={}, email={}, age={}", full.name, full.email, full.age);
+
+    // Missing optional fields are filled with None.
+    let partial: User = std::json::parse("{\"name\": \"Bob\"}")?;
+    io::println("partial: name={}, email={}, age={}", partial.name, partial.email, partial.age);
+
+    // Accessing an optional field with match.
+    match partial.email {
+        Some(e) => io::println("email: {}", e),
+        None    => io::println("no email on file"),
+    }
+
+    Ok(())
+}
