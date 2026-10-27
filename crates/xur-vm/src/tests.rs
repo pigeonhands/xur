@@ -345,3 +345,39 @@ fn unix_sockets() {
     let _ = std::fs::remove_file(&path);
     assert_eq!(output, Ok("over unix\n".into()));
 }
+
+#[test]
+fn the_channels_example_counts_primes() {
+    let output = run_files(&[(
+        "example/channels.xur",
+        include_str!("../../../example/channels.xur"),
+    )])
+    .unwrap();
+    let mut lines: Vec<_> = output.lines().collect();
+    assert_eq!(lines.pop(), Some("1229 primes below 10000"));
+    lines.sort();
+    assert_eq!(
+        lines,
+        [
+            "0..2500: 367 primes",
+            "2500..5000: 302 primes",
+            "5000..7500: 281 primes",
+            "7500..10000: 279 primes"
+        ]
+    );
+}
+
+#[test]
+fn the_echo_server_example_compiles() {
+    // It serves forever, so only check that it loads without errors.
+    let registry = Arc::new(xur_std::registry());
+    let src = include_str!("../../../example/echo_server.xur");
+    let loader = MemoryFileLoader::new([("example/echo_server.xur", src)]);
+    let (_, diags) = Program::load(
+        Path::new("example/echo_server.xur"),
+        Box::new(loader),
+        Box::new(registry),
+    )
+    .unwrap();
+    assert!(diags.is_empty(), "{diags:#?}");
+}

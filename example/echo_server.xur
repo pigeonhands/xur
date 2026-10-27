@@ -1,0 +1,49 @@
+// A TCP echo server: every line a client sends is sent straight back.
+//
+// Run it:
+//
+//     xur run example/echo_server.xur
+//
+// Then, in another terminal, connect with netcat and type some lines:
+//
+//     nc 127.0.0.1 7878
+//
+// Each line comes back as you send it. Several clients can connect at
+// once, as each is served on its own thread. Press Ctrl-C in netcat to
+// disconnect, and in the server's terminal to stop it.
+
+const ADDRESS = "127.0.0.1:7878";
+
+// Echoes lines back to one client until it disconnects.
+fn serve(client: std::net::TcpStream, peer: str) {
+    std::io::println("{} connected", peer);
+    loop {
+        match client.read_line() {
+            // An empty read means the client closed the connection.
+            Ok(line) => {
+                if line == "" {
+                    break;
+                }
+                client.write(line).unwrap();
+            }
+            Err(error) => {
+                std::io::println("{}: {}", peer, error);
+                break;
+            }
+        }
+    }
+    std::io::println("{} disconnected", peer);
+}
+
+fn main() {
+    let listener = std::net::TcpListener::bind(ADDRESS).expect("couldn't listen");
+    std::io::println("listening on {}", ADDRESS);
+    loop {
+        match listener.accept() {
+            Ok((client, peer)) => {
+                std::thread::spawn(|| serve(client, peer));
+            }
+            Err(error) => std::io::println("couldn't accept a connection: {}", error),
+        }
+    }
+}

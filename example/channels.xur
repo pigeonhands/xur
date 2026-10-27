@@ -1,0 +1,51 @@
+// Counting primes on several threads, which send their results back
+// over a channel.
+//
+// Run it:
+//
+//     xur run example/channels.xur
+//
+// The per-range lines may come in any order, as the threads finish in
+// whatever order they finish.
+
+fn is_prime(n: i64) -> bool {
+    if n < 2 {
+        return false;
+    }
+    let divisor = 2;
+    while divisor * divisor <= n {
+        if n % divisor == 0 {
+            return false;
+        }
+        divisor = divisor + 1;
+    }
+    true
+}
+
+fn main() {
+    // `sender` can be used from any number of threads; `receiver` gets
+    // everything they send, in the order it was sent.
+    let (sender, receiver) = std::sync::channel();
+
+    let ranges = [(0, 2500), (2500, 5000), (5000, 7500), (7500, 10000)];
+    for (start, end) in ranges {
+        // The closure captures `start`, `end` and `sender`.
+        std::thread::spawn(|| {
+            let count = 0;
+            for n in start..end {
+                if is_prime(n) {
+                    count = count + 1;
+                }
+            }
+            sender.send((start, end, count)).unwrap();
+        });
+    }
+
+    let total = 0;
+    for _ in ranges {
+        let (start, end, count) = receiver.recv().unwrap();
+        std::io::println("{}..{}: {} primes", start, end, count);
+        total = total + count;
+    }
+    std::io::println("{} primes below 10000", total);
+}
