@@ -133,6 +133,8 @@ pub enum Res {
     /// A local variable, identified by the pattern that binds it.
     Local(NodeId),
     PrimTy(PrimTy),
+    /// `T::name` where `T` is a type parameter: resolved at runtime.
+    TyParamAssoc(DefId, Symbol),
     /// Resolution failed; the error has been reported.
     Err,
 }
@@ -143,6 +145,7 @@ impl Res {
             Self::Def(kind, _) => kind.descr(),
             Self::Local(_) => "local variable",
             Self::PrimTy(_) => "builtin type",
+            Self::TyParamAssoc(..) => "type parameter associated function",
             Self::Err => "unresolved item",
         }
     }

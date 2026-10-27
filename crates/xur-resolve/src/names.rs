@@ -55,6 +55,9 @@ impl Resolutions {
                 format!("local {ident} at {}", source_map.describe_pos(ident.span))
             }
             Res::PrimTy(ty) => format!("builtin type {}", ty.name()),
+            Res::TyParamAssoc(param, name) => {
+                format!("{}::{name}", self.def_path(param))
+            }
             Res::Err => "error".to_owned(),
         }
     }

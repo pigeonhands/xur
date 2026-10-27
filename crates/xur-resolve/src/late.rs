@@ -164,6 +164,11 @@ impl LateResolver<'_, '_> {
         let start = self
             .resolve_path_start(first.ident.name)
             .ok_or_else(|| Some(undeclared_module(first.ident)))?;
+        if let Res::Def(DefKind::TyParam, param) = start
+            && rest.is_empty()
+        {
+            return Ok(Res::TyParamAssoc(param, last.ident.name));
+        }
         let mut privacy = Vec::new();
         let scope = self
             .r
