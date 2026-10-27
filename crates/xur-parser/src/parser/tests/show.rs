@@ -64,6 +64,7 @@ impl Show for Ty {
             TyKind::Tuple(tys) => format!("({})", list(tys)),
             TyKind::Paren(ty) => format!("({})", ty.show()),
             TyKind::List(ty) => format!("[{}]", ty.show()),
+            TyKind::Record => "@".to_owned(),
             TyKind::Infer => "_".to_owned(),
             TyKind::ImplicitSelf => "Self".to_owned(),
             TyKind::Err => "<err>".to_owned(),

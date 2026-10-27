@@ -88,6 +88,7 @@ pub enum TokenKind<'src> {
     AmpAmp,
     Pipe,
     PipePipe,
+    At,
 
     Eof,
 }
@@ -137,6 +138,7 @@ impl fmt::Display for TokenKind<'_> {
             Self::AmpAmp => "&&",
             Self::Pipe => "|",
             Self::PipePipe => "||",
+            Self::At => "@",
             Self::Eof => "<eof>",
         };
         f.write_str(text)

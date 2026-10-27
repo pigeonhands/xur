@@ -18,6 +18,9 @@ pub enum TyKind {
     Paren(Box<Ty>),
     /// `[T]`, a list of `T`.
     List(Box<Ty>),
+    /// `@`, record mode: values are coerced to records, and `T::new()`
+    /// creates an empty record.
+    Record,
     /// `_`, or no type written at all, as for the closure parameter in
     /// `|x| x + 1`.
     Infer,

@@ -19,6 +19,8 @@ impl Parser<'_> {
             let element = self.parse_ty()?;
             self.expect(TokenKind::RBracket)?;
             TyKind::List(Box::new(element))
+        } else if self.eat_noexpect(TokenKind::At) {
+            TyKind::Record
         } else if self.eat_noexpect(TokenKind::Underscore) {
             TyKind::Infer
         } else if matches!(self.token.kind, TokenKind::Ident(_)) {

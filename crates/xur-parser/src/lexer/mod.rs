@@ -141,6 +141,7 @@ impl<'src> Lexer<'src> {
             '&' if c.eat('&') => TokenKind::AmpAmp,
             '|' if c.eat('|') => TokenKind::PipePipe,
             '|' => TokenKind::Pipe,
+            '@' => TokenKind::At,
 
             _ => return None,
         };

@@ -108,6 +108,8 @@ pub struct Generics {
 pub struct GenericParam {
     pub id: NodeId,
     pub ident: Ident,
+    /// `T!`: the caller must provide a concrete type, not `_`.
+    pub required: bool,
 }
 
 /// The fields of a struct or enum variant.
