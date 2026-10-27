@@ -49,6 +49,8 @@ struct Shared {
     code: RwLock<HashMap<DefId, Arc<Function>>>,
     /// The values of constants evaluated so far.
     consts: Mutex<HashMap<DefId, Value>>,
+    /// Decorated function values, cached after first application.
+    decorated: Mutex<HashMap<DefId, Value>>,
     stdout: Mutex<Box<dyn Write + Send>>,
     /// Diagnostics for modules imported while running.
     diags: Mutex<Vec<Diag>>,
@@ -70,6 +72,7 @@ impl Vm {
             lang,
             code: RwLock::new(HashMap::new()),
             consts: Mutex::new(HashMap::new()),
+            decorated: Mutex::new(HashMap::new()),
             stdout: Mutex::new(stdout),
             diags: Mutex::new(Vec::new()),
             tracing: AtomicBool::new(true),

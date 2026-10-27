@@ -10,11 +10,14 @@ mod pat;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use xur_ast::{Block as AstBlock, Expr, FnRetTy, NodeId, Param, Ty, TyKind};
-use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, Program, Res, Resolutions};
+use xur_ast::{
+    Attribute, Block as AstBlock, Expr, FnRetTy, LitKind, MetaItemInner, MetaItemKind, NodeId,
+    Param, Ty, TyKind,
+};
+use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, Namespace, Program, Res, Resolutions};
 use xur_span::{Span, Symbol};
 
-use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, RtType, Terminator, TypeArg};
+use crate::ir::{Block, BlockId, Constant, Decorator, DefRef, Function, Inst, InstKind, Reg, RtType, Terminator, TypeArg};
 use crate::items::{ItemIndex, ItemRef};
 
 /// Lowers the function or constant `def`, or returns `None` if `def` is
@@ -24,7 +27,7 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
     let resolutions = program.resolutions();
     let name = resolutions.def_path(def);
     match items.get(def)? {
-        ItemRef::Fn { item, module } => {
+        ItemRef::Fn { item, attrs, module } => {
             let mut lowerer = Lowerer::new(program, items, module);
             for param in &item.generics.params {
                 lowerer.type_params.push(resolutions.node_defs[&param.id]);
@@ -38,7 +41,10 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
             let value = lowerer.block(&item.body);
             lowerer.ret(value, item.body.span);
             let params = item.decl.inputs.len() as u32;
-            Some(lowerer.finish(name, 0, params, item.body.span))
+            let decorators = extract_decorators(resolutions, module, attrs);
+            let mut func = lowerer.finish(name, 0, params, item.body.span);
+            func.decorators = decorators;
+            Some(func)
         }
         ItemRef::Const { item, module } => {
             let mut lowerer = Lowerer::new(program, items, module);
@@ -144,6 +150,7 @@ impl<'a> Lowerer<'a> {
             param_names: self.param_names,
             param_types: self.param_types,
             ret_type: self.ret_ty,
+            decorators: Vec::new(),
             blocks,
             closures: self.closures,
             span,
@@ -278,5 +285,92 @@ impl<'a> Lowerer<'a> {
             Some(expr) => self.expr(expr),
             None => self.unit(span),
         }
+    }
+}
+
+fn extract_decorators(
+    resolutions: &Resolutions,
+    module: ModuleIdx,
+    attrs: &[Attribute],
+) -> Vec<Decorator> {
+    let module_def = resolutions.module_defs[module.0];
+    let mut decorators = Vec::new();
+    for attr in attrs {
+        let segments = &attr.meta.path.segments;
+        if segments.len() != 1 || segments[0].ident.name.as_str() != "decorate" {
+            continue;
+        }
+        let MetaItemKind::List(items) = &attr.meta.kind else {
+            continue;
+        };
+        for item in items {
+            let MetaItemInner::MetaItem(meta) = item else {
+                continue;
+            };
+            let def = resolve_path_in_module(resolutions, module_def, &meta.path.segments);
+            let Some(def) = def else { continue };
+            let args = match &meta.kind {
+                MetaItemKind::Word => Vec::new(),
+                MetaItemKind::List(inner) => inner
+                    .iter()
+                    .filter_map(|a| match a {
+                        MetaItemInner::Lit(lit) => lit_to_constant(lit),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            decorators.push(Decorator { def, args });
+        }
+    }
+    decorators
+}
+
+fn resolve_path_in_module(
+    resolutions: &Resolutions,
+    module_def: DefId,
+    segments: &[xur_ast::PathSegment],
+) -> Option<DefRef> {
+    if segments.len() == 1 {
+        let name = segments[0].ident.name;
+        let res = resolutions.lookup(module_def, Namespace::Value, name)?;
+        return res_to_def_ref(res);
+    }
+    // Multi-segment: resolve the first as a module, then walk.
+    let mut scope = module_def;
+    for (i, seg) in segments.iter().enumerate() {
+        let name = seg.ident.name;
+        let is_last = i + 1 == segments.len();
+        if is_last {
+            let res = resolutions.lookup(scope, Namespace::Value, name)?;
+            return res_to_def_ref(res);
+        }
+        let res = resolutions.lookup(scope, Namespace::Value, name)
+            .or_else(|| resolutions.lookup(scope, Namespace::Type, name))?;
+        match res {
+            Res::Def(DefKind::Mod, def) => scope = def,
+            Res::Def(DefKind::Enum, def) => scope = def,
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn res_to_def_ref(res: Res) -> Option<DefRef> {
+    match res {
+        Res::Def(DefKind::Fn, def) => Some(DefRef::Fn(def)),
+        Res::Def(DefKind::NativeFn(id), _) => Some(DefRef::Native(id)),
+        Res::Def(DefKind::Const, def) => Some(DefRef::Const(def)),
+        _ => None,
+    }
+}
+
+fn lit_to_constant(lit: &xur_ast::Lit) -> Option<Constant> {
+    match &lit.kind {
+        LitKind::Bool(b) => Some(Constant::Bool(*b)),
+        LitKind::Int(i) => Some(Constant::Int(*i as i64)),
+        LitKind::Float(digits) => digits.as_str().parse().ok().map(Constant::Float),
+        LitKind::Str(s) => Some(Constant::Str(s.as_str().into())),
+        _ => None,
     }
 }

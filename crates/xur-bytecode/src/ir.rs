@@ -61,6 +61,7 @@ pub struct Function {
     pub param_types: Vec<Option<RtType>>,
     /// The declared return type, for reflection.
     pub ret_type: Option<RtType>,
+    pub decorators: Vec<Decorator>,
     pub blocks: Vec<Block>,
     /// The bodies of closures created by this function, by index.
     pub closures: Vec<Arc<Function>>,
@@ -105,6 +106,14 @@ pub enum DefRef {
 }
 
 pub use xur_resolve::RtType;
+
+/// A decorator applied to a function: `#[decorate(wrapper)]` or
+/// `#[decorate(wrapper(1, "tag"))]`.
+#[derive(Debug, Clone)]
+pub struct Decorator {
+    pub def: DefRef,
+    pub args: Vec<Constant>,
+}
 
 /// The fields a record is built with.
 #[derive(Debug, Clone, PartialEq, Eq)]

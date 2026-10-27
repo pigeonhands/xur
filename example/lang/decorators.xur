@@ -1,0 +1,78 @@
+// Decorators: #[decorate(wrapper)] wraps a function like Python's @decorator.
+//
+//     xur run example/lang/decorators.xur
+
+use std::io;
+
+// A simple decorator that logs calls.
+fn logged(f: fn(i64, i64) -> i64) -> fn(i64, i64) -> i64 {
+    |a, b| {
+        io::println("  calling with ({}, {})", a, b);
+        let result = f(a, b);
+        io::println("  => {}", result);
+        result
+    }
+}
+
+#[decorate(logged)]
+fn add(x: i64, y: i64) -> i64 {
+    x + y
+}
+
+#[decorate(logged)]
+fn mul(x: i64, y: i64) -> i64 {
+    x * y
+}
+
+// A decorator factory that takes parameters.
+fn repeat(n: i64) -> fn(fn() -> str) -> fn() -> str {
+    |f| {
+        || {
+            let result = "";
+            let i = 0;
+            while i < n {
+                if i > 0 { result = result + " "; }
+                result = result + f();
+                i = i + 1;
+            }
+            result
+        }
+    }
+}
+
+#[decorate(repeat(3))]
+fn greet() -> str {
+    "hello"
+}
+
+// Multiple decorators: applied bottom-up like Python.
+fn uppercase(f: fn() -> str) -> fn() -> str {
+    || f().to_upper()
+}
+
+#[decorate(repeat(2))]
+#[decorate(uppercase)]
+fn shout() -> str {
+    "wow"
+}
+
+fn main() -> Result<()> {
+    io::println("add(2, 3):");
+    let result = add(2, 3);
+    io::println("result = {}", result);
+
+    io::println("");
+    io::println("mul(4, 5):");
+    let result = mul(4, 5);
+    io::println("result = {}", result);
+
+    io::println("");
+    io::println("greet() with repeat(3):");
+    io::println("{}", greet());
+
+    io::println("");
+    io::println("shout() with uppercase then repeat(2):");
+    io::println("{}", shout());
+
+    Ok(())
+}

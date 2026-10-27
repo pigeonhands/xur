@@ -11,6 +11,7 @@ use xur_resolve::{DefId, ModuleIdx, Program, Resolutions};
 pub enum ItemRef {
     Fn {
         item: &'static Fn,
+        attrs: &'static [Attribute],
         module: ModuleIdx,
     },
     Const {
@@ -121,7 +122,7 @@ impl Visitor<'static> for Indexer<'_> {
     fn visit_item(&mut self, item: &'static Item) {
         let module = self.module;
         match &item.kind {
-            ItemKind::Fn(func) => self.add(item.id, ItemRef::Fn { item: func, module }),
+            ItemKind::Fn(func) => self.add(item.id, ItemRef::Fn { item: func, attrs: &item.attrs, module }),
             ItemKind::Const(konst) => self.add(
                 item.id,
                 ItemRef::Const {

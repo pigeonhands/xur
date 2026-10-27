@@ -134,6 +134,35 @@ impl<'s> Interp<'s> {
         Ok(value)
     }
 
+    /// Returns the function value for `def`, applying decorators if present.
+    fn maybe_decorated(&mut self, def: DefId) -> RunResult<Value> {
+        if let Some(value) = lock(&self.shared.decorated).get(&def) {
+            return Ok(value.clone());
+        }
+        let function = self.shared.code(def)?;
+        if function.decorators.is_empty() {
+            return Ok(Value::Fn(def));
+        }
+        let mut value = Value::Fn(def);
+        for decorator in &function.decorators {
+            let decorator_value = match decorator.def {
+                DefRef::Fn(d) => self.maybe_decorated(d)?,
+                DefRef::Const(d) => self.constant(d)?,
+                DefRef::Native(id) => Value::NativeFn(id),
+                _ => return Err(RuntimeError::new("decorator must be a function")),
+            };
+            let args: Vec<Value> = decorator.args.iter().map(constant_to_value).collect();
+            if args.is_empty() {
+                value = self.call_value(&decorator_value, &[value], Vec::new(), function.span)?;
+            } else {
+                let factory = self.call_value(&decorator_value, &args, Vec::new(), function.span)?;
+                value = self.call_value(&factory, &[value], Vec::new(), function.span)?;
+            }
+        }
+        lock(&self.shared.decorated).insert(def, value.clone());
+        Ok(value)
+    }
+
     fn run(
         &mut self,
         function: &Function,
@@ -395,7 +424,7 @@ impl<'s> Interp<'s> {
             }
             InstKind::Def { dst, def } => {
                 let value = match *def {
-                    DefRef::Fn(def) => Value::Fn(def),
+                    DefRef::Fn(def) => self.maybe_decorated(def)?,
                     DefRef::Ctor(def) => Value::Ctor(def),
                     DefRef::Const(def) => self.constant(def)?,
                     DefRef::Module(def) => Value::Module(def),
@@ -722,4 +751,15 @@ fn iterate(value: &Value) -> RunResult<Arc<ValueIter>> {
         }
     };
     Ok(Arc::new(iter))
+}
+
+fn constant_to_value(c: &Constant) -> Value {
+    match c {
+        Constant::Unit => Value::Unit,
+        Constant::Bool(b) => Value::Bool(*b),
+        Constant::Int(i) => Value::Int(*i),
+        Constant::Float(f) => Value::Float(*f),
+        Constant::Str(s) => Value::Str(Arc::clone(s)),
+        Constant::Bytes(b) => Value::bytes(b.to_vec()),
+    }
 }

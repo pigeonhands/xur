@@ -120,7 +120,7 @@ fn bytecode(path: &Path) -> Result<()> {
     let mut defs: Vec<_> = items
         .iter()
         .filter_map(|(def, item)| match item {
-            ItemRef::Fn { item, module } if module == program.krate.root => {
+            ItemRef::Fn { item, module, .. } if module == program.krate.root => {
                 Some((item.body.span, def))
             }
             ItemRef::Const { item, module } if module == program.krate.root => {

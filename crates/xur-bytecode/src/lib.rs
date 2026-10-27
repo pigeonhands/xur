@@ -12,8 +12,8 @@ mod types;
 
 pub use display::display_function;
 pub use ir::{
-    Block, BlockId, Constant, DefRef, Function, Inst, InstKind, RecordFields, Reg, RtType,
-    Terminator, TypeArg,
+    Block, BlockId, Constant, Decorator, DefRef, Function, Inst, InstKind, RecordFields, Reg,
+    RtType, Terminator, TypeArg,
 };
 pub use items::{ItemIndex, ItemRef};
 pub use lower::lower;
