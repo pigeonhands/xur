@@ -9,7 +9,7 @@ struct User {
     age: Option<u32>
 }
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let io = std::io;
 
     // All fields present — Option fields are wrapped in Some.

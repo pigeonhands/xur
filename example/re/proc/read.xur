@@ -5,7 +5,7 @@
 use std::io;
 use std::re::proc;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let handle = proc::open_current()?;
     let base = handle.modules()?[0].base;
     io::println("bytes at {}: {}", base.to_hex(), handle.read(base, 4)?.to_hex());

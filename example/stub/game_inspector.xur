@@ -20,7 +20,7 @@ use std::fs;
 use std::re::proc;
 use std::re::dotnet::il2cpp;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let pid = proc::current_pid();
     io::println("[game_inspector] pid {}", pid);
 

@@ -6,7 +6,7 @@ use std::io;
 use std::re::pe;
 use std::re::pe::ImageFileMachine;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let bytes = pe::ImageDef::new_dll(ImageFileMachine::Amd64).write()?;
     let file = pe::PEFile::parse(bytes)?;
     io::println("machine {}", file.coff_header.machine);

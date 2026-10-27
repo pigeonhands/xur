@@ -7,7 +7,7 @@
 use std::io;
 use std::re::dotnet;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let module = dotnet::new("Example");
     io::println("created: {}", module.name());
     io::println("runtime: {}", module.runtime_version());

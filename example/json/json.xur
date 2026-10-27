@@ -16,7 +16,7 @@ struct Person {
     tags: [str]
 }
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let io = std::io;
 
     // parse a JSON string into a struct

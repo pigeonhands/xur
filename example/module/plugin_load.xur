@@ -1,6 +1,6 @@
 use std::io;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     // folder import: loads ./my_plugin/lib.xur
     let plugin = std::import("./my_plugin");
 

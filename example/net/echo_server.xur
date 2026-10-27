@@ -35,7 +35,7 @@ fn serve(client: std::net::TcpStream, peer: str) {
     std::io::println("{} disconnected", peer);
 }
 
-fn main() {
+fn main() -> Result<()> {
     let listener = std::net::TcpListener::bind(ADDRESS).expect("couldn't listen");
     std::io::println("listening on {}", ADDRESS);
     loop {
@@ -46,4 +46,6 @@ fn main() {
             Err(error) => std::io::println("couldn't accept a connection: {}", error),
         }
     }
+
+    Ok(())
 }

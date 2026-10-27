@@ -6,7 +6,9 @@
 use std::io;
 use std::re::proc;
 
-fn main() {
+fn main() -> Result<()> {
     let pid = proc::current_pid();
     io::println("[hello.xur] running inside pid {}", pid);
+
+    Ok(())
 }

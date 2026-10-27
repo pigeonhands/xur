@@ -12,7 +12,7 @@ use std::io;
 use std::re::proc;
 use std::re::proc::LoadMethod;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     // Find a library already loaded in this process to re-load into the
     // child; any real tool would point at its own library instead.
     let library = "";

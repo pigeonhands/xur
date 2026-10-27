@@ -5,7 +5,7 @@
 use std::io;
 use std::re::asm::x86;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     // mov rax, [rbx+rcx*4+0x10]; jmp 0x1050; ret
     let bytes = std::bytes::from_list([
         0x48, 0x8B, 0x44, 0x8B, 0x10,

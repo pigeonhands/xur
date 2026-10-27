@@ -12,7 +12,7 @@ use std::io;
 use std::re::asm::x86;
 use std::re::proc;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     // Build the instructions: mov eax, 42; ret.
     let mov = x86::insn("Mov_r32_imm32", "EAX", 42)?;
     let ret = x86::insn("Retnq")?;

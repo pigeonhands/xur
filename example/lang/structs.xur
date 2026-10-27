@@ -46,7 +46,7 @@ impl Player {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let io = std::io;
     let start = Player::new("ada");
     io::println("{}", start);
@@ -60,4 +60,6 @@ fn main() {
 
     // The original is unchanged.
     io::println("start is still at {}", start.pos);
+
+    Ok(())
 }

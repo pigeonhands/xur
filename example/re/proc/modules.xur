@@ -5,7 +5,7 @@
 use std::io;
 use std::re::proc;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let handle = proc::open_current()?;
     let modules = handle.modules()?;
     io::println("{} modules; main = {}", modules.len(), modules[0].name);

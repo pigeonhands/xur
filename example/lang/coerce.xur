@@ -25,7 +25,7 @@ struct SmallData {
     b: str
 }
 
-fn main() {
+fn main() -> Result<()> {
     let small_data = SmallData {
         a: "this is a",
         b: "this is b",
@@ -57,4 +57,6 @@ fn main() {
     // convert to untyped record, then let the type annotation coerce it
     let small_from_record: SmallData = any::record(full_data);
     io::println("small (from record): {}", small_from_record);
+
+    Ok(())
 }

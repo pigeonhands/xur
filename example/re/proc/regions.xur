@@ -5,7 +5,7 @@
 use std::io;
 use std::re::proc;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let handle = proc::open_current()?;
     let regions = handle.regions()?;
     let first = regions[0];

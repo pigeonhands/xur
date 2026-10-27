@@ -8,7 +8,7 @@
 use std::io;
 use std::re::dotnet;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let module = dotnet::new("Hello");
     let bytes = module.write()?;
     let loaded = dotnet::parse(bytes)?;

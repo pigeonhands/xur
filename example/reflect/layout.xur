@@ -58,7 +58,7 @@ struct Tagged {
     #[field(offset = 8)] value: u32
 }
 
-fn main() {
+fn main() -> Result<()> {
     io::println("{}", reflect::layout::<Padded>());
     io::println("{}", reflect::layout::<Tagged>());
     io::println("{}", reflect::layout::<Tagged>().to_bytes(Tagged { tag: b"XUR", value: 0xcafe }).to_hex());
@@ -94,4 +94,6 @@ fn main() {
     record.write(buffer, record.size(), Score { id: 7, score: 1.5, alive: true });
     io::println("{}", buffer.to_hex());
     io::println("{}", record.read(buffer, record.size()));
+
+    Ok(())
 }

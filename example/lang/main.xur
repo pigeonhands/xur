@@ -54,7 +54,7 @@ fn print_name<T>() {
     std::io::println("Struct name: {}", std::any::type_name::<T>());
 }
 
-fn main() {
+fn main() -> Result<()> {
     let io = std::io; // modules are values
 
     io::println("Hello, World");
@@ -98,4 +98,6 @@ fn main() {
     let data = aligned.to_bytes();
     io::println("Aligned: {} bytes, c = {}", data.len(), data.read_u32_le(100));
     io::println("back again: {}", std::mem::from_bytes::<Aligned>(data));
+
+    Ok(())
 }

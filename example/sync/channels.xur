@@ -22,7 +22,7 @@ fn is_prime(n: i64) -> bool {
     true
 }
 
-fn main() {
+fn main() -> Result<()> {
     // `sender` can be used from any number of threads; `receiver` gets
     // everything they send, in the order it was sent.
     let (sender, receiver) = std::sync::channel();
@@ -48,4 +48,6 @@ fn main() {
         total = total + count;
     }
     std::io::println("{} primes below 10000", total);
+
+    Ok(())
 }

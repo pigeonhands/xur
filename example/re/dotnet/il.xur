@@ -9,7 +9,7 @@
 use std::io;
 use std::re::dotnet;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let sig = dotnet::sig;
     let module = dotnet::new("Hello", "console");
 

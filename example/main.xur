@@ -1,0 +1,17 @@
+use std::io;
+
+fn main() -> Result<()> {
+    let args = std::argv();
+
+    if args.len() != 2 {
+        io::eprintln("usage: xur run example <example>");
+        io::eprintln("e.g. xur run example lang/types.xur");
+        return Err("bad usage");
+    }
+
+    let [_, example] = args;
+    let example_module = std::try_import(example)?;
+    let example_main = example_module.get_method("main")?;
+
+    example_main()
+}

@@ -6,7 +6,7 @@ use std::io;
 use std::re::pe;
 use std::re::pe::ImageFileMachine;
 
-fn main() -> Result<(), str> {
+fn main() -> Result<()> {
     let dll = pe::ImageDef::new_dll(ImageFileMachine::Amd64);
     let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"])?;
     dll.add_section(".text", flags, b"\xc3"); // a single `ret`
