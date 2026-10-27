@@ -787,13 +787,13 @@ fn structs_know_their_bytes() {
 #[test]
 fn the_re_example_runs() {
     let output = run_files(&[("example/re.xur", include_str!("../../../example/re.xur"))]);
-    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nAnyImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
 }
 
 #[test]
 fn std_re_reports_bad_input() {
     assert_eq!(
-        run("fn main() { std::io::println(\"{}\", std::re::Image::parse(b\"nope\").is_err()); }"),
+        run("fn main() { std::io::println(\"{}\", std::re::AnyImage::load(b\"nope\").is_err()); }"),
         Ok("true\n".into())
     );
     assert_eq!(
@@ -888,5 +888,22 @@ fn rust_types_are_built_and_matched_like_xur_ones() {
     assert_eq!(
         with("std::re::pe::ImageDef::new_dll(std::re::pe::ImageFileMachine::Other(-1));"),
         Err("-1 does not fit in `u16`".into())
+    );
+}
+
+#[test]
+fn any_image_gives_the_file_inside() {
+    let src = r#"
+        use std::re::{AnyImage, pe::{ImageDef, ImageFileMachine}};
+        fn main() {
+            let data = ImageDef::new_dll(ImageFileMachine::I386).write().unwrap();
+            let image = AnyImage::load(data).unwrap();
+            let pe = image.as_pe().unwrap();
+            std::io::println("{} {} {} {}", image, image.format(), pe.coff_header.machine, image.as_elf());
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok("AnyImage(pe, 32-bit) pe ImageFileMachine::I386 None\n".into())
     );
 }

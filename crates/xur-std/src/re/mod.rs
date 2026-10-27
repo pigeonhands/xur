@@ -1,14 +1,14 @@
 //! `std::re`: reverse engineering, reading and changing executables with
 //! [pewter](https://docs.rs/pewter).
 //!
-//! `Image::open(path)` loads a PE or ELF file and reads it by virtual
+//! `AnyImage::open(path)` loads a PE or ELF file and reads it by virtual
 //! address, as it would be once loaded. `std::re::pe` and `std::re::elf`
 //! have each format's own file types and every structure inside them,
 //! registered by walking pewter's facet shapes, so headers, sections and
 //! tables arrive as typed records:
 //!
 //! ```text
-//! let image = std::re::Image::open("game.dll").unwrap();
+//! let image = std::re::AnyImage::open("game.dll").unwrap();
 //! for export in image.exports().unwrap() { ... }
 //!
 //! let pe = std::re::pe::File::open("game.dll").unwrap();
@@ -52,13 +52,14 @@ pub(crate) fn register(registry: &Registry) {
     });
 }
 
-/// A PE or ELF file, read by virtual address.
+/// `std::re::AnyImage`: a PE or ELF file, read by virtual address. Named
+/// and used as pewter's `AnyImage`, which it holds with its bytes.
 #[derive(Facet, Clone)]
 #[facet(opaque)]
 struct Image(Arc<Parsed<AnyImage<'static>>>);
 
 impl Image {
-    fn parse(data: Vec<u8>) -> Result<Self, String> {
+    fn load(data: Vec<u8>) -> Result<Self, String> {
         let parsed = Parsed::new(data, AnyImage::load).map_err(error_text)?;
         Ok(Self(Arc::new(parsed)))
     }
@@ -78,15 +79,15 @@ impl Image {
 impl std::fmt::Display for Image {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let bits = if self.get().is_64() { 64 } else { 32 };
-        write!(f, "Image({}, {bits}-bit)", self.format())
+        write!(f, "AnyImage({}, {bits}-bit)", self.format())
     }
 }
 
 fn register_image(re: &mut ModuleBuilder<'_>) {
-    re.ty::<Image>("Image")
-        .function("parse", Image::parse)
+    re.ty::<Image>("AnyImage")
+        .function("load", Image::load)
         .function("open", |path: String| {
-            Image::parse(std::fs::read(&path).map_err(error_text)?)
+            Image::load(std::fs::read(&path).map_err(error_text)?)
         })
         .method("format", |i: &Image| i.format().to_owned())
         .method("is_64", |i: &Image| i.get().is_64())
@@ -113,10 +114,10 @@ fn register_image(re: &mut ModuleBuilder<'_>) {
         })
         .method("data_segments", |i: &Image| i.get().data_segments())
         .method("exports", |i: &Image| i.get().exports().map_err(error_text))
-        .method("pe", |i: &Image| {
+        .method("as_pe", |i: &Image| {
             i.get().as_pe().map(|pe| pe.file().clone())
         })
-        .method("elf", |i: &Image| {
+        .method("as_elf", |i: &Image| {
             i.get().as_elf()?;
             Some(elf::File(Arc::new(i.0.derive(|image| match image {
                 AnyImage::Elf(elf) => elf.elf().clone(),

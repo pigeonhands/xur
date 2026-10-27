@@ -43,7 +43,7 @@ fn main() {
 
     // Reading it as a loaded image, by virtual address: find the export and
     // disassemble (well, dump) its code.
-    let image = re::Image::open("demo.dll").unwrap();
+    let image = re::AnyImage::open("demo.dll").unwrap();
     io::println("{} based at {}", image, image.image_base().unwrap().to_hex());
     for export in image.exports().unwrap() {
         match export.location {
