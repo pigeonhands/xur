@@ -1,0 +1,25 @@
+// Starting the .NET CoreCLR runtime and loading an assembly.
+//
+//     xur run example/re/dotnet/runtime.xur -- path/to/MyLib.dll
+//
+// Starts the .NET runtime, loads the given assembly, and looks up
+// a function pointer.
+
+use std::io;
+use std::re::dotnet::runtime;
+
+fn main() -> Result<(), str> {
+    let args = std::args();
+    if args.len() < 2 {
+        io::println("usage: xur run example/re/dotnet/runtime.xur -- <assembly.dll>");
+        return Err("missing assembly path argument");
+    }
+
+    let rt = runtime::coreclr()?;
+    io::println("backend: {}", rt.backend());
+
+    rt.load_assembly(args[1])?;
+    io::println("loaded {}", args[1]);
+
+    Ok(())
+}

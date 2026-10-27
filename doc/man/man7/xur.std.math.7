@@ -1,0 +1,40 @@
+.TH XUR.STD.MATH 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.math \- mathematical functions
+.SH SYNOPSIS
+.B use std::math;
+.SH DESCRIPTION
+.B std::math
+provides basic mathematical operations on numbers.
+.SH FUNCTIONS
+.TP
+.B sqrt(x: f64) -> f64
+Square root.
+.TP
+.B pow(x: f64, y: f64) -> f64
+Raise
+.I x
+to the power
+.IR y .
+.TP
+.B abs(x: f64) -> f64
+Absolute value.
+.TP
+.B min(a: i64, b: i64) -> i64
+The smaller of two integers.
+.TP
+.B max(a: i64, b: i64) -> i64
+The larger of two integers.
+.SH EXAMPLES
+.nf
+use std::math;
+use std::io;
+
+fn main() {
+    io::println("sqrt(9) = {}", math::sqrt(9.0));
+    io::println("2^10 = {}", math::pow(2.0, 10.0));
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.num (7)

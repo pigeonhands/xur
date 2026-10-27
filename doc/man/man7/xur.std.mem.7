@@ -1,0 +1,59 @@
+.TH XUR.STD.MEM 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.mem \- struct size, alignment and binary conversion
+.SH SYNOPSIS
+.B use std::mem;
+.SH DESCRIPTION
+.B std::mem
+provides size and alignment queries and binary conversion for structs
+that have a layout (see
+.BR xur.std.reflect (7)
+for the layout system).
+.SH FUNCTIONS
+.TP
+.B size_of::<T>() -> i64
+The size in bytes of
+.IR T .
+.TP
+.B align_of::<T>() -> i64
+The alignment of
+.IR T .
+.TP
+.B size_of_val(value) -> i64
+The size in bytes of a struct value.
+.TP
+.B from_bytes::<T>(data) -> T
+Read a struct of type
+.I T
+from the start of
+.IR data .
+.TP
+.B to_bytes(value) -> bytes
+Serialize a struct value to bytes.
+.SH STRUCT METHODS
+Every struct value also has:
+.TP
+.B value.to_bytes() -> bytes
+Serialize the struct to bytes using its layout.
+.TP
+.B value.byte_size() -> i64
+The struct's size in bytes.
+.SH EXAMPLES
+.nf
+use std::mem;
+use std::io;
+
+#[repr(C)]
+struct Header { magic: u32, version: u16 }
+
+fn main() {
+    io::println("size: {}", mem::size_of::<Header>());
+    let h = Header { magic: 0x5a4d, version: 1 };
+    let data = h.to_bytes();
+    io::println("bytes: {}", data.to_hex());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.reflect (7),
+.BR xur.std.bytes (7)

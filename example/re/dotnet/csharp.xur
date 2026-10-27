@@ -1,0 +1,17 @@
+// Dumping the C# representation of a .NET module.
+//
+//     xur run example/re/dotnet/csharp.xur
+//
+// Creates a module, writes it to bytes, reads it back, and prints
+// the C#-like output hao generates.
+
+use std::io;
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let module = dotnet::new("Hello");
+    let bytes = module.write()?;
+    let loaded = dotnet::parse(bytes)?;
+    io::println(loaded.to_csharp());
+    Ok(())
+}

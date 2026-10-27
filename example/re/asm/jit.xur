@@ -1,0 +1,41 @@
+// Building a tiny function from x86 instructions, injecting it into a
+// child process and calling it remotely.
+//
+//     xur run example/re/asm/jit.xur
+//
+// Constructs `mov eax, 42; ret` using `x86::insn`, encodes it, spawns a
+// `sleep` child, injects the bytes into the child's address space with
+// procodile, and calls the function. The return value (RAX) comes back
+// through `execute_remote`.
+
+use std::io;
+use std::re::asm::x86;
+use std::re::proc;
+
+fn main() -> Result<(), str> {
+    // Build the instructions: mov eax, 42; ret.
+    let mov = x86::insn("Mov_r32_imm32", "EAX", 42)?;
+    let ret = x86::insn("Retnq")?;
+    io::println("assembled:");
+    io::println("  {}", mov);
+    io::println("  {}", ret);
+
+    // Encode them to bytes.
+    let code = x86::encode(64, [mov, ret], 0)?;
+    io::println("bytes: {}", code.to_hex());
+
+    // Spawn a disposable child process.
+    let child = std::process::spawn("sleep", ["10"])?;
+    let handle = proc::open(child.pid(), "readwrite")?;
+
+    // Inject the code and call it.
+    let address = handle.inject_bytes(code)?;
+    io::println("injected at {}", address.to_hex());
+
+    let result = handle.execute_remote(address, 0)?;
+    io::println("result: {}", result);
+
+    child.kill()?;
+    child.wait()?;
+    Ok(())
+}

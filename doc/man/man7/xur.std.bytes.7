@@ -1,0 +1,115 @@
+.TH XUR.STD.BYTES 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.bytes \- byte buffer operations
+.SH SYNOPSIS
+.B use std::bytes;
+.SH DESCRIPTION
+.B std::bytes
+creates byte buffers, and byte values have methods for reading and
+writing integers at byte offsets in either endianness. Mutations happen
+in place.
+.SH MODULE FUNCTIONS
+.TP
+.B zeroed(len) -> bytes
+A buffer of
+.I len
+zero bytes.
+.TP
+.B from_list(list) -> bytes
+Convert a list of integers (0\(en255) to bytes.
+.TP
+.B from_hex(hex) -> Result<bytes, str>
+Parse hex pairs, ignoring whitespace: "4d 5a".
+.SH BYTE METHODS
+.TP
+.B len() -> i64
+Length of the buffer.
+.TP
+.B is_empty() -> bool
+Whether the buffer is empty.
+.TP
+.B push(byte)
+Append a byte (0\(en255).
+.TP
+.B extend(other)
+Append another byte buffer.
+.TP
+.B find(needle) -> Option<i64>
+Find the first occurrence of
+.I needle
+in the buffer.
+.TP
+.B starts_with(prefix) -> bool
+Whether the buffer starts with
+.IR prefix .
+.TP
+.B to_hex() -> str
+Format the buffer as a hex string.
+.TP
+.B decode() -> Result<str, str>
+Decode the buffer as UTF-8.
+.TP
+.B to_list() -> [i64]
+Convert each byte to an integer.
+.SS Numeric reads and writes
+Integers and floats are read and written at byte offsets. The suffix
+indicates the byte order:
+.B _le
+for little-endian,
+.B _be
+for big-endian.
+.B u8
+and
+.B i8
+have no suffix (single byte).
+.PP
+Read:
+.BR read_u8(off) ,
+.BR read_i8(off) ,
+.BR read_u16_le(off) ,
+.BR read_u16_be(off) ,
+.BR read_i16_le(off) ,
+.BR read_i16_be(off) ,
+.BR read_u32_le(off) ,
+.BR read_u32_be(off) ,
+.BR read_i32_le(off) ,
+.BR read_i32_be(off) ,
+.BR read_u64_le(off) ,
+.BR read_u64_be(off) ,
+.BR read_i64_le(off) ,
+.BR read_i64_be(off) ,
+.BR read_f32_le(off) ,
+.BR read_f32_be(off) ,
+.BR read_f64_le(off) ,
+.BR read_f64_be(off) .
+.PP
+Write:
+.BR write_u8(off,\ val) ,
+.BR write_i8(off,\ val) ,
+.BR write_u16_le(off,\ val) ,
+.BR write_u16_be(off,\ val) ,
+and so on for every read variant.
+.SH STRING METHODS
+Strings also have:
+.TP
+.B "text".to_bytes() -> bytes
+Encode the string as UTF-8 bytes.
+.TP
+.B str::from_hex(hex) -> Result<bytes, str>
+Same as
+.BR bytes::from_hex .
+.SH EXAMPLES
+.nf
+use std::bytes;
+use std::io;
+
+fn main() {
+    let buf = bytes::zeroed(8);
+    buf.write_u32_le(0, 0x00905a4d);
+    io::println("MZ header: {}", buf.to_hex());
+    io::println("u32 at 0: {}", buf.read_u32_le(0));
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.list (7)

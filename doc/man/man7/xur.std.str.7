@@ -1,0 +1,82 @@
+.TH XUR.STD.STR 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.str \- string methods
+.SH DESCRIPTION
+These are methods on string values. They are not imported from a module;
+they are available on any
+.B str
+value directly.
+.SH METHODS
+.TP
+.B len() -> i64
+Number of characters (Unicode scalar values).
+.TP
+.B is_empty() -> bool
+Whether the string is empty.
+.TP
+.B to_upper() -> str
+Convert to uppercase.
+.TP
+.B to_lower() -> str
+Convert to lowercase.
+.TP
+.B trim() -> str
+Remove leading and trailing whitespace.
+.TP
+.B contains(part) -> bool
+Whether the string contains
+.IR part .
+.TP
+.B starts_with(prefix) -> bool
+Whether the string starts with
+.IR prefix .
+.TP
+.B ends_with(suffix) -> bool
+Whether the string ends with
+.IR suffix .
+.TP
+.B replace(from, to) -> str
+Replace all occurrences of
+.I from
+with
+.IR to .
+.TP
+.B split(separator) -> [str]
+Split the string by
+.I separator
+into a list.
+.TP
+.B lines() -> [str]
+Split the string into lines.
+.TP
+.B repeat(n) -> str
+Repeat the string
+.I n
+times.
+.TP
+.B pad_left(width, fill) -> str
+Pad the string on the left with
+.I fill
+characters until it reaches
+.I width
+characters.
+.TP
+.B parse_int() -> Result<i64, str>
+Parse the string as an integer.
+.TP
+.B parse_float() -> Result<f64, str>
+Parse the string as a float.
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    let s = "  Hello, World!  ";
+    io::println("{}", s.trim());
+    io::println("{}", s.trim().to_upper());
+    io::println("{}", "a,b,c".split(",").join(" | "));
+    io::println("{}", "42".parse_int().unwrap());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

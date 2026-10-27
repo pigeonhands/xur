@@ -1,0 +1,74 @@
+.TH XUR.STD.LIST 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.list \- list methods
+.SH DESCRIPTION
+Lists in Xur are shared and change in place, like Python's.
+.B std::list
+is not imported directly; instead these are methods on any list value.
+.SH METHODS
+.TP
+.B len() -> i64
+Number of elements.
+.TP
+.B is_empty() -> bool
+Whether the list has no elements.
+.TP
+.B push(item)
+Append an item to the end.
+.TP
+.B pop() -> Option<Value>
+Remove and return the last item.
+.TP
+.B get(index) -> Option<Value>
+Return the item at
+.IR index ,
+or
+.B None
+if out of bounds.
+.TP
+.B first() -> Option<Value>
+The first item.
+.TP
+.B last() -> Option<Value>
+The last item.
+.TP
+.B insert(index, item)
+Insert an item at the given position.
+.TP
+.B remove(index) -> Value
+Remove and return the item at the given position.
+.TP
+.B contains(item) -> bool
+Whether the list contains the item.
+.TP
+.B clear()
+Remove all items.
+.TP
+.B reverse()
+Reverse the list in place.
+.TP
+.B extend(other)
+Append all items from another list. Safe to call as
+.BR xs.extend(xs) .
+.TP
+.B to_hex() -> str
+Format a list of bytes as a hex string.
+.TP
+.B join(separator) -> str
+Join all items into a string, separated by
+.IR separator .
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    let xs = [1, 2, 3];
+    xs.push(4);
+    io::println("len: {}", xs.len());
+    io::println("last: {}", xs.last().unwrap());
+    io::println("joined: {}", xs.join(", "));
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.bytes (7)

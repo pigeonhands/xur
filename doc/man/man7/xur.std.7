@@ -1,0 +1,202 @@
+.TH XUR.STD 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std \- overview of Xur's standard library
+.SH DESCRIPTION
+The
+.B std
+module is Xur's standard library, registered automatically at startup.
+Each submodule is loaded lazily on first
+.BR use .
+.SH MODULES
+.TP
+.B std::io
+Console I/O.
+.BR println ,
+.BR eprintln ,
+.BR print ,
+.BR eprint ,
+and
+.B readln
+for reading a line from stdin.
+.TP
+.B std::fs
+Filesystem access.
+.BR read_bytes ,
+.BR read_text ,
+.BR write_bytes ,
+.BR write_text ,
+and
+.BR exists .
+.TP
+.B std::process
+Run external programs.
+.B spawn(program, args)
+returns a handle with
+.BR wait ,
+.BR stdout ,
+and
+.BR stderr .
+.TP
+.B std::thread
+Threads.
+.B spawn(closure)
+returns a join handle;
+.B sleep(ms)
+pauses the current thread.
+.TP
+.B std::sync
+Synchronisation primitives.
+.B Mutex
+wraps a value with
+.B lock()
+and
+.BR try_lock() .
+.B Channel
+provides
+.B send()
+and
+.BR recv() .
+.TP
+.B std::net
+Networking.
+.B TcpStream
+(connect, read, write) and
+.B TcpListener
+(bind, accept).
+.TP
+.B std::math
+Mathematical functions:
+.BR abs ,
+.BR floor ,
+.BR ceil ,
+.BR sqrt ,
+.BR pow ,
+.BR min ,
+.BR max ,
+.BR PI ,
+.BR E .
+.TP
+.B std::any
+Runtime type introspection.
+.B name_of::<T>()
+returns a type's name as a string.
+.TP
+.B std::reflect
+Reflection.
+.BR fields ,
+.BR get ,
+.BR set ,
+.BR call ,
+.BR variants .
+Inspect and manipulate structs and enums at runtime.
+.TP
+.B std::re
+Reverse engineering toolkit. See
+.BR xur.std.re (7).
+.TP
+.B std::list
+List utilities:
+.BR map ,
+.BR filter ,
+.BR fold ,
+.BR zip ,
+.BR flat_map ,
+.BR sort ,
+.BR sort_by ,
+.BR rev ,
+.BR range .
+.TP
+.B std::bytes
+Byte buffer operations.
+.BR zeroed ,
+.BR from_list ,
+.BR read_u8 / u16 / u32 / u64 ,
+.BR write_u8 / u16 / u32 / u64
+(little-endian).
+.TP
+.B std::str
+String utilities:
+.BR split ,
+.BR join ,
+.BR trim ,
+.BR starts_with ,
+.BR ends_with ,
+.BR contains ,
+.BR replace ,
+.BR to_upper ,
+.BR to_lower .
+.TP
+.B std::num
+Numeric conversions:
+.BR parse_int ,
+.BR parse_float ,
+.BR to_hex ,
+.BR to_bin .
+.TP
+.B std::fmt
+Format strings.
+.B format(template, args...)
+returns a formatted string.
+.SH BUILT-IN FUNCTIONS
+These are available without importing
+.BR std :
+.TP
+.B std::import(path)
+Dynamically import a module by path at runtime.
+.TP
+.B std::panic(format, args...)
+Stop the program with a formatted runtime error.
+.SH PRELUDE
+The prelude is loaded into every program automatically and provides:
+.TP
+.B Option<T>
+.BR Some(T) " and " None .
+Methods:
+.BR unwrap() ,
+.BR unwrap_or(default) ,
+.BR is_some() ,
+.BR is_none() ,
+.BR map(f) ,
+.BR and_then(f) .
+.TP
+.B Result<T, E>
+.BR Ok(T) " and " Err(E) .
+Methods:
+.BR unwrap() ,
+.BR unwrap_or(default) ,
+.BR is_ok() ,
+.BR is_err() ,
+.BR map(f) ,
+.BR map_err(f) ,
+.BR and_then(f) .
+Supports the
+.B ?
+operator for early return.
+.SH EXAMPLES
+.nf
+use std::io;
+use std::fs;
+
+fn main() -> Result<(), str> {
+    let text = fs::read_text("hello.txt")?;
+    io::println("contents: {}", text);
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur (1),
+.BR xur.std.io (7),
+.BR xur.std.fs (7),
+.BR xur.std.process (7),
+.BR xur.std.thread (7),
+.BR xur.std.sync (7),
+.BR xur.std.net (7),
+.BR xur.std.math (7),
+.BR xur.std.any (7),
+.BR xur.std.reflect (7),
+.BR xur.std.re (7),
+.BR xur.std.list (7),
+.BR xur.std.bytes (7),
+.BR xur.std.str (7),
+.BR xur.std.num (7),
+.BR xur.std.mem (7)

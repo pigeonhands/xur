@@ -1,0 +1,49 @@
+.TH XUR.STD.SYNC 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.sync \- channels for sending values between threads
+.SH SYNOPSIS
+.B use std::sync;
+.SH DESCRIPTION
+.B std::sync
+provides channels for inter-thread communication.
+.B channel()
+returns a
+.RI ( Sender ", " Receiver )
+pair.
+.SH FUNCTIONS
+.TP
+.B channel() -> (Sender, Receiver)
+Create a new channel. Multiple senders can be cloned from the same sender;
+there is one receiver.
+.SS Sender methods
+.TP
+.B send(value) -> Result<(), str>
+Send a value to the receiver. Returns an error if the receiver has been
+dropped.
+.SS Receiver methods
+.TP
+.B recv() -> Option<Value>
+Block until a value arrives, or return
+.B None
+if all senders are gone.
+.TP
+.B try_recv() -> Option<Value>
+Return a value if one is already waiting, otherwise
+.BR None .
+.SH EXAMPLES
+.nf
+use std::sync;
+use std::thread;
+use std::io;
+
+fn main() {
+    let (tx, rx) = sync::channel();
+    thread::spawn(|| {
+        tx.send("hello from another thread").unwrap();
+    });
+    io::println("{}", rx.recv().unwrap());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.thread (7)

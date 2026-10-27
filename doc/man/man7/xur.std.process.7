@@ -1,0 +1,39 @@
+.TH XUR.STD.PROCESS 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.process \- spawning and controlling child processes
+.SH SYNOPSIS
+.B use std::process;
+.SH DESCRIPTION
+.B std::process
+starts OS child processes and waits for them to finish.
+.SH FUNCTIONS
+.TP
+.B spawn(program, args) -> Result<Process, str>
+Start a new process with the given program path and argument list.
+.SH PROCESS METHODS
+.TP
+.B pid() -> i64
+The process ID of the child.
+.TP
+.B kill()
+Send a kill signal to the child.
+.TP
+.B wait() -> Result<i64, str>
+Wait for the child to exit and return its exit code.
+.TP
+.B try_wait() -> Result<Option<i64>, str>
+Check whether the child has exited without blocking.
+.SH EXAMPLES
+.nf
+use std::process;
+use std::io;
+
+fn main() -> Result<(), str> {
+    let child = process::spawn("echo", ["hello"])?;
+    let code = child.wait()?;
+    io::println("exited with {}", code);
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

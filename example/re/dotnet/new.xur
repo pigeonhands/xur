@@ -1,0 +1,29 @@
+// Creating a new .NET assembly from scratch.
+//
+//     xur run example/re/dotnet/new.xur
+//
+// Creates a minimal .NET DLL, writes it to bytes, and reads it back.
+
+use std::io;
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let module = dotnet::new("Example");
+    io::println("created: {}", module.name());
+    io::println("runtime: {}", module.runtime_version());
+
+    let bytes = module.write()?;
+    io::println("wrote {} bytes", bytes.len());
+
+    let loaded = dotnet::parse(bytes)?;
+    io::println("loaded back: {}", loaded.name());
+
+    for ty in loaded.all_types() {
+        if ty.namespace != "" {
+            io::println("  type: {}.{}", ty.namespace, ty.name);
+        } else {
+            io::println("  type: {}", ty.name);
+        }
+    }
+    Ok(())
+}

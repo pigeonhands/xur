@@ -1,0 +1,40 @@
+// Browsing the types in a Unity Il2Cpp game.
+//
+//     xur run example/re/dotnet/il2cpp.xur -- path/to/game
+//
+// Opens the game folder and prints every type, its fields and methods.
+// Then generates .NET proxy assemblies into `out/`.
+
+use std::io;
+use std::re::dotnet::il2cpp;
+
+fn main() -> Result<(), str> {
+    let args = std::args();
+    if args.len() < 2 {
+        io::println("usage: xur run example/re/dotnet/il2cpp.xur -- <game-dir>");
+        return Err("missing game directory argument");
+    }
+
+    let game = il2cpp::open(args[1])?;
+    io::println("images: {}", game.image_names());
+
+    let types = game.types();
+    io::println("{} types", types.len());
+
+    for ty in types {
+        io::println("\n{} (flags: {})", ty.full_name(), ty.flags());
+        if ty.base_type_name() != () {
+            io::println("  extends {}", ty.base_type_name());
+        }
+        for field in ty.fields() {
+            io::println("  field: {} {}", field.type_name(), field.name());
+        }
+        for method in ty.methods() {
+            io::println("  method: {}", method);
+        }
+    }
+
+    let paths = game.write_assemblies("out")?;
+    io::println("\nwrote {} assemblies to out/", paths.len());
+    Ok(())
+}

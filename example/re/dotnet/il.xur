@@ -1,0 +1,82 @@
+// Building a .NET method body with the IL emitter.
+//
+//     xur run example/re/dotnet/il.xur
+//
+// Creates a console app whose Main method is constructed entirely
+// from Xur using hao's IL emitter, writes it, reads it back, and
+// dumps every method's IL instructions and the C# representation.
+
+use std::io;
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let sig = dotnet::sig;
+    let module = dotnet::new("Hello", "console");
+
+    // Import Console.WriteLine(string) from System.Console.
+    module.add_assembly_ref("System.Console");
+    let write_line = module.import_method(
+        "System.Console", "System.Console", "WriteLine",
+        sig::method_static(sig::void(), [sig::string()])
+    )?;
+
+    // Build the IL body:
+    //   ldstr   "Hello from hao!"
+    //   call    System.Console::WriteLine
+    //   ldc.i4  0
+    //   ret
+    let body = {
+        let e = dotnet::il::emitter();
+        e.ldstr("Hello from hao!");
+        e.call(write_line);
+        e.ldc_i4(0);
+        e.ret();
+        e.finish()
+    };
+
+    // int32 Main(string[])
+    let main_sig = sig::method_static(
+        sig::int32(),
+        [sig::sz_array(sig::string())]
+    );
+    let main = dotnet::public_static_method("Main", main_sig, body);
+
+    // Program class
+    let program = dotnet::static_class(module, "Hello", "Program");
+    let main_entry = dotnet::add_method(program, main);
+    module.add_type(program);
+    module.set_entry_point(main_entry);
+
+    // Round-trip: write and parse back.
+    let bytes = module.write()?;
+    let loaded = dotnet::parse(bytes)?;
+
+    io::println("=== types and methods ===");
+    for ty in loaded.all_types() {
+        if ty.namespace != "" {
+            io::println("\ntype {}.{}", ty.namespace, ty.name);
+        } else {
+            io::println("\ntype {}", ty.name);
+        }
+
+        for method in ty.methods {
+            let flags = dotnet::method_flags_names(method.flags);
+            io::println("  method: {} (flags: {})", method.name, flags);
+
+            match method.body {
+                Some(body) => {
+                    io::println("    max_stack: {}", body.max_stack);
+                    io::println("    instructions ({}):", body.instructions.len());
+                    for insn in body.instructions {
+                        io::println("      {}", insn.opcode);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    io::println("\n=== C# dump ===");
+    io::println("{}", loaded.to_csharp());
+    Ok(())
+}

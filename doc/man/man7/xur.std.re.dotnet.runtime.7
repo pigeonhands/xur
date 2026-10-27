@@ -1,0 +1,65 @@
+.TH XUR.STD.RE.DOTNET.RUNTIME 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.re.dotnet.runtime \- host a .NET runtime
+.SH DESCRIPTION
+.B std::re::dotnet::runtime
+starts and drives a .NET runtime (CoreCLR) from Xur.
+Assemblies can be loaded from disk and methods called by looking up
+their native function pointers.
+.PP
+Backed by
+.BR hao\-runtime .
+.SH FUNCTIONS
+.TP
+.B coreclr()
+Start the CoreCLR runtime, or return the one already running.
+Only one CoreCLR can exist per process.
+Returns
+.BR Result<Runtime,\ str> .
+.SH Runtime METHODS
+.TP
+.B backend()
+The active backend name:
+.B \(dqCoreClr\(dq
+or
+.BR \(dqMono\(dq .
+.TP
+.B load_assembly(path)
+Load a .NET assembly from disk and make it available by name.
+Returns
+.BR Result<(),\ str> .
+.TP
+.B function_pointer(assembly, type, method)
+Get a native function pointer to a static
+.B [UnmanagedCallersOnly]
+method.
+Returns
+.BR Result<int,\ str> .
+.TP
+.B method_pointer(assembly, type, method)
+Get a JIT-compiled function pointer to any static method, whether or
+not it is
+.BR [UnmanagedCallersOnly] .
+Returns
+.BR Result<int,\ str> .
+.SH EXAMPLES
+.PP
+.RS
+.nf
+use std::re::dotnet::runtime;
+
+fn main() -> Result<(), str> {
+    let rt = runtime::coreclr()?;
+    rt.load_assembly("MyLib.dll")?;
+    let fp = rt.function_pointer(
+        "MyLib", "MyClass", "MyMethod"
+    )?;
+    io::println("pointer: 0x{}", fp.to_hex());
+    Ok(())
+}
+.fi
+.RE
+.SH SEE ALSO
+.BR xur (1),
+.BR xur.std.re (7),
+.BR xur.std.re.dotnet.il2cpp (7)

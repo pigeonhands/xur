@@ -193,7 +193,22 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
         )
         .method("map_image", |h: &Handle, bytes: Vec<u8>| {
             h.0.map_image(&bytes).map_err(error_text)
-        });
+        })
+        .method("inject_bytes", |h: &Handle, bytes: Vec<u8>| {
+            h.0.inject_bytes(&bytes)
+                .map(|a| a.get() as u64)
+                .map_err(error_text)
+        })
+        .method("execute_remote", |h: &Handle, address: u64, arg: u64| {
+            h.0.execute_remote(addr(address), arg).map_err(error_text)
+        })
+        .method(
+            "execute_remote_detached",
+            |h: &Handle, address: u64, arg: u64| {
+                h.0.execute_remote_detached(addr(address), arg)
+                    .map_err(error_text)
+            },
+        );
 }
 
 /// `proc::open(pid, access)`: a handle, as a Xur `Result`.

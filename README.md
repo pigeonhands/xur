@@ -28,6 +28,8 @@ There are complete programs in [`example/`](example):
 | [`layout.xur`](example/layout.xur)         | structs as bytes: padding, packing, byte order    |
 | [`re/image/`](example/re/image)            | building and reading PE/ELF binaries              |
 | [`re/proc/`](example/re/proc)              | inspecting a live process's memory                |
+| [`re/asm/`](example/re/asm)               | decoding/encoding x86 instructions                |
+| [`re/dotnet/`](example/re/dotnet)         | reading and creating .NET assemblies              |
 
 ## A taste of Xur
 
@@ -237,7 +239,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
-| `std::re`     | binaries with [pewter](https://docs.rs/pewter) (`AnyImage`, `pe::PEFile`, `pe::ImageDef`, `elf::ElfFile`) and live processes with [procodile](https://docs.rs/procodile) (`proc`), their structures arriving as typed records |
+| `std::re`     | binaries with [pewter](https://docs.rs/pewter) (`AnyImage`, `pe::PEFile`, `pe::ImageDef`, `elf::ElfFile`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), and .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`) |
 | `std::mem`    | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>(data)`, `to_bytes(v)` |
 | `std::reflect`| `fields`, `get`, `set`, `methods`, `call` of any value; `layout::<T>()`, `Layout` |
 

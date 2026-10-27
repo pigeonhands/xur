@@ -1,0 +1,65 @@
+.TH XUR.STD.FS 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.fs \- filesystem access
+.SH SYNOPSIS
+.B use std::fs;
+.SH DESCRIPTION
+.B std::fs
+reads and writes files. All functions that touch the filesystem return
+.B Result
+on failure.
+.SH FUNCTIONS
+.TP
+.B read_to_string(path) -> Result<str, str>
+Read an entire file as a UTF-8 string.
+.TP
+.B read(path) -> Result<bytes, str>
+Read an entire file as raw bytes.
+.TP
+.B write(path, contents)
+Write a string to a file, creating or truncating it.
+.TP
+.B write_bytes(path, data)
+Write raw bytes to a file, creating or truncating it.
+.TP
+.B append(path, contents)
+Append a string to a file, creating it if needed.
+.TP
+.B exists(path) -> bool
+Whether a path exists on disk.
+.TP
+.B remove(path)
+Delete a file.
+.TP
+.B create_dir_all(path)
+Create a directory and all missing parents.
+.TP
+.B read_dir(path) -> Result<[str], str>
+List the entries of a directory, sorted alphabetically.
+.SS File type
+.TP
+.B File::open(path) -> Result<File, str>
+Open a file for reading.
+.TP
+.B File::create(path) -> Result<File, str>
+Create or truncate a file for writing.
+.TP
+.B file.read_to_string() -> Result<str, str>
+Read the rest of the file as a string.
+.TP
+.B file.write(contents)
+Write a string to the file.
+.SH EXAMPLES
+.nf
+use std::fs;
+use std::io;
+
+fn main() -> Result<(), str> {
+    fs::write("greeting.txt", "hello")?;
+    let text = fs::read_to_string("greeting.txt")?;
+    io::println("{}", text);
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

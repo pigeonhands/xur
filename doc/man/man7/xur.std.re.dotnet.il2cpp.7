@@ -1,0 +1,113 @@
+.TH XUR.STD.RE.DOTNET.IL2CPP 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.re.dotnet.il2cpp \- read Unity Il2Cpp games
+.SH DESCRIPTION
+.B std::re::dotnet::il2cpp
+reads the metadata and type table of a Unity Il2Cpp game.
+.B Game
+is the entry point: it opens a game folder, finds the
+.B global\-metadata.dat
+and
+.B GameAssembly
+binary, and gives every type, field and method by name.
+It can also generate .NET proxy assemblies with
+.BR write_assemblies() .
+.PP
+Backed by
+.BR hao\-il2cpp .
+.SH FUNCTIONS
+.TP
+.B open(path)
+Open a game folder (the one holding
+.B GameAssembly.so
+and
+.BR *_Data ).
+Returns
+.BR Result<Game,\ str> .
+.TP
+.B from_files(metadata, binary)
+Open from explicit paths to
+.B global\-metadata.dat
+and
+.BR GameAssembly .
+Returns
+.BR Result<Game,\ str> .
+.SH Game METHODS
+.TP
+.B types()
+A list of every
+.B TypeView
+in the game.
+.TP
+.B find_type(full_name)
+Look up a type by its full name (e.g.\&
+.BR \(dqSystem.String\(dq ).
+Returns
+.BR Result<TypeView,\ str> .
+.TP
+.B image_names()
+The assembly names, e.g.\&
+.BR \(dqAssembly\-CSharp.dll\(dq .
+.TP
+.B write_assemblies(dir)
+Generate .NET proxy assemblies and write them to
+.IR dir .
+Returns
+.BR Result<list<str>,\ str> .
+.SH TypeView METHODS
+.TP
+.B name(), namespace(), full_name(), image_name()
+The type's name parts and containing assembly.
+.TP
+.B flags()
+The
+.B TypeAttributes
+flags as an integer.
+.TP
+.B base_type_name()
+The parent type name, if any.
+.TP
+.B fields()
+A list of
+.BR FieldView .
+.TP
+.B methods()
+A list of
+.BR MethodView .
+.SH FieldView METHODS
+.TP
+.B name(), type_name()
+The field's name and type.
+.TP
+.B is_static()
+Whether the field is static.
+.SH MethodView METHODS
+.TP
+.B name(), return_type(), is_static()
+The method's name, return type name, and whether it is static.
+.TP
+.B parameter_names(), parameter_type_names()
+The parameter names and type names as lists of strings.
+.SH EXAMPLES
+.PP
+.RS
+.nf
+use std::re::dotnet::il2cpp;
+
+fn main() -> Result<(), str> {
+    let game = il2cpp::open("path/to/game")?;
+    for ty in game.types() {
+        io::println("{}", ty.full_name());
+        for method in ty.methods() {
+            io::println("  {}", method);
+        }
+    }
+    game.write_assemblies("out")?;
+    Ok(())
+}
+.fi
+.RE
+.SH SEE ALSO
+.BR xur (1),
+.BR xur.std.re (7),
+.BR xur.std.re.dotnet.runtime (7)

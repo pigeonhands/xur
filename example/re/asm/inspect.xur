@@ -1,0 +1,40 @@
+// Inspecting instruction operands and control flow.
+//
+//     xur run example/re/asm/inspect.xur
+
+use std::io;
+use std::re::asm::x86;
+
+fn main() -> Result<(), str> {
+    // mov rax, [rbx+rcx*4+0x10]; jmp 0x1050; ret
+    let bytes = std::bytes::from_list([
+        0x48, 0x8B, 0x44, 0x8B, 0x10,
+        0xE9, 0x45, 0x00, 0x00, 0x00,
+        0xC3,
+    ]);
+    let insns = x86::decode(64, bytes, 0x1000);
+
+    for insn in insns {
+        io::println("{}", insn);
+        io::println("  mnemonic:     {}", insn.mnemonic());
+        io::println("  flow_control: {}", insn.flow_control());
+        io::println("  op_count:     {}", insn.op_count());
+
+        for i in 0..insn.op_count() {
+            let kind = insn.op_kind(i);
+            io::println("  op[{}]: {}", i, kind);
+            if kind == "Register" {
+                io::println("    register: {}", insn.op_register(i));
+            }
+        }
+
+        if insn.memory_base() != "None" {
+            io::println("  memory_base:         {}", insn.memory_base());
+            io::println("  memory_index:        {}", insn.memory_index());
+            io::println("  memory_index_scale:  {}", insn.memory_index_scale());
+            io::println("  memory_displacement: {}", insn.memory_displacement().to_hex());
+        }
+        io::println("");
+    }
+    Ok(())
+}

@@ -1,0 +1,32 @@
+.TH XUR.STD.IO 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.io \- console I/O
+.SH SYNOPSIS
+.B use std::io;
+.SH DESCRIPTION
+.B std::io
+provides formatted printing to stdout. Format strings use
+.B {}
+as placeholders, replaced by the next argument's display form.
+Literal braces are written as
+.B {{
+and
+.BR }} .
+.SH FUNCTIONS
+.TP
+.B println(format, args...)
+Print a formatted line to stdout (with trailing newline).
+.TP
+.B print(format, args...)
+Print formatted text to stdout (no trailing newline).
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    io::println("Hello, {}!", "world");
+    io::println("{} + {} = {{}{}{}}", 1, 2, 3);
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

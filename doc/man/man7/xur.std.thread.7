@@ -1,0 +1,39 @@
+.TH XUR.STD.THREAD 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.thread \- running code in parallel
+.SH SYNOPSIS
+.B use std::thread;
+.SH DESCRIPTION
+.B std::thread
+spawns OS threads that run Xur closures.
+.SH FUNCTIONS
+.TP
+.B spawn(closure) -> JoinHandle
+Start a new thread running
+.IR closure .
+.TP
+.B sleep(millis)
+Pause the current thread for
+.I millis
+milliseconds.
+.SS JoinHandle methods
+.TP
+.B join() -> Value
+Wait for the thread to finish and return its result. Panics if the thread
+has already been joined.
+.SH EXAMPLES
+.nf
+use std::thread;
+use std::io;
+
+fn main() {
+    let handle = thread::spawn(|| {
+        thread::sleep(100);
+        42
+    });
+    io::println("answer: {}", handle.join());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.sync (7)

@@ -1,0 +1,135 @@
+.TH XUR.STD.REFLECT 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.reflect \- runtime reflection and binary layout
+.SH SYNOPSIS
+.B use std::reflect;
+.SH DESCRIPTION
+.B std::reflect
+inspects and manipulates values at runtime: listing fields, reading and
+writing them by name, calling methods dynamically, and reading/writing
+structs as binary data through layouts.
+.SH FUNCTIONS
+.TP
+.B type_name(value) -> str
+The type name of a value (e.g.\& "Point", "Shape::Circle", "list").
+.TP
+.B fields(value) -> [str]
+The names of the value's fields (numbers for tuples).
+.TP
+.B has_field(value, name) -> bool
+Whether the value has a field with this name.
+.TP
+.B get(value, name) -> Value
+Read a field by name.
+.TP
+.B try_get(value, name) -> Option<Value>
+Read a field by name, returning
+.B None
+if it doesn't exist.
+.TP
+.B set(value, name, new_value) -> Value
+Return a copy of the value with one field changed.
+.TP
+.B variant(value) -> Option<str>
+The variant name of an enum value (e.g.\& "Circle" for Shape::Circle).
+.TP
+.B methods(value) -> [str]
+List the value's methods.
+.TP
+.B has_method(value, name) -> bool
+Whether the value has a method with this name.
+.TP
+.B call(value, name, args) -> Value
+Call a method by name with a list of arguments.
+.SS Layout
+Layouts describe where a struct's fields sit in memory, for reading and
+writing binary data. They come from struct attributes or are built at
+runtime.
+.TP
+.B layout::<T>() -> Layout
+Get the layout of a Xur struct from its type and attributes.
+.TP
+.B layout_of(value) -> Layout
+Get the layout of a struct value.
+.TP
+.B Layout::new(name) -> Layout
+Start building a layout at runtime.
+.PP
+Layout methods (each returns a new layout):
+.TP
+.B layout.field(name, type) -> Layout
+Add a field of a primitive type ("u8", "u32", "f64", "bool", etc).
+.TP
+.B layout.field_at(name, type, offset) -> Layout
+Add a field at an explicit byte offset.
+.TP
+.B layout.bytes(name, len) -> Layout
+Add a fixed-length raw byte field.
+.TP
+.B layout.nested(name, inner_layout) -> Layout
+Add a nested struct field.
+.TP
+.B layout.packed() -> Layout
+No padding between fields.
+.TP
+.B layout.big_endian() -> Layout
+.TQ
+.B layout.little_endian() -> Layout
+Set the byte order for integer and float fields.
+.TP
+.B layout.aligned(n) -> Layout
+Set minimum alignment.
+.PP
+Layout properties:
+.BR name() ,
+.BR size() ,
+.BR align() ,
+.BR is_big_endian() ,
+.BR fields() ,
+.BR offset_of(name) .
+.PP
+Reading and writing:
+.TP
+.B layout.read(data, offset) -> Value
+Read a struct from bytes at the given offset.
+.TP
+.B layout.from_bytes(data) -> Value
+Read a struct from the start of bytes.
+.TP
+.B layout.write(data, offset, value)
+Write a struct's fields into a byte buffer.
+.TP
+.B layout.to_bytes(value) -> bytes
+Serialize a value to bytes.
+.SS Struct attributes for layout
+.nf
+#[repr(C)]             // C layout (default)
+#[repr(packed)]        // no padding
+#[repr(align(8))]      // minimum alignment
+#[endian(Big)]         // byte order (Little by default)
+#[field(offset = 8)]   // explicit field offset
+#[field(size = 16)]    // fixed byte count (for bytes fields)
+.fi
+.SH EXAMPLES
+.nf
+use std::reflect;
+use std::io;
+
+struct Point { x: i64, y: i64 }
+
+fn main() {
+    let p = Point { x: 1, y: 2 };
+    io::println("fields: {}", reflect::fields(p));
+    io::println("x = {}", reflect::get(p, "x"));
+
+    let layout = reflect::layout::<Point>();
+    io::println("{}", layout);
+    let data = layout.to_bytes(p);
+    let p2 = layout.from_bytes(data);
+    io::println("round-trip: {}", p2);
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.any (7),
+.BR xur.std.mem (7)

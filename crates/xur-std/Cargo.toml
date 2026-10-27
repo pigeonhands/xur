@@ -19,6 +19,10 @@ facet.workspace = true
 pewter.workspace = true
 procodile.workspace = true
 bitflags.workspace = true
+hao.workspace = true
+hao-il2cpp.workspace = true
+hao-runtime.workspace = true
+iced-x86.workspace = true
 
 [dev-dependencies]
 xur-runtime = { workspace = true, features = ["testing"] }

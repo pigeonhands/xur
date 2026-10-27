@@ -1,0 +1,27 @@
+.TH XUR.STD.ANY 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.any \- runtime type introspection
+.SH SYNOPSIS
+.B use std::any;
+.SH DESCRIPTION
+.B std::any
+provides basic runtime type information.
+.SH FUNCTIONS
+.TP
+.B type_name::<T>() -> str
+Returns the name of
+.I T
+as a string.
+.SH EXAMPLES
+.nf
+use std::any;
+use std::io;
+
+fn main() {
+    io::println("{}", any::type_name::<i64>());
+    io::println("{}", any::type_name::<Option<str>>());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.reflect (7)

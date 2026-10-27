@@ -1,0 +1,94 @@
+.TH XUR 1 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur \- run and inspect Xur programs
+.SH SYNOPSIS
+.B xur run
+.RB [ \-\-no\-trace ]
+.I file
+.br
+.B xur debug tokens
+.I file
+.br
+.B xur debug ast
+.I file
+.br
+.B xur debug resolve
+.I file
+.br
+.B xur debug bytecode
+.I file
+.SH DESCRIPTION
+.B xur
+is the command-line interface for the Xur programming language, a
+dynamically-checked, expression-oriented language with Rust-like syntax.
+Programs are compiled to bytecode and run on Xur's virtual machine.
+.PP
+A program's entry point is a
+.B fn main()
+function, which may optionally return
+.BR Result<(),\ str> .
+When
+.B main
+returns an
+.BR Err ,
+.B xur
+prints the error message and exits with a non-zero status.
+.SH COMMANDS
+.TP
+.B run \fIfile\fR
+Compile and execute the program rooted at
+.IR file .
+Imports are resolved relative to the file's directory.
+.RS
+.TP
+.B \-\-no\-trace
+Suppress the chain of
+.B ?
+locations printed when an error propagates up to
+.BR main .
+.RE
+.TP
+.B debug tokens \fIfile\fR
+Print the token stream produced by the lexer, one token per line, with
+line:column, kind, and source text.
+.TP
+.B debug ast \fIfile\fR
+Print the syntax tree produced by the parser.
+.TP
+.B debug resolve \fIfile\fR
+Print what every name in the program resolves to after following imports.
+.TP
+.B debug bytecode \fIfile\fR
+Print the compiled bytecode of every function in the program.
+.SH EXAMPLES
+Run a program:
+.PP
+.RS
+.nf
+xur run example/main.xur
+.fi
+.RE
+.PP
+Inspect a file's tokens:
+.PP
+.RS
+.nf
+xur debug tokens example/main.xur
+.fi
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+The program ran successfully (or
+.B main
+returned
+.BR Ok ).
+.TP
+.B 1
+A compile error, runtime error, or
+.B Err
+from
+.BR main .
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.re (7)

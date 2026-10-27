@@ -13,7 +13,7 @@ use xur_runtime::registry::ModuleBuilder;
 /// submodule `submodule_of` gives it (`""` for `base` itself, `None` to
 /// skip — a type wrapped by hand, or not this library's), unless it is
 /// already registered or has no fields to show.
-pub(super) fn register(
+pub fn register(
     registry: &Registry,
     base: &mut ModuleBuilder<'_>,
     roots: &[&'static Shape],

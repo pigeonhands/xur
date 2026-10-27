@@ -1,0 +1,18 @@
+// Formatting instructions in different assembly syntaxes.
+//
+//     xur run example/re/asm/format.xur
+
+use std::io;
+use std::re::asm::x86;
+
+fn main() -> Result<(), str> {
+    let bytes = std::bytes::from_list([0x48, 0x89, 0x5C, 0x24, 0x08]);
+    let insns = x86::decode(64, bytes, 0);
+    let insn = insns[0];
+
+    io::println("masm:  {}", x86::format(insn));
+    io::println("intel: {}", x86::format(insn, "intel"));
+    io::println("nasm:  {}", x86::format(insn, "nasm"));
+    io::println("gas:   {}", x86::format(insn, "gas"));
+    Ok(())
+}

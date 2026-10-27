@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Executables live in top-level folders; their libraries in crates/.
-members = ["xur", "crates/*"]
+members = ["xur", "xur-stub", "crates/*"]
 default-members = ["xur"]
 
 [workspace.package]
@@ -30,7 +30,14 @@ ariadne = "0.5"
 clap = { version = "4.5", features = ["derive"] }
 facet = { version = "=0.50.0-rc.7", features = ["reflect"] }
 pewter = { version = "0.0.10", features = ["reflect"] }
-procodile = { version = "0.3.0", default-features = false, features = ["reflect", "inject"] }
+procodile = { version = "0.3.1", default-features = false, features = ["reflect", "inject"] }
 bitflags = "2.13"
+hao = { version = "0.0.7", features = ["reflect"] }
+hao-il2cpp = { version = "0.0.3", features = ["reflect"] }
+hao-runtime = { version = "0.0.3", features = ["reflect"] }
+hao-il2cpp-runtime = { version = "0.0.3", features = ["reflect"] }
+hao-il2cpp-unity = { version = "0.0.4", features = ["reflect"] }
+hao-godot = { version = "0.0.3", features = ["reflect"] }
+iced-x86 = "1.21"
 cranelift-jit = "0.137"
 cranelift-module = "0.137"

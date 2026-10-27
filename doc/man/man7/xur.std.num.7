@@ -1,0 +1,64 @@
+.TH XUR.STD.NUM 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.num \- integer and float methods
+.SH DESCRIPTION
+These are methods on integer and float values, available directly without
+importing a module.
+.SS Integer methods (i64)
+.TP
+.B abs() -> i64
+Absolute value.
+.TP
+.B pow(exp: u32) -> i64
+Raise to the power
+.IR exp .
+.TP
+.B min(other) -> i64
+The smaller of the two.
+.TP
+.B max(other) -> i64
+The larger of the two.
+.TP
+.B to_float() -> f64
+Convert to a float.
+.TP
+.B to_string() -> str
+Decimal string representation.
+.TP
+.B to_hex() -> str
+Lowercase hexadecimal string representation.
+.SS Float methods (f64)
+.TP
+.B abs() -> f64
+Absolute value.
+.TP
+.B sqrt() -> f64
+Square root.
+.TP
+.B floor() -> f64
+Round toward negative infinity.
+.TP
+.B ceil() -> f64
+Round toward positive infinity.
+.TP
+.B round() -> f64
+Round to the nearest integer (half away from zero).
+.TP
+.B to_int() -> i64
+Truncate to an integer.
+.TP
+.B to_string() -> str
+String representation.
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    io::println("{}", (-5).abs());
+    io::println("{}", 255.to_hex());
+    io::println("{}", 3.14.floor());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.math (7)

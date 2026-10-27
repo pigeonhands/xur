@@ -1,0 +1,30 @@
+// Listing the types and methods in a .NET assembly.
+//
+//     xur run example/re/dotnet/dump.xur
+//
+// Creates a small .NET module, writes it, reads it back, and dumps
+// every type with its fields and methods.
+
+use std::io;
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let module = dotnet::new("Example");
+    let bytes = module.write()?;
+    let loaded = dotnet::parse(bytes)?;
+
+    io::println("module: {} ({})", loaded.name(), loaded.runtime_version());
+
+    for ty in loaded.all_types() {
+        let vis = dotnet::type_attributes_names(ty.flags);
+        io::println("\ntype {} (flags: {})", ty.name, vis);
+
+        for field in ty.fields {
+            io::println("  field: {}", field.name);
+        }
+        for method in ty.methods {
+            io::println("  method: {}", method.name);
+        }
+    }
+    Ok(())
+}

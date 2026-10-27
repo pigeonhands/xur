@@ -1,0 +1,85 @@
+.TH XUR.STD.NET 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.net \- TCP, UDP and Unix-domain sockets
+.SH SYNOPSIS
+.B use std::net;
+.SH DESCRIPTION
+.B std::net
+provides networking with a text-oriented interface. All I/O operations
+return
+.BR Result .
+.SH TYPES
+.SS TcpListener
+.TP
+.B TcpListener::bind(address) -> Result<TcpListener, str>
+Bind a TCP listener to an address (e.g.\& "127.0.0.1:8080").
+.TP
+.B listener.accept() -> Result<(TcpStream, str), str>
+Accept a connection, returning the stream and the peer address.
+.TP
+.B listener.local_addr() -> Result<str, str>
+The listener's bound address.
+.SS TcpStream
+.TP
+.B TcpStream::connect(address) -> Result<TcpStream, str>
+Connect to a TCP server.
+.TP
+.B stream.write(text)
+Write a string to the stream.
+.TP
+.B stream.read_line() -> Result<str, str>
+Read one line from the stream.
+.TP
+.B stream.read(max) -> Result<str, str>
+Read up to
+.I max
+bytes and return them as a string.
+.TP
+.B stream.shutdown()
+Shut down both halves of the connection.
+.SS UdpSocket
+.TP
+.B UdpSocket::bind(address) -> Result<UdpSocket, str>
+Bind a UDP socket.
+.TP
+.B socket.send_to(text, address)
+Send a string as a datagram.
+.TP
+.B socket.recv_from(max) -> Result<(str, str), str>
+Receive a datagram, returning the text and the sender's address.
+.TP
+.B socket.local_addr() -> Result<str, str>
+The socket's bound address.
+.SS UnixListener (Unix only)
+.TP
+.B UnixListener::bind(path) -> Result<UnixListener, str>
+Bind a Unix-domain socket.
+.TP
+.B listener.accept() -> Result<UnixStream, str>
+Accept a connection.
+.SS UnixStream (Unix only)
+.TP
+.B UnixStream::connect(path) -> Result<UnixStream, str>
+Connect to a Unix-domain socket.
+.PP
+Unix streams have the same methods as TCP streams:
+.BR write ,
+.BR read_line ,
+.BR read ,
+.BR shutdown .
+.SH EXAMPLES
+.nf
+use std::net;
+use std::io;
+
+fn main() -> Result<(), str> {
+    let listener = net::TcpListener::bind("127.0.0.1:0")?;
+    io::println("listening on {}", listener.local_addr()?);
+    let (client, addr) = listener.accept()?;
+    io::println("connection from {}", addr);
+    client.write("hello\\n")?;
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

@@ -1,0 +1,273 @@
+.TH XUR.STD.RE 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.SH NAME
+xur.std.re \- Xur's reverse engineering standard library module
+.SH DESCRIPTION
+.B std::re
+is a toolkit for binary analysis, live process interaction, machine code
+disassembly, and .NET assembly manipulation. Each capability is backed by
+a dedicated Rust crate and exposed as a submodule.
+.SH MODULES
+.SS std::re (top level) \(em binary images via pewter
+Parse and construct PE and ELF binaries.
+.TP
+.B AnyImage::open(path)
+Open a PE or ELF file from disk; returns a parsed image.
+.TP
+.B AnyImage::load(bytes)
+Parse a binary image from a byte buffer.
+.PP
+Top-level also exposes export/import types:
+.BR ExportEntry ,
+.BR ExportLocation ,
+.BR ImportEntry .
+.SS std::re::pe \(em PE files via pewter
+Direct access to PE structures and construction of new PE images.
+.TP
+.B PEFile::open(path)
+Open a PE file. Fields such as
+.BR coff_header ,
+.BR optional_header ,
+.BR sections ,
+.BR imports ,
+.B exports
+are available through facet shapes.
+.TP
+.B ImageDef::new_dll(machine)
+.TQ
+.B ImageDef::new_exe(machine)
+Start building a new PE image.
+.TP
+.B section_flags(names)
+Convert a list of flag name strings to a section flags value.
+.SS std::re::elf \(em ELF files via pewter
+Access to ELF structures:
+.BR ElfFile::open(path) ,
+header fields, sections, segments, symbols.
+.SS std::re::proc \(em live processes via procodile
+Attach to and interact with running processes.
+.TP
+.B open(pid, access)
+Open a process handle.
+.I access
+is one of
+.BR \(dqread\(dq ,
+.BR \(dqwrite\(dq ,
+or
+.BR \(dqall\(dq .
+.TP
+.B handle.modules()
+List loaded modules (name, base address, size).
+.TP
+.B handle.read(address, size)
+Read bytes from process memory.
+.TP
+.B handle.write(address, bytes)
+Write bytes to process memory.
+.TP
+.B handle.inject(dll_path)
+Inject a DLL into the target process (requires the
+.B inject
+feature).
+.SS std::re::asm::x86 \(em x86 disassembly via iced\-x86
+Decode and format x86/x64 machine code.
+.TP
+.B decode(bitness, bytes, ip)
+Disassemble
+.I bytes
+at virtual address
+.IR ip .
+.I bitness
+is 16, 32, or 64.
+Returns a list of instruction objects with fields:
+.BR ip ,
+.BR len ,
+.BR mnemonic ,
+.BR op_count ,
+and formatting methods.
+.TP
+.B encode(bitness, instructions, ip)
+Assemble a list of instructions back to bytes.
+.SS std::re::dotnet \(em .NET assemblies via hao
+Read, construct, and write .NET (ECMA-335) assemblies.
+.SS std::re::dotnet::il2cpp \(em Unity Il2Cpp games via hao\-il2cpp
+Read type metadata from Unity Il2Cpp games and generate .NET proxy assemblies.
+.TP
+.B il2cpp::open(path)
+Open a game folder. Returns a
+.B Game
+with
+.BR types() ,
+.BR find_type() ,
+.BR write_assemblies() .
+.SS std::re::dotnet::runtime \(em .NET runtime hosting via hao\-runtime
+Start a .NET runtime (CoreCLR) and call into managed code.
+.TP
+.B runtime::coreclr()
+Start or get the running CoreCLR. Returns a
+.B Runtime
+with
+.BR load_assembly() ,
+.BR function_pointer() ,
+.BR method_pointer() .
+.PP
+.I Reading:
+.TP
+.B open(path)
+Open a .NET assembly file from disk.
+.TP
+.B parse(bytes)
+Parse a .NET assembly from a byte buffer.
+.TP
+.B module.all_types()
+List all type definitions. Each type has
+.BR name ,
+.BR namespace ,
+.BR methods ,
+.BR fields .
+.TP
+.B module.to_csharp()
+Decompile the module to a C# string representation.
+.PP
+.I Construction:
+.TP
+.B new(name, kind)
+Create a new module.
+.I kind
+is
+.B \(dqconsole\(dq
+or
+.BR \(dqdll\(dq .
+.TP
+.B module.add_assembly_ref(name)
+Add a reference to an external assembly.
+.TP
+.B module.import_method(asm, type, name, sig)
+Import a method from an assembly reference. Returns a member token.
+.TP
+.B module.corlib_type(ns, name)
+Get a type reference from the core library.
+.TP
+.B module.add_type(typedef)
+Add a constructed type definition to the module.
+.TP
+.B module.set_entry_point(method)
+Set the module's entry point method.
+.TP
+.B module.write()
+Serialize the module to bytes.
+.TP
+.B static_class(module, ns, name)
+Create a new static class type definition.
+.TP
+.B public_static_method(name, sig, body)
+Create a new public static method with the given signature and IL body.
+.TP
+.B add_method(typedef, method)
+Add a method to a type definition, returning a method token.
+.PP
+.I Type and method signatures (\fBdotnet::sig\fR):
+.TP
+.B void(), bool(), char(), int32(), int64(), float64(), string(), object(), intptr()
+Primitive type signatures.
+.TP
+.B sz_array(elem)
+Single-dimension zero-based array of
+.IR elem .
+.TP
+.B method_static(ret, params)
+.TQ
+.B method_instance(ret, params)
+Method signatures, taking a return type and a list of parameter types.
+.PP
+.I IL emitter (\fBdotnet::il\fR):
+.TP
+.B emitter()
+Create a new IL emitter.
+.TP
+.B e.ldstr(s), e.call(token), e.callvirt(token), e.newobj(token)
+Load a string literal, call a method, virtual call, or constructor call.
+.TP
+.B e.ldc_i4(n), e.ldarg(n), e.ldloc(n), e.stloc(n)
+Load an integer constant, load an argument, load/store a local.
+.TP
+.B e.ret(), e.pop(), e.dup(), e.ldnull()
+Return, pop, duplicate, or load null.
+.TP
+.B e.finish()
+Finalise the emitter and return a method body.
+.SH EXAMPLES
+Disassemble bytes:
+.PP
+.RS
+.nf
+use std::re::asm::x86;
+
+fn main() {
+    let code = b"\\x55\\x48\\x89\\xe5";
+    for insn in x86::decode(64, code, 0x1000) {
+        io::println("{}", insn);
+    }
+}
+.fi
+.RE
+.PP
+Read a .NET assembly:
+.PP
+.RS
+.nf
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let module = dotnet::open("Game.dll")?;
+    for ty in module.all_types() {
+        io::println("{}.{}", ty.namespace, ty.name);
+    }
+    Ok(())
+}
+.fi
+.RE
+.PP
+Construct a .NET console app:
+.PP
+.RS
+.nf
+use std::re::dotnet;
+
+fn main() -> Result<(), str> {
+    let sig = dotnet::sig;
+    let module = dotnet::new("Hello", "console");
+    module.add_assembly_ref("System.Console");
+    let wl = module.import_method(
+        "System.Console", "System.Console",
+        "WriteLine",
+        sig::method_static(sig::void(), [sig::string()])
+    )?;
+    let body = {
+        let e = dotnet::il::emitter();
+        e.ldstr("Hello from Xur!");
+        e.call(wl);
+        e.ldc_i4(0);
+        e.ret();
+        e.finish()
+    };
+    let main_sig = sig::method_static(
+        sig::int32(),
+        [sig::sz_array(sig::string())]
+    );
+    let m = dotnet::public_static_method("Main", main_sig, body);
+    let prog = dotnet::static_class(module, "Hello", "Program");
+    let entry = dotnet::add_method(prog, m);
+    module.add_type(prog);
+    module.set_entry_point(entry);
+    std::fs::write_bytes("hello.dll", module.write()?);
+    Ok(())
+}
+.fi
+.RE
+.SH SEE ALSO
+.BR xur (1),
+.BR xur.std (7),
+.BR xur.std.re.dotnet.il2cpp (7),
+.BR xur.std.re.dotnet.runtime (7),
+.BR xur.std.io (7),
+.BR xur.std.fs (7)
