@@ -1,9 +1,10 @@
 use std::io;
 use std::fs;
 use std::cli;
+use std::path;
 
-fn run_example(path: str) -> Result<()> {
-    let module = std::try_import(path)?;
+fn run_example(p: str) -> Result<()> {
+    let module = std::try_import(p)?;
     let main = module.get_method("main")?;
     main()
 }
@@ -27,10 +28,10 @@ fn main() -> Result<()> {
 
     let folder = cli::select("Pick a category:", folders);
 
-    let files = fs::read_dir("example/" + folder)?;
+    let files = fs::read_dir(path::join("example", folder))?;
     let examples = files.filter(|e| e.ends_with(".xur"));
 
     let file = cli::select("Pick an example:", examples);
 
-    run_example(folder + "/" + file)
+    run_example(path::join(folder, file))
 }
