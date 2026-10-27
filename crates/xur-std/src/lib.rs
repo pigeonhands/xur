@@ -16,6 +16,7 @@ mod list;
 mod math;
 mod net;
 mod num;
+mod path;
 mod process;
 pub mod re;
 mod reflect;
@@ -61,6 +62,7 @@ pub fn register(registry: &Registry) {
     bytes::register(registry);
     str::register(registry);
     num::register(registry);
+    path::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);
