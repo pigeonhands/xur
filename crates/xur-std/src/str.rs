@@ -28,12 +28,22 @@ pub(crate) fn register(registry: &Registry) {
             s.lines().map(str::to_owned).collect::<Vec<_>>()
         })
         .function("repeat", |s: String, n: u32| s.repeat(n as usize))
+        .function("pad_left", |s: String, width: usize, fill: String| {
+            pad_left(s, width, &fill)
+        })
         .function("parse_int", |s: String| {
             s.trim().parse::<i64>().map_err(|e| e.to_string())
         })
         .function("parse_float", |s: String| {
             s.trim().parse::<f64>().map_err(|e| e.to_string())
         });
+}
+
+/// `s` with `fill` repeated in front until it is `width` characters long.
+fn pad_left(s: String, width: usize, fill: &str) -> String {
+    let missing = width.saturating_sub(s.chars().count());
+    let padding: String = fill.chars().cycle().take(missing).collect();
+    padding + &s
 }
 
 #[cfg(test)]

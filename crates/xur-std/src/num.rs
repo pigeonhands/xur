@@ -10,7 +10,8 @@ pub(crate) fn register(registry: &Registry) {
         .function("min", |x: i64, y: i64| x.min(y))
         .function("max", |x: i64, y: i64| x.max(y))
         .function("to_float", |x: i64| x as f64)
-        .function("to_string", |x: i64| x.to_string());
+        .function("to_string", |x: i64| x.to_string())
+        .function("to_hex", |x: i64| format!("{x:x}"));
     registry
         .builtin(BuiltinType::Float)
         .function("abs", |x: f64| x.abs())

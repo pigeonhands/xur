@@ -5,6 +5,7 @@
 //! alongside it. Each submodule registers itself.
 
 mod any;
+mod bytes;
 mod fmt;
 mod fs;
 mod io;
@@ -39,6 +40,7 @@ pub fn register(registry: &Registry) {
     any::register(registry);
     math::register(registry);
     list::register(registry);
+    bytes::register(registry);
     str::register(registry);
     num::register(registry);
 }

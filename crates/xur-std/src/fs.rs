@@ -27,6 +27,10 @@ pub(crate) fn register(registry: &Registry) {
         .function("read_to_string", |path: String| {
             fs::read_to_string(path).map_err(error_text)
         })
+        .function("read", |path: String| fs::read(path).map_err(error_text))
+        .function("write_bytes", |path: String, data: Vec<u8>| {
+            fs::write(path, data).map_err(error_text)
+        })
         .function("write", |path: String, contents: String| {
             fs::write(path, contents).map_err(error_text)
         })

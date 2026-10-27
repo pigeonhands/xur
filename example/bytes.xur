@@ -1,0 +1,60 @@
+// Reading and writing binary data with `bytes`.
+//
+// Run it:
+//
+//     xur run example/bytes.xur
+//
+// It builds a small binary file format in memory, prints a hex dump of it,
+// patches a field in place and parses it back.
+
+// The format: the magic "XUR!", a u16 version, a u16 entry count, then each
+// entry as a little-endian u32.
+fn build(entries: [i64]) -> bytes {
+    let data = b"XUR!" + std::bytes::zeroed(4 + entries.len() * 4);
+    data.write_u16_le(4, 1);
+    data.write_u16_le(6, entries.len());
+    let offset = 8;
+    for entry in entries {
+        data.write_u32_le(offset, entry);
+        offset = offset + 4;
+    }
+    data
+}
+
+fn parse(data: bytes) -> Result<[i64], str> {
+    if !data.starts_with(b"XUR!") {
+        return Err("not a XUR! file");
+    }
+    let count = data.read_u16_le(6);
+    let entries = [];
+    for i in 0..count {
+        entries.push(data.read_u32_le(8 + i * 4));
+    }
+    Ok(entries)
+}
+
+// Prints `data` as rows of 16 bytes: the offset, then each byte in hex.
+fn hexdump(data: bytes) {
+    let offset = 0;
+    while offset < data.len() {
+        let end = std::math::min(offset + 16, data.len());
+        let row = [];
+        for byte in data[offset..end] {
+            row.push(byte.to_hex().pad_left(2, "0"));
+        }
+        std::io::println("{}  {}", offset.to_hex().pad_left(8, "0"), row.join(" "));
+        offset = offset + 16;
+    }
+}
+
+fn main() {
+    let data = build([0xdead, 0xbeef, 42]);
+    hexdump(data);
+
+    // `bytes` change in place: patch the last entry.
+    data.write_u32_le(8 + 2 * 4, 1337);
+    std::io::println("entries: {}", parse(data));
+
+    std::io::println("{}", parse(b"MZ\x90\x00"));
+    std::io::println("magic at {}", data.find(b"UR").unwrap());
+}

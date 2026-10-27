@@ -107,6 +107,12 @@ pub(crate) fn register(registry: &Registry) {
             lock(list).extend(others);
             Ok(Value::Unit)
         })
+        .function("to_hex", |bytes: Vec<u8>| {
+            bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        })
         .raw_function("join", |cx, args| {
             let (list, [Value::Str(separator)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`join` takes a separator string"));

@@ -260,6 +260,8 @@ fn files() {
             let file = std::fs::File::open(path).unwrap();
             std::io::println(\"{{}}\", file.read_to_string().unwrap().lines());
             std::io::println(\"{{}} {{}}\", std::fs::exists(path), std::fs::read_dir(dir).unwrap());
+            std::fs::write_bytes(path, b\"\\x00\\xff\").unwrap();
+            std::io::println(\"{{}}\", std::fs::read(path).unwrap());
             std::fs::remove(path).unwrap();
             std::io::println(\"{{}}\", std::fs::read_to_string(path).is_err());
         }}"
@@ -268,7 +270,7 @@ fn files() {
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         output,
-        Ok("[\"one\", \"two\"]\ntrue [\"notes.txt\"]\ntrue\n".into())
+        Ok("[\"one\", \"two\"]\ntrue [\"notes.txt\"]\nb\"\\x00\\xff\"\ntrue\n".into())
     );
 }
 
@@ -442,5 +444,46 @@ fn ranges_slice_lists_strings_and_tuples() {
     assert_eq!(
         run("fn main() { [1, 2][1..5]; }"),
         Err("range 1..5 is out of range for length 2".into())
+    );
+}
+
+#[test]
+fn bytes_methods() {
+    let src = "
+        fn main() {
+            let data = std::bytes::zeroed(8);
+            data.write_u32_le(0, 0xdeadbeef);
+            data.write_i16_be(4, -2);
+            std::io::println(\"{} {} {} {}\", data.to_hex(), data.read_u32_le(0).to_hex(), data.read_i16_be(4), data.read_u8(7));
+            std::io::println(\"{} {}\", std::bytes::from_hex(\"4d5a\").unwrap(), \"hi\".to_bytes().decode());
+            std::io::println(\"{}\", data.find(b\"\\xbe\\xad\"));
+            std::io::println(\"{} {}\", [0x4d, 0x5a].to_hex(), \"4d 5a\".from_hex());
+        }";
+    assert_eq!(
+        run(src),
+        Ok(
+            "efbeaddefffe0000 deadbeef -2 0\nb\"MZ\" Ok(\"hi\")\nSome(1)\n4d5a Ok(b\"MZ\")\n"
+                .into()
+        )
+    );
+    assert_eq!(
+        run("fn main() { b\"ab\".read_u32_le(0); }"),
+        Err("4 byte(s) at offset 0 are out of range for 2 byte(s)".into())
+    );
+    assert_eq!(
+        run("fn main() { std::bytes::zeroed(1).write_u8(0, 256); }"),
+        Err("256 does not fit in `u8`".into())
+    );
+}
+
+#[test]
+fn the_bytes_example_runs() {
+    let output = run_files(&[(
+        "example/bytes.xur",
+        include_str!("../../../example/bytes.xur"),
+    )]);
+    assert_eq!(
+        output,
+        Ok("00000000  58 55 52 21 01 00 03 00 ad de 00 00 ef be 00 00\n00000010  2a 00 00 00\nentries: Ok([57005, 48879, 1337])\nErr(\"not a XUR! file\")\nmagic at 1\n".into())
     );
 }

@@ -169,11 +169,21 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
     if let Some(scalar) = ScalarType::try_from_shape(shape) {
         return set_scalar(partial, scalar, value);
     }
+    // A `Vec<u8>` takes bytes, or a list of byte values.
     if shape == <Vec<u8>>::SHAPE {
-        return match value {
-            Value::Bytes(bytes) => partial.set(lock(bytes).clone()).map_err(reflect_error),
-            _ => Err(mismatch(shape, value)),
+        let bytes = match value {
+            Value::Bytes(bytes) => lock(bytes).clone(),
+            Value::List(items) => lock(items)
+                .iter()
+                .map(|item| match item {
+                    Value::Int(i) => u8::try_from(*i)
+                        .map_err(|_| RuntimeError::new(format!("{i} does not fit in `u8`"))),
+                    other => Err(mismatch(u8::SHAPE, other)),
+                })
+                .collect::<RunResult<_>>()?,
+            _ => return Err(mismatch(shape, value)),
         };
+        return partial.set(bytes).map_err(reflect_error);
     }
     let lang = cx.lang();
     match (&shape.def, value) {
