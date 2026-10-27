@@ -91,6 +91,17 @@ impl Kind {
         }
     }
 
+    fn from_rt_type(ty: &xur_resolve::RtType) -> Option<Self> {
+        use xur_resolve::RtType;
+        match ty {
+            RtType::Bool => Some(Self::Bool),
+            RtType::Float { name: "f32" } => Some(Self::Float { size: 4 }),
+            RtType::Float { .. } => Some(Self::Float { size: 8 }),
+            RtType::Int { name, .. } => Self::primitive(name),
+            _ => None,
+        }
+    }
+
     fn size(&self) -> usize {
         match self {
             Self::Int { size, .. } | Self::Float { size } | Self::Bytes(size) => *size,
@@ -116,6 +127,30 @@ impl Kind {
             Self::Bool => "bool".to_owned(),
             Self::Bytes(len) => format!("bytes[{len}]"),
             Self::Struct(layout) => layout.0.name.clone(),
+        }
+    }
+
+    fn to_rt_type(&self) -> xur_resolve::RtType {
+        use xur_resolve::RtType;
+        match self {
+            Self::Bool => RtType::Bool,
+            &Self::Float { size } => RtType::Float { name: if size <= 4 { "f32" } else { "f64" } },
+            &Self::Int { size, signed } => {
+                let (name, min, max): (&str, i64, i64) = match (size, signed) {
+                    (1, false) => ("u8", 0, u8::MAX as i64),
+                    (2, false) => ("u16", 0, u16::MAX as i64),
+                    (4, false) => ("u32", 0, u32::MAX as i64),
+                    (8, false) => ("u64", 0, i64::MAX),
+                    (1, true) => ("i8", i8::MIN as i64, i8::MAX as i64),
+                    (2, true) => ("i16", i16::MIN as i64, i16::MAX as i64),
+                    (4, true) => ("i32", i32::MIN as i64, i32::MAX as i64),
+                    (8, true) => ("i64", i64::MIN, i64::MAX),
+                    _ => ("i64", i64::MIN, i64::MAX),
+                };
+                RtType::Int { name, min, max }
+            }
+            Self::Bytes(_) => RtType::Bytes,
+            Self::Struct(_) => RtType::Any,
         }
     }
 }
@@ -337,7 +372,7 @@ impl Layout {
             .map(|field| {
                 let entries = [
                     ("name", Value::str(&field.name)),
-                    ("ty", Value::str(&field.kind.name())),
+                    ("ty", Value::Type(Box::new(field.kind.to_rt_type()))),
                     ("offset", Value::Int(field.offset as i64)),
                     ("size", Value::Int(field.kind.size() as i64)),
                 ];
@@ -578,24 +613,40 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             Ok(Value::Int(layout_arg(args)?.field(name)?.offset as i64))
         })
         .raw_function("field", |_, args| {
-            let [_, Value::Str(name), Value::Str(ty)] = args else {
-                return Err(RuntimeError::new(
-                    "`field` takes a name and a type: `field(\"len\", \"u16\")`",
-                ));
+            let (name, kind) = match args {
+                [_, Value::Str(name), Value::Type(ty)] => {
+                    let kind = Kind::from_rt_type(ty)
+                        .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
+                    (name, kind)
+                }
+                [_, Value::Str(name), Value::Str(ty)] => {
+                    let kind = Kind::primitive(ty)
+                        .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
+                    (name, kind)
+                }
+                _ => return Err(RuntimeError::new(
+                    "`field` takes a name and a type: `field(\"len\", u16)`",
+                )),
             };
-            let kind = Kind::primitive(ty)
-                .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
             add_field(args, name, kind, None)
         })
         .raw_function("field_at", |_, args| {
-            let [_, Value::Str(name), Value::Str(ty), Value::Int(at)] = args else {
-                return Err(RuntimeError::new(
+            let (name, kind, at) = match args {
+                [_, Value::Str(name), Value::Type(ty), Value::Int(at)] => {
+                    let kind = Kind::from_rt_type(ty)
+                        .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
+                    (name, kind, *at)
+                }
+                [_, Value::Str(name), Value::Str(ty), Value::Int(at)] => {
+                    let kind = Kind::primitive(ty)
+                        .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
+                    (name, kind, *at)
+                }
+                _ => return Err(RuntimeError::new(
                     "`field_at` takes a name, a type and an offset",
-                ));
+                )),
             };
-            let kind = Kind::primitive(ty)
-                .ok_or_else(|| RuntimeError::new(format!("`{ty}` is not a primitive type")))?;
-            add_field(args, name, kind, Some(usize_arg(*at)?))
+            add_field(args, name, kind, Some(usize_arg(at)?))
         })
         .raw_function("bytes", |_, args| {
             let [_, Value::Str(name), Value::Int(len)] = args else {

@@ -14,7 +14,7 @@ pub enum RtType {
     Bool,
     Str,
     Bytes,
-    Float,
+    Float { name: &'static str },
     /// An integer type, with the range its values must be in.
     Int {
         name: &'static str,
@@ -51,7 +51,7 @@ impl std::fmt::Display for RtType {
             Self::Bool => f.write_str("bool"),
             Self::Str => f.write_str("str"),
             Self::Bytes => f.write_str("bytes"),
-            Self::Float => f.write_str("float"),
+            Self::Float { name } => f.write_str(name),
             Self::Int { name, .. } => f.write_str(name),
             Self::Tuple(tys) => {
                 let tys: Vec<_> = tys.iter().map(ToString::to_string).collect();

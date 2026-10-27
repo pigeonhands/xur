@@ -62,8 +62,8 @@ fn main() -> Result<()> {
 
     // Runtime-built layout with record literals.
     let pair_layout = reflect::Layout::new("Pair")
-        .field("x", "i32")
-        .field("y", "i32");
+        .field("x", i32)
+        .field("y", i32);
 
     let pair_bytes = pair_layout.to_bytes(@{ x: 42, y: -1 });
     let pair = pair_layout.from_bytes(pair_bytes);

@@ -83,7 +83,7 @@ fn main() -> Result<()> {
     }
 
     // A layout described at runtime, e.g. from a format specification.
-    let spec = [("id", "u16"), ("score", "f32"), ("alive", "bool")];
+    let spec = [("id", u16), ("score", f32), ("alive", bool)];
     let record = reflect::Layout::new("Record");
     for (name, ty) in spec {
         record = record.field(name, ty);
