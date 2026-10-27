@@ -79,6 +79,10 @@ impl ItemIndex {
                 data: VariantData::Struct(fields),
                 ..
             } => Some(fields),
+            ItemRef::Ctor {
+                data: VariantData::Unit,
+                ..
+            } => Some(&[]),
             _ => None,
         }
     }
