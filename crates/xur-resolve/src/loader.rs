@@ -166,7 +166,10 @@ impl Loader {
         let first = self.add_module(krate, path, src, diags);
         let mut pending = vec![first];
         while let Some(idx) = pending.pop() {
-            for import in find_imports(krate.module(idx)) {
+            for mut import in find_imports(krate.module(idx)) {
+                if import.path.is_dir() {
+                    import.path = import.path.join("lib.xur");
+                }
                 let target = match self.loaded(&import.path) {
                     Some(loaded) => loaded,
                     None => match self.read(&import.path) {
@@ -235,8 +238,15 @@ fn find_imports(module: &LoadedModule) -> Vec<Import> {
 }
 
 /// A module is named after its file: `math` for `lib/math.xur`.
+/// A `lib.xur` is named after its parent folder: `my_plugin` for
+/// `my_plugin/lib.xur`.
 pub(crate) fn module_name(path: &Path) -> Symbol {
     let stem = path.file_stem().unwrap_or(path.as_os_str());
+    if stem == "lib" {
+        if let Some(parent) = path.parent().and_then(|p| p.file_name()) {
+            return Symbol::intern(&parent.to_string_lossy());
+        }
+    }
     Symbol::intern(&stem.to_string_lossy())
 }
 

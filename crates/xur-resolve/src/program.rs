@@ -75,7 +75,10 @@ impl Program {
     /// Fails if `path` cannot be read. Diagnostics are for the newly loaded
     /// modules only.
     pub fn import(&mut self, path: &Path) -> io::Result<(ModuleIdx, Vec<Diag>)> {
-        let path = normalize(path);
+        let mut path = normalize(path);
+        if path.is_dir() {
+            path = path.join("lib.xur");
+        }
         if let Some(loaded) = self.loader.loaded(&path) {
             return Ok((loaded, Vec::new()));
         }

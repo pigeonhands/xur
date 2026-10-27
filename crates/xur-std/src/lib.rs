@@ -38,6 +38,7 @@ pub fn register(registry: &Registry) {
     registry
         .module("std")
         .raw_function("import", import)
+        .raw_function("try_import", try_import)
         .raw_function("panic", panic);
     registry
         .module("std::fmt")
@@ -66,6 +67,23 @@ fn import(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         [Value::Str(path)] => cx.import(path),
         _ => Err(RuntimeError::new(
             "`std::import` takes a single path string",
+        )),
+    }
+}
+
+/// `std::try_import(path)`: like `import`, but returns `Result<module, str>`
+/// instead of stopping the program.
+fn try_import(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    match args {
+        [Value::Str(path)] => {
+            let lang = *cx.lang();
+            match cx.import(path) {
+                Ok(module) => Ok(Value::adt(lang.ok, vec![module])),
+                Err(error) => Ok(Value::adt(lang.err, vec![Value::str(&error.message)])),
+            }
+        }
+        _ => Err(RuntimeError::new(
+            "`std::try_import` takes a single path string",
         )),
     }
 }

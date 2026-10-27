@@ -25,7 +25,7 @@ impl Context for Interp<'_> {
     /// Loads a module at runtime. A relative path is relative to the file
     /// of the module whose code is running.
     fn import(&mut self, path: &str) -> RunResult<Value> {
-        let path = {
+        let mut path = {
             let program = self.shared.program();
             let dir = self
                 .module
@@ -34,6 +34,9 @@ impl Context for Interp<'_> {
                 .to_owned();
             dir.join(path)
         };
+        if path.is_dir() {
+            path = path.join("lib.xur");
+        }
         let (module, diags) = self.shared.program_mut().import(&path).map_err(|error| {
             RuntimeError::new(format!("couldn't import `{}`: {error}", path.display()))
         })?;
