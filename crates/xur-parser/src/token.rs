@@ -29,6 +29,7 @@ pub enum Keyword {
     Match,
     True,
     False,
+    Is,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

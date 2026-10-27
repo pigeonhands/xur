@@ -256,6 +256,10 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
             visitor.visit_expr(expr);
             visitor.visit_ty(ty);
         }
+        ExprKind::Is(expr, pat) => {
+            visitor.visit_expr(expr);
+            visitor.visit_pat(pat);
+        }
         ExprKind::Break(value) | ExprKind::Ret(value) => {
             if let Some(value) = value {
                 visitor.visit_expr(value);

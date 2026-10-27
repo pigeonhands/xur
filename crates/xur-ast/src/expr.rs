@@ -95,6 +95,8 @@ pub enum ExprKind {
     Ret(Option<Box<Expr>>),
     /// `expr as Type`
     Cast(Box<Expr>, Ty),
+    /// `expr is Pattern`
+    Is(Box<Expr>, Box<Pat>),
     /// An expression that failed to parse; the error has already been reported.
     Err,
 }

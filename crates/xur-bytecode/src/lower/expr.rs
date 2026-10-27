@@ -166,6 +166,32 @@ impl Lowerer<'_> {
                 self.switch_to(dead);
                 self.unit(span)
             }
+            ExprKind::Is(inner, pat) => {
+                let value = self.expr(inner);
+                let dst = self.new_reg();
+                let fail = self.new_block();
+                let join = self.new_block();
+                self.pat(pat, value, fail);
+                self.emit(
+                    InstKind::Const {
+                        dst,
+                        value: Constant::Bool(true),
+                    },
+                    span,
+                );
+                self.terminate(Terminator::Goto(join), span);
+                self.switch_to(fail);
+                self.emit(
+                    InstKind::Const {
+                        dst,
+                        value: Constant::Bool(false),
+                    },
+                    span,
+                );
+                self.terminate(Terminator::Goto(join), span);
+                self.switch_to(join);
+                dst
+            }
             ExprKind::Cast(inner, ty) => {
                 let src = self.expr(inner);
                 let dst = self.new_reg();

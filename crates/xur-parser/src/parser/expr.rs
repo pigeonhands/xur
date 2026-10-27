@@ -302,6 +302,9 @@ impl Parser<'_> {
             } else if self.eat(TokenKind::Keyword(Keyword::As)) {
                 let ty = self.parse_ty()?;
                 ExprKind::Cast(Box::new(expr), ty)
+            } else if self.eat(TokenKind::Keyword(Keyword::Is)) {
+                let pat = self.parse_pat()?;
+                ExprKind::Is(Box::new(expr), Box::new(pat))
             } else {
                 return Ok(expr);
             };
