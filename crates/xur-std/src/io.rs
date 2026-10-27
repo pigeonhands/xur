@@ -1,5 +1,7 @@
 //! `std::io`: printing.
 
+use std::io::Write;
+
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 use crate::fmt::format;
@@ -8,7 +10,9 @@ pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::io")
         .raw_function("print", |cx, args| print(cx, args, ""))
-        .raw_function("println", |cx, args| print(cx, args, "\n"));
+        .raw_function("println", |cx, args| print(cx, args, "\n"))
+        .raw_function("eprint", |cx, args| eprint(cx, args, ""))
+        .raw_function("eprintln", |cx, args| eprint(cx, args, "\n"));
 }
 
 /// `print(format, args...)`: each `{}` in `format` is replaced by the next
@@ -22,6 +26,20 @@ fn print(cx: &mut dyn Context, args: &[Value], end: &str) -> RunResult<Value> {
     let mut text = format(cx, template, args)?;
     text.push_str(end);
     cx.print(&text)?;
+    Ok(Value::Unit)
+}
+
+fn eprint(cx: &mut dyn Context, args: &[Value], end: &str) -> RunResult<Value> {
+    let Some((Value::Str(template), args)) = args.split_first() else {
+        return Err(RuntimeError::new(
+            "expected a format string as the first argument",
+        ));
+    };
+    let mut text = format(cx, template, args)?;
+    text.push_str(end);
+    std::io::stderr()
+        .write_all(text.as_bytes())
+        .map_err(|e| RuntimeError::new(e.to_string()))?;
     Ok(Value::Unit)
 }
 
