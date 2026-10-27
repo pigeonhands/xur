@@ -47,6 +47,11 @@ fn fmt_name(name: str) -> str {
     }
 }
 
+fn folder_of(name: str) -> str {
+    let parts = name.split("/");
+    if parts.len() >= 2 { parts[0] } else { "" }
+}
+
 fn test_all() {
     let examples = all_examples();
     let (tx, rx) = sync::channel();
@@ -76,40 +81,80 @@ fn test_all() {
         });
     }
 
-    let passed = 0;
-    let failed = 0;
-    let skipped = 0;
+    let results = [];
+    let total_passed = 0;
+    let total_failed = 0;
+    let total_skipped = 0;
+
     for _ in examples {
-        match rx.recv().unwrap() {
-            ExampleResult::Skipped(name, reason) => {
-                io::println("  {} {}: {}", io::yellow("skip"), fmt_name(name), io::dim(reason));
-                skipped = skipped + 1;
-            }
-            ExampleResult::Passed(name) => {
-                io::println("  {}   {}", io::green("ok"), fmt_name(name));
-                passed = passed + 1;
-            }
-            ExampleResult::Failed(name, err) => {
-                io::println("  {} {}: {}", io::red("FAIL"), fmt_name(name), err);
-                failed = failed + 1;
-            }
+        let r = rx.recv().unwrap();
+        results = results + [r];
+        match r {
+            ExampleResult::Passed(_) => total_passed = total_passed + 1,
+            ExampleResult::Failed(_, _) => total_failed = total_failed + 1,
+            ExampleResult::Skipped(_, _) => total_skipped = total_skipped + 1,
         }
     }
 
-    io::println("");
+    // Build per-folder rows and detail lines.
+    let folders = #{};
+    let failures = [];
+    for r in results {
+        let name = match r {
+            ExampleResult::Passed(n) => n,
+            ExampleResult::Failed(n, _) => n,
+            ExampleResult::Skipped(n, _) => n,
+        };
+        let folder = folder_of(name);
+        if !folders.contains_key(folder) {
+            folders[folder] = #{ "pass": 0, "fail": 0, "skip": 0 };
+        }
+        let counts = folders[folder];
+        match r {
+            ExampleResult::Passed(_) => counts["pass"] = counts["pass"] + 1,
+            ExampleResult::Failed(_, err) => {
+                counts["fail"] = counts["fail"] + 1;
+                failures = failures + [std::fmt::format("  {} {}: {}", io::red("FAIL"), fmt_name(name), err)];
+            }
+            ExampleResult::Skipped(_, _) => counts["skip"] = counts["skip"] + 1,
+        }
+    }
+
+    // Print failures first so the table is the last thing visible.
+    for line in failures {
+        io::println("{}", line);
+    }
+    if failures.len() > 0 {
+        io::println("");
+    }
+
+    // Build table rows: one per folder.
+    let rows = [];
+    for entry in folders.entries() {
+        let (folder, counts) = entry;
+        let p = counts["pass"];
+        let f = counts["fail"];
+        let s = counts["skip"];
+        let pass_str = if p > 0 { io::green(p.to_string()) } else { io::dim("0") };
+        let fail_str = if f > 0 { io::red(f.to_string()) } else { io::dim("0") };
+        let skip_str = if s > 0 { io::yellow(s.to_string()) } else { io::dim("0") };
+        rows = rows + [[io::bold(folder), pass_str, fail_str, skip_str]];
+    }
+    rows = rows + [[
+        io::bold("total"),
+        io::green(total_passed.to_string()),
+        if total_failed > 0 { io::red(total_failed.to_string()) } else { io::dim("0") },
+        if total_skipped > 0 { io::yellow(total_skipped.to_string()) } else { io::dim("0") },
+    ]];
+
     let summary = cli::table(
-        ["", "Count"],
-        [
-            [io::green("Passed"), passed.to_string()],
-            [io::red("Failed"), failed.to_string()],
-            [io::yellow("Skipped"), skipped.to_string()],
-            [io::bold("Total"), total.to_string()],
-        ],
+        ["", io::green("Pass"), io::red("Fail"), io::yellow("Skip")],
+        rows,
     );
     io::println("{}", summary);
 
-    if failed > 0 {
-        std::panic("{} example(s) failed", failed);
+    if total_failed > 0 {
+        std::panic("{} example(s) failed", total_failed);
     }
 }
 
