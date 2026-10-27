@@ -59,6 +59,18 @@ impl ItemIndex {
         self.items.get(&def).copied()
     }
 
+    /// The fields of the struct or variant `def`, named or positional, in
+    /// declaration order, or `None` if `def` has no fields.
+    pub fn fields(&self, def: DefId) -> Option<&'static [FieldDef]> {
+        match self.get(def)? {
+            ItemRef::Ctor {
+                data: VariantData::Struct(fields) | VariantData::Tuple(fields),
+                ..
+            } => Some(fields),
+            _ => None,
+        }
+    }
+
     /// The named fields of the struct or variant `def`, in declaration
     /// order, or `None` if it has no named fields.
     pub fn named_fields(&self, def: DefId) -> Option<&'static [FieldDef]> {

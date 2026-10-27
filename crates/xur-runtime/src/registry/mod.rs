@@ -368,8 +368,13 @@ impl Registry {
     }
 
     /// Formats a native object with its `Display`, or else `Debug`.
+    /// A native object's `Display`, or its Xur type name in angle brackets
+    /// when the Rust type has no `Display` (`<AnyImage>`), rather than a
+    /// debug dump.
     pub fn display(&self, object: &NativeObject) -> String {
-        object.with_any(self.hooks(object.ty).display)
+        object
+            .with_any(self.hooks(object.ty).display)
+            .unwrap_or_else(|| format!("<{}>", self.type_name(object.ty)))
     }
 
     /// Whether two native objects are equal by their Rust `PartialEq`.

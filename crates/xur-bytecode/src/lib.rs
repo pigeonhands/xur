@@ -17,7 +17,7 @@ pub use ir::{
 };
 pub use items::{ItemIndex, ItemRef};
 pub use lower::lower;
-pub use types::{type_def, type_name};
+pub use types::{rt_type, type_def, type_name};
 
 #[cfg(test)]
 mod tests;

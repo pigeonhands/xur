@@ -940,3 +940,45 @@ fn main_may_return_a_result() {
     "#;
     assert_eq!(run(src), Err("main returned an error: boom".into()));
 }
+
+#[test]
+fn field_assignment_checks_the_declared_type() {
+    let src = "struct P { x: u8, y: i64 } fn main() { let p = P { x: 1, y: 2 }; p.x = 5; p.y = p.x; std::io::println(\"{}\", p); }";
+    assert_eq!(run(src), Ok("P { x: 5, y: 5 }\n".into()));
+    let bad = "struct P { x: u8 } fn main() { let p = P { x: 1 }; p.x = 300; }";
+    assert_eq!(run(bad), Err("expected `u8`, found 300".into()));
+    // `reflect::set` goes through the same check.
+    let reflect = "struct P { x: u8 } fn main() { std::reflect::set(P { x: 1 }, \"x\", 300); }";
+    assert_eq!(run(reflect), Err("expected `u8`, found 300".into()));
+    // An untyped or generic field is never checked.
+    let loose = "struct P { x: _ } fn main() { let p = P { x: 1 }; p.x = \"now a string\"; std::io::println(\"{}\", p); }";
+    assert_eq!(run(loose), Ok("P { x: \"now a string\" }\n".into()));
+}
+
+#[test]
+fn struct_patterns_on_rust_types_must_name_every_field() {
+    let whole = "use std::re::pe::ImageDataDirectory;
+        fn main() {
+            let d = ImageDataDirectory { virtual_address: 16, size: 8 };
+            let io = std::io;
+            match d { ImageDataDirectory { virtual_address, size } => io::println(\"{} {}\", virtual_address, size) }
+            match d { ImageDataDirectory { virtual_address, .. } => io::println(\"{}\", virtual_address) }
+            match d {
+                ImageDataDirectory { virtual_address } => io::println(\"no\"),
+                _ => io::println(\"needs all fields\"),
+            }
+        }";
+    assert_eq!(run(whole), Ok("16 8\n16\nneeds all fields\n".into()));
+    let dup = "use std::re::pe::ImageDataDirectory;
+        fn main() { let d = ImageDataDirectory { virtual_address: 1, size: 2 }; match d { ImageDataDirectory { size: a, size: b } => 1 }; }";
+    assert_eq!(run(dup), Err("field `size` bound more than once".into()));
+}
+
+#[test]
+fn native_objects_without_display_show_their_type_name() {
+    let src = "fn main() {
+            let data = std::re::pe::ImageDef::new_dll(std::re::pe::ImageFileMachine::Amd64).write().unwrap();
+            std::io::println(\"{}\", std::re::pe::PEFile::parse(data).unwrap());
+        }";
+    assert_eq!(run(src), Ok("<PEFile>\n".into()));
+}

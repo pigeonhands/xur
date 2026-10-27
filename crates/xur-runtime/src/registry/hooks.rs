@@ -18,7 +18,7 @@ pub(super) struct TypeHooks {
     pub(super) set: fn(Builder, &dyn Any) -> RunResult<Builder>,
     /// Reads a field by name.
     pub(super) field: fn(&dyn ConvertCx, &dyn Any, &str) -> Option<RunResult<Value>>,
-    pub(super) display: fn(&dyn Any) -> String,
+    pub(super) display: fn(&dyn Any) -> Option<String>,
     pub(super) eq: fn(&dyn Any, &dyn Any) -> bool,
 }
 
@@ -81,16 +81,20 @@ fn field<T: Facet<'static>>(
     Some(peek_to_value(cx, field))
 }
 
-/// Uses `Display`, or `Debug` if the type has no `Display`.
-fn display<T: Facet<'static>>(value: &dyn Any) -> String {
+/// The value's `Display`, or its `Debug`, or `None` when the type has
+/// neither (an opaque type), so the caller can fall back to its Xur name
+/// rather than facet's `⟨Type⟩` placeholder.
+fn display<T: Facet<'static>>(value: &dyn Any) -> Option<String> {
     let peek = Peek::new(downcast::<T>(value));
+    let placeholder = format!("⟨{}⟩", T::SHAPE);
+    // Without a `Display`, a peek's `Display` is the `⟨Type⟩` placeholder.
     let displayed = peek.to_string();
-    // Without a `Display`, a peek shows the type name as `⟨Type⟩`.
-    if displayed == format!("⟨{}⟩", T::SHAPE) {
-        format!("{peek:?}")
-    } else {
-        displayed
+    if displayed != placeholder {
+        return Some(displayed);
     }
+    // Fall back to `Debug`, which is the same placeholder when absent.
+    let debugged = format!("{peek:?}");
+    (debugged != placeholder).then_some(debugged)
 }
 
 fn eq<T: Facet<'static>>(a: &dyn Any, b: &dyn Any) -> bool {

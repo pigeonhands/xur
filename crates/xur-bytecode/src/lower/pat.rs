@@ -80,7 +80,24 @@ impl Lowerer<'_> {
                 self.pat_path(path, value, fail);
                 if self.is_native_ctor(path) {
                     // The VM finds the fields by name; a field the record
-                    // lacks makes the pattern a runtime error.
+                    // lacks makes the pattern a runtime error. Without `..`,
+                    // the pattern must name every field, which the record's
+                    // arity tells us at runtime since its fields aren't
+                    // known while lowering.
+                    self.reject_duplicate_fields(fields);
+                    if !*rest {
+                        let is = self.new_reg();
+                        let len = fields.len() as u32;
+                        self.emit(
+                            InstKind::RecordArity {
+                                dst: is,
+                                value,
+                                len,
+                            },
+                            span,
+                        );
+                        self.test(is, fail, span);
+                    }
                     for field in fields {
                         self.pat_record_field(field.ident.name, &field.pat, value, fail);
                     }
@@ -248,6 +265,21 @@ impl Lowerer<'_> {
             span,
         );
         self.test(is, fail, span);
+    }
+
+    /// Reports fields named more than once in a struct pattern.
+    fn reject_duplicate_fields(&mut self, fields: &[PatField]) {
+        for (i, field) in fields.iter().enumerate() {
+            if fields[..i]
+                .iter()
+                .any(|earlier| earlier.ident.name == field.ident.name)
+            {
+                self.error(
+                    format!("field `{}` bound more than once", field.ident),
+                    field.span,
+                );
+            }
+        }
     }
 
     fn pat_record_field(&mut self, name: Symbol, pat: &Pat, value: Reg, fail: BlockId) {

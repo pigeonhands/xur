@@ -258,6 +258,13 @@ pub enum InstKind {
         ty: NativeTypeId,
         variant: Option<Symbol>,
     },
+    /// Whether `value` is a record with exactly `len` fields: a struct
+    /// pattern without `..` must name them all.
+    RecordArity {
+        dst: Reg,
+        value: Reg,
+        len: u32,
+    },
     /// Whether `value` is a tuple of `len` elements.
     IsTuple {
         dst: Reg,

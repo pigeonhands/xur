@@ -138,6 +138,9 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             ty,
             variant,
         } => format!("{dst:?} = {value:?} is {}", record_name(*ty, *variant)),
+        InstKind::RecordArity { dst, value, len } => {
+            format!("{dst:?} = {value:?} is record of {len}")
+        }
         InstKind::IsTuple { dst, value, len } => format!("{dst:?} = {value:?} is tuple of {len}"),
         InstKind::Project { dst, value, index } => format!("{dst:?} = {value:?}.{index}"),
         InstKind::IterStart { dst, iterable } => format!("{dst:?} = iter {iterable:?}"),

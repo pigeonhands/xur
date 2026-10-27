@@ -135,6 +135,16 @@ impl Shared {
         )
     }
 
+    /// The runtime check for the declared type of field `index` of the
+    /// struct or variant `ctor`, if it is written and concrete. Used to
+    /// check assignments to a field, as a struct literal checks its fields.
+    fn field_type(&self, ctor: DefId, index: usize) -> Option<xur_bytecode::RtType> {
+        let items = self.items.read().unwrap_or_else(PoisonError::into_inner);
+        let ty = &items.fields(ctor)?.get(index)?.ty;
+        let program = self.program();
+        xur_bytecode::rt_type(program.resolutions(), ty)
+    }
+
     /// The bytecode of the function or constant `def`, lowered on first use.
     fn code(&self, def: DefId) -> RunResult<Arc<Function>> {
         if let Some(function) = self

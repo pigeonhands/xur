@@ -362,6 +362,13 @@ impl<'s> Interp<'s> {
                 );
                 frame.set(*dst, Value::Bool(is));
             }
+            InstKind::RecordArity { dst, value, len } => {
+                let is = matches!(
+                    frame.get(*value),
+                    Value::Record(record) if record.fields.len() == *len as usize
+                );
+                frame.set(*dst, Value::Bool(is));
+            }
             InstKind::IsTuple { dst, value, len } => {
                 let is = matches!(frame.get(*value), Value::Tuple(items) if items.len() == *len as usize);
                 frame.set(*dst, Value::Bool(is));

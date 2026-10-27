@@ -163,6 +163,11 @@ impl Interp<'_> {
                 .filter(|&i| i < adt.fields.len()),
         }
         .ok_or_else(missing)?;
+        // Check the new value against the field's declared type, as a struct
+        // literal checks the fields it is built with.
+        if let Some(ty) = self.shared.field_type(adt.ctor, index) {
+            self.check_type(&value, &ty)?;
+        }
         let mut fields = adt.fields.clone();
         fields[index] = value;
         Ok(Value::adt(adt.ctor, fields))
