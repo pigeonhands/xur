@@ -919,3 +919,24 @@ fn any_image_gives_the_file_inside() {
         Ok("pe 32-bit ImageFileMachine::I386 None\n".into())
     );
 }
+
+#[test]
+fn main_may_return_a_result() {
+    // `Ok` and plain values succeed with no output.
+    assert_eq!(
+        run("fn main() -> Result<i64, str> { Ok(7) }"),
+        Ok(String::new())
+    );
+    assert_eq!(run("fn main() { 1 + 1; }"), Ok(String::new()));
+    // `Err` from `main` fails the program, showing the error's value.
+    let src = r#"
+        fn bad() -> Result<i64, str> { Err("boom") }
+        fn main() -> Result<(), str> {
+            std::io::println("before");
+            bad()?;
+            std::io::println("after");
+            Ok(())
+        }
+    "#;
+    assert_eq!(run(src), Err("main returned an error: boom".into()));
+}

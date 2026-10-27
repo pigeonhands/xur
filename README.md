@@ -135,6 +135,17 @@ match average(10, 0) {
 }
 ```
 
+`main` may return a `Result` too: an `Err` prints its value and the program
+exits non-zero, like Rust's.
+
+```rust
+fn main() -> Result<(), str> {
+    let config = std::fs::read_to_string("config.txt")?;
+    std::io::println("{}", config);
+    Ok(())
+}
+```
+
 ### Lists and closures
 
 Lists are shared and change in place, like Python's. Closures capture the
