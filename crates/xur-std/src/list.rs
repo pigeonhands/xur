@@ -113,6 +113,32 @@ pub(crate) fn register(registry: &Registry) {
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>()
         })
+        .raw_function("map", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut result = Vec::with_capacity(items.len());
+            for item in items {
+                result.push(cx.call(f, vec![item])?);
+            }
+            Ok(Value::list(result))
+        })
+        .raw_function("filter", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut result = Vec::new();
+            for item in items {
+                match cx.call(f, vec![item.clone()])? {
+                    Value::Bool(true) => result.push(item),
+                    Value::Bool(false) => {}
+                    _ => return Err(RuntimeError::new("filter predicate must return a bool")),
+                }
+            }
+            Ok(Value::list(result))
+        })
         .raw_function("join", |cx, args| {
             let (list, [Value::Str(separator)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`join` takes a separator string"));
