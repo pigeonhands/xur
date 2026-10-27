@@ -150,6 +150,9 @@ impl<'s> Interp<'s> {
             )));
         }
         if !function.type_params.is_empty() {
+            if type_args.len() < function.type_params.len() {
+                self.infer_type_args(function, &args, &mut type_args);
+            }
             for (i, required) in function.type_param_required.iter().enumerate() {
                 if *required {
                     let is_concrete = type_args
@@ -162,9 +165,6 @@ impl<'s> Interp<'s> {
                         )));
                     }
                 }
-            }
-            if type_args.len() < function.type_params.len() {
-                self.infer_type_args(function, &args, &mut type_args);
             }
             self.check_generic_args(function, &mut args, &type_args)?;
         }

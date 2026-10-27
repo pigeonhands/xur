@@ -99,9 +99,19 @@ fn main() {
     needs_type::<MyType>(MyType { num: 1 });
     io::println("");
 
-    // Should fail: T! requires explicit type arg
-    //needs_type(MyType { num: 2 });
+    io::println("inferred explicit type:");
+    needs_type(MyType { num: 1 });
+    io::println("");
 
+
+    // Should fail: T! requires explicit type arg
+    //needs_type::<_>(MyType { num: 1 });
+
+    // Should fail: T! requires explicit type arg
+    //needs_type::<@>(MyType { num: 1 });
+
+    // Doesn't fail — print_two_types_one_generic doesn't use T!
+    // so _ just erases the type
     io::println("erased generics:");
     print_two_types_one_generic::<_>(my_type, MyZst);
     io::println("");
