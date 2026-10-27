@@ -20,12 +20,12 @@ facet.workspace = true
 hao-il2cpp-runtime = { workspace = true, optional = true }
 hao-il2cpp-unity = { workspace = true, optional = true }
 hao-godot = { workspace = true, optional = true }
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 default = ["il2cpp-runtime", "il2cpp-unity", "godot"]
 il2cpp-runtime = ["dep:hao-il2cpp-runtime"]
 il2cpp-unity = ["dep:hao-il2cpp-unity"]
 godot = ["dep:hao-godot"]
-egui = ["hao-il2cpp-unity/egui", "dep:tracing", "dep:tracing-subscriber"]
+egui = ["hao-il2cpp-unity/egui"]

@@ -10,31 +10,13 @@ use xur_vm::Vm;
 
 #[cfg(feature = "egui")]
 mod egui_module;
+mod tracing_module;
 
 const STACK_SIZE: usize = 256 << 20;
 const LOG_PATH: &str = "/tmp/xur-stub.log";
 
 fn init_logging() {
-    // Truncate the log file so each run starts fresh.
     let _ = std::fs::write(LOG_PATH, b"");
-
-    #[cfg(feature = "egui")]
-    {
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(LOG_PATH)
-            .ok();
-        if let Some(file) = file {
-            let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into());
-            let _ = tracing_subscriber::fmt()
-                .with_env_filter(filter)
-                .with_writer(std::sync::Mutex::new(file))
-                .with_ansi(false)
-                .try_init();
-        }
-    }
 }
 
 fn log(msg: std::fmt::Arguments<'_>) {
@@ -42,6 +24,7 @@ fn log(msg: std::fmt::Arguments<'_>) {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(LOG_PATH) {
         let _ = writeln!(f, "[xur-stub] {msg}");
     }
+    tracing::info!("{msg}");
     eprintln!("[xur-stub] {msg}");
 }
 
@@ -53,6 +36,7 @@ struct Script {
 
 #[ctor::ctor]
 fn init() {
+    xur_std::set_invoked_by("stub");
     init_logging();
     log(format_args!("init"));
 
@@ -143,7 +127,14 @@ fn run_main(script: &Script) -> Result<(), String> {
         thread::Builder::new()
             .name(script.path.display().to_string())
             .stack_size(STACK_SIZE)
-            .spawn_scoped(scope, || script.vm.run_main())
+            .spawn_scoped(scope, || {
+                // Prefer stub_main() so a script can serve as both a CLI
+                // program and a stub payload.
+                match script.vm.run_fn("stub_main") {
+                    Some(r) => r,
+                    None => script.vm.run_main(),
+                }
+            })
             .map(|h| h.join())
     });
 
@@ -192,7 +183,7 @@ fn find_scripts(path: &Path) -> Result<Vec<PathBuf>, String> {
 
 fn register_game_mods(registry: &Registry) {
     #[cfg(feature = "il2cpp-runtime")]
-    registry.lazy_module("std::re::il2cpp_runtime", |m| {
+    registry.lazy_module("std::stub::re::il2cpp_runtime", |m| {
         let registry = m.registry();
         xur_std::re::walk::register(
             registry,
@@ -211,7 +202,7 @@ fn register_game_mods(registry: &Registry) {
     });
 
     #[cfg(feature = "il2cpp-unity")]
-    registry.lazy_module("std::re::unity", |m| {
+    registry.lazy_module("std::stub::re::unity", |m| {
         let registry = m.registry();
         xur_std::re::walk::register(
             registry,
@@ -230,7 +221,7 @@ fn register_game_mods(registry: &Registry) {
     });
 
     #[cfg(feature = "godot")]
-    registry.lazy_module("std::re::godot", |m| {
+    registry.lazy_module("std::stub::re::godot", |m| {
         let registry = m.registry();
         xur_std::re::walk::register(
             registry,
@@ -249,7 +240,7 @@ fn register_game_mods(registry: &Registry) {
     });
 
     #[cfg(feature = "il2cpp-unity")]
-    registry.lazy_module("std::re::unity::time", |m| {
+    registry.lazy_module("std::stub::re::unity::time", |m| {
         use hao_il2cpp_unity::time;
         use xur_runtime::{RuntimeError, Value};
 
@@ -287,9 +278,13 @@ fn register_game_mods(registry: &Registry) {
     });
 
     #[cfg(feature = "egui")]
-    registry.lazy_module("std::re::unity::egui", |m| {
+    registry.lazy_module("std::stub::re::unity::egui", |m| {
         let registry = m.registry();
         egui_module::register(registry, m);
+    });
+
+    registry.lazy_module("std::stub::tracing", |m| {
+        tracing_module::register(m);
     });
 }
 

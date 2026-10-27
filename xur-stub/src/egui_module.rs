@@ -1,15 +1,16 @@
-//! `std::re::unity::egui` — draw an egui overlay from a Xur script.
+//! `stub::re::unity::egui` — egui overlay driven by Xur scripts.
 //!
 //! The script's `ctor()` calls `egui::init()` to install the Il2Cpp
-//! hooks before the game starts. Then `main()` calls `egui::run(title,
-//! draw)` which blocks forever, drawing each frame.
+//! hooks. Then `main()` calls `egui::run(draw)` which blocks forever,
+//! calling `draw(ctx)` each frame. The script uses `ctx.window(...)` to
+//! create its own windows.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use facet::Facet;
 use hao_il2cpp_unity::egui as hao_egui;
-use hao_il2cpp_unity::egui::{Color32, Context, Frame, Slider, Window};
+use hao_il2cpp_unity::egui::{Color32, Context, Frame, ScrollArea, Slider, Window};
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
@@ -26,8 +27,6 @@ struct Bridge {
     cv: Condvar,
     ready: AtomicBool,
     frames: AtomicU64,
-    visible: AtomicBool,
-    f1_down: AtomicBool,
 }
 
 struct BridgeState {
@@ -45,15 +44,36 @@ fn get_or_init_bridge() -> Arc<Bridge> {
             cv: Condvar::new(),
             ready: AtomicBool::new(false),
             frames: AtomicU64::new(0),
-            visible: AtomicBool::new(true),
-            f1_down: AtomicBool::new(false),
         })
     }))
 }
 
 // -----------------------------------------------------------------------
-// Opaque Ui wrapper
+// Opaque wrappers
 // -----------------------------------------------------------------------
+
+#[derive(Facet, Clone)]
+#[facet(opaque)]
+struct EguiCtx(usize);
+
+unsafe impl Send for EguiCtx {}
+unsafe impl Sync for EguiCtx {}
+
+impl EguiCtx {
+    fn from_ctx(ctx: &Context) -> Self {
+        Self(ctx as *const Context as usize)
+    }
+
+    fn ctx(&self) -> &Context {
+        unsafe { &*(self.0 as *const Context) }
+    }
+}
+
+impl std::fmt::Display for EguiCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ctx")
+    }
+}
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
@@ -79,26 +99,15 @@ impl std::fmt::Display for EguiUi {
 }
 
 // -----------------------------------------------------------------------
-// Init (called from stub ctor, on the main thread)
+// Init
 // -----------------------------------------------------------------------
 
-/// Installs the Il2Cpp dlopen/il2cpp_init hooks and registers the egui
-/// render callback. Called from the script's `ctor()` via `egui::init()`.
 fn init_early() {
     let bridge = get_or_init_bridge();
     let render_bridge = Arc::clone(&bridge);
 
     hao_il2cpp_unity::on_init(move |_il2cpp| {
         hao_egui::on_egui(move |ctx| {
-            let f1 = input::key(KeyCode::F1).unwrap_or(false);
-            let was_down = render_bridge.f1_down.swap(f1, Ordering::Relaxed);
-            if f1 && !was_down {
-                render_bridge.visible.fetch_xor(true, Ordering::Relaxed);
-            }
-            if !render_bridge.visible.load(Ordering::Relaxed) {
-                return;
-            }
-
             render_bridge.frames.fetch_add(1, Ordering::Relaxed);
 
             if !render_bridge.ready.load(Ordering::Relaxed) {
@@ -134,26 +143,27 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         init_early();
         Ok(Value::Unit)
     });
+
     register_run(m);
     register_frame_count(m);
+    register_ctx_methods(registry, m);
     register_ui_methods(registry, m);
 }
 
-/// `egui::run(title, fn(ui))` — blocks forever, calling draw each frame.
+/// `egui::run(fn(ctx))` — blocks forever, calling draw each frame.
 fn register_run(m: &mut ModuleBuilder<'_>) {
     m.raw_function("run", |cx, args| {
-        let [Value::Str(title), draw] = args else {
-            return Err(RuntimeError::new("`run` takes (title: str, draw: fn)"));
+        let [draw] = args else {
+            return Err(RuntimeError::new("`run` takes a draw function"));
         };
         if !matches!(draw, Value::Closure(_) | Value::Fn(_)) {
             return Err(RuntimeError::new("`draw` must be a function or closure"));
         }
 
-        let title = title.to_string();
         let draw = draw.clone();
 
         let bridge = BRIDGE.get().ok_or_else(|| {
-            RuntimeError::new("egui not initialised (stub must be built with --features egui)")
+            RuntimeError::new("egui not initialised (call egui::init() in ctor)")
         })?;
 
         bridge.ready.store(true, Ordering::Relaxed);
@@ -167,20 +177,12 @@ fn register_run(m: &mut ModuleBuilder<'_>) {
                 state.ctx.take().unwrap()
             };
 
-            let frames = bridge.frames.load(Ordering::Relaxed);
-            let frame = Frame::window(&ctx.style()).fill(Color32::from_rgb(24, 24, 28));
-            Window::new(&title)
-                .frame(frame)
-                .default_pos([24.0, 24.0])
-                .default_width(400.0)
-                .show(&ctx, |ui| {
-                    ui.label(format!("F1 to toggle — frame {frames}"));
-                    ui.separator();
-                    let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
-                    if let Err(e) = cx.call(&draw, vec![ui_val]) {
-                        ui.colored_label(Color32::RED, format!("draw error: {}", e.message));
-                    }
+            let ctx_val = into_value(cx, EguiCtx::from_ctx(&ctx)).expect("EguiCtx registered");
+            if let Err(e) = cx.call(&draw, vec![ctx_val]) {
+                Window::new("xur error").show(&ctx, |ui| {
+                    ui.colored_label(Color32::RED, format!("draw error: {}", e.message));
                 });
+            }
 
             {
                 let mut state = bridge.mu.lock().unwrap();
@@ -202,6 +204,100 @@ fn register_frame_count(m: &mut ModuleBuilder<'_>) {
     });
 }
 
+// -----------------------------------------------------------------------
+// Ctx methods
+// -----------------------------------------------------------------------
+
+fn register_ctx_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
+    let mut ty = m.ty::<EguiCtx>("Ctx");
+
+    ty.raw_function("window", |cx, args| {
+        let [this, Value::Str(title), body] = args else {
+            return Err(RuntimeError::new(
+                "`window` takes (title: str, body: fn(ui))",
+            ));
+        };
+        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+            return Err(RuntimeError::new("body must be a function"));
+        }
+        let body = body.clone();
+        let title = title.clone();
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        with_ctx(this, |ctx| {
+            let frame = Frame::window(&ctx.style()).fill(Color32::from_rgb(24, 24, 28));
+            Window::new(title.as_ref())
+                .frame(frame)
+                .default_width(400.0)
+                .show(ctx, |ui| {
+                    let cx = unsafe { &mut *cx_ptr };
+                    let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
+                    if let Err(e) = cx.call(&body, vec![ui_val]) {
+                        ui.colored_label(Color32::RED, format!("error: {}", e.message));
+                    }
+                });
+            Ok(Value::Unit)
+        })
+    });
+
+    ty.raw_function("key", |_cx, args| {
+        let [this, Value::Str(name)] = args else {
+            return Err(RuntimeError::new("`key` takes a key name string"));
+        };
+        let _ = with_ctx(this, |_ctx| Ok(Value::Unit))?;
+        let code = parse_keycode(name)
+            .ok_or_else(|| RuntimeError::new(format!("unknown key: {name}")))?;
+        Ok(Value::Bool(input::key(code).unwrap_or(false)))
+    });
+
+    let _ = registry;
+}
+
+fn parse_keycode(name: &str) -> Option<KeyCode> {
+    match name.to_ascii_lowercase().as_str() {
+        "f1" => Some(KeyCode::F1),
+        "f2" => Some(KeyCode::F2),
+        "f3" => Some(KeyCode::F3),
+        "f4" => Some(KeyCode::F4),
+        "f5" => Some(KeyCode::F5),
+        "f6" => Some(KeyCode::F6),
+        "escape" | "esc" => Some(KeyCode::ESCAPE),
+        "space" => Some(KeyCode::SPACE),
+        "tab" => Some(KeyCode::TAB),
+        "return" | "enter" => Some(KeyCode::RETURN),
+        "backspace" => Some(KeyCode::BACKSPACE),
+        "insert" | "ins" => Some(KeyCode::INSERT),
+        "delete" | "del" => Some(KeyCode::DELETE),
+        "home" => Some(KeyCode::HOME),
+        "end" => Some(KeyCode::END),
+        "left" => Some(KeyCode::LEFT),
+        "right" => Some(KeyCode::RIGHT),
+        "up" => Some(KeyCode::UP),
+        "down" => Some(KeyCode::DOWN),
+        "lshift" => Some(KeyCode::LEFT_SHIFT),
+        "rshift" => Some(KeyCode::RIGHT_SHIFT),
+        "lctrl" => Some(KeyCode::LEFT_CONTROL),
+        "rctrl" => Some(KeyCode::RIGHT_CONTROL),
+        "lalt" => Some(KeyCode::LEFT_ALT),
+        "ralt" => Some(KeyCode::RIGHT_ALT),
+        _ => None,
+    }
+}
+
+fn with_ctx(
+    val: &Value,
+    f: impl FnOnce(&Context) -> Result<Value, RuntimeError>,
+) -> Result<Value, RuntimeError> {
+    let Value::Native(obj) = val else {
+        return Err(RuntimeError::new("expected a `Ctx`"));
+    };
+    obj.with(|wrapper: &EguiCtx| f(wrapper.ctx()))
+        .ok_or_else(|| RuntimeError::new("expected a `Ctx`"))?
+}
+
+// -----------------------------------------------------------------------
+// Ui methods
+// -----------------------------------------------------------------------
+
 fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
     let mut ty = m.ty::<EguiUi>("Ui");
 
@@ -211,6 +307,16 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         };
         with_ui(this, |ui| {
             ui.label(text.as_ref());
+            Ok(Value::Unit)
+        })
+    });
+
+    ty.raw_function("small", |_cx, args| {
+        let [this, Value::Str(text)] = args else {
+            return Err(RuntimeError::new("`small` takes a string"));
+        };
+        with_ui(this, |ui| {
+            ui.small(text.as_ref());
             Ok(Value::Unit)
         })
     });
@@ -328,6 +434,28 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
             ui.collapsing(heading.as_ref(), |inner_ui| {
+                let cx = unsafe { &mut *cx_ptr };
+                let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
+                let _ = cx.call(&body, vec![inner]);
+            });
+            Ok(Value::Unit)
+        })
+    });
+
+    ty.raw_function("scroll", |cx, args| {
+        let [this, Value::Float(max_height), body] = args else {
+            return Err(RuntimeError::new(
+                "`scroll` takes (max_height: float, body: fn)",
+            ));
+        };
+        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+            return Err(RuntimeError::new("body must be a function"));
+        }
+        let max_height = *max_height as f32;
+        let body = body.clone();
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        with_ui(this, |ui| {
+            ScrollArea::vertical().max_height(max_height).show(ui, |inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                 let _ = cx.call(&body, vec![inner]);

@@ -1,37 +1,73 @@
 // An egui overlay like hao's egui_demo, but written entirely in Xur.
 //
-// F1 toggles visibility (handled by the stub). The script draws a time
-// scale slider with pause/1x/2x buttons.
+// The script creates its own windows, handles F1 toggling, and routes
+// tracing output to a separate log window.
 //
 //     cargo build --release -p xur-stub --features egui
 //     XUR_STUB_PATH=example/stub/egui_overlay.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
 use std::fmt;
-use std::re::unity::egui;
-use std::re::unity::time;
+use std::xur;
+use std::stub::re::unity::egui;
+use std::stub::re::unity::time;
+use std::stub::tracing;
 
 fn ctor() {
+    tracing::register("memory", "debug");
     egui::init();
 }
 
-fn main() {
-    egui::run("xur", |ui| {
-        let scale = time::scale();
-        ui.label(fmt::format("Time.timeScale: {}", scale));
-        scale = ui.slider_float("", scale, 0.0, 3.0);
-        time::set_scale(scale);
+fn stub_main() {
+    let visible = true;
+    let f1_down = false;
+    let note = "";
+    let log_lines = [];
 
-        ui.horizontal(|row| {
-            if row.button("pause") {
-                time::set_scale(0.0);
-            }
-            if row.button("1x") {
-                time::set_scale(1.0);
-            }
-            if row.button("2x") {
-                time::set_scale(2.0);
-            }
+    egui::run(|ctx| {
+        for line in tracing::drain() {
+            log_lines = log_lines + [line];
+        }
+
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down {
+            visible = !visible;
+        }
+        f1_down = f1;
+
+        if !visible {
+            return;
+        }
+
+        ctx.window("hao + egui (xur)", |ui| {
+            ui.label(fmt::format("invoked by: {}", xur::invoked_by()));
+            ui.label(fmt::format("frames rendered: {}", egui::frame_count()));
+            ui.separator();
+
+            let scale = time::scale();
+            ui.label(fmt::format("Time.timeScale (from game): {}", scale));
+            scale = ui.slider_float("", scale, 0.0, 3.0);
+            time::set_scale(scale);
+
+            ui.horizontal(|row| {
+                if row.button("pause (0x)") {
+                    time::set_scale(0.0);
+                }
+                if row.button("normal (1x)") {
+                    time::set_scale(1.0);
+                }
+                if row.button("fast (2x)") {
+                    time::set_scale(2.0);
+                }
+            });
+        });
+
+        ctx.window("log", |ui| {
+            ui.scroll(400.0, |scroll| {
+                for line in log_lines {
+                    scroll.small(line);
+                }
+            });
         });
     });
 }
