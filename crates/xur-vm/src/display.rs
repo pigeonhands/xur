@@ -29,6 +29,7 @@ impl Interp<'_> {
             Value::Tuple(items) if items.len() == 1 => format!("({},)", self.repr(&items[0])),
             Value::Tuple(items) => format!("({})", list(items)),
             Value::List(items) => format!("[{}]", list(&lock(items))),
+            Value::Bytes(bytes) => format!("b\"{}\"", lock(bytes).escape_ascii()),
             Value::Adt(adt) => {
                 let name = self.def_name(adt.ctor);
                 if adt.fields.is_empty() {

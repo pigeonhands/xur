@@ -123,6 +123,7 @@ fn constant_text(value: &Constant) -> String {
         Constant::Int(i) => i.to_string(),
         Constant::Float(f) => format!("{f:?}"),
         Constant::Str(s) => format!("{s:?}"),
+        Constant::Bytes(bytes) => format!("b\"{}\"", bytes.escape_ascii()),
     }
 }
 

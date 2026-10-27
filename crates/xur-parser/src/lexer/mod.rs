@@ -209,6 +209,16 @@ impl<'src> Lexer<'src> {
     }
 
     fn lex_number(&mut self, start: usize) -> TokenKind<'src> {
+        // `0x1F`, `0o17`, `0b101`: the digits are checked when decoded, so
+        // a bad digit is reported as such rather than ending the number.
+        if self.cursor.slice_from(start) == "0"
+            && matches!(self.cursor.peek(), Some('x' | 'o' | 'b'))
+        {
+            self.cursor.bump();
+            self.cursor
+                .eat_while(|c| c.is_ascii_alphanumeric() || c == '_');
+            return TokenKind::IntLit(self.cursor.slice_from(start));
+        }
         let is_digit = |c: char| c.is_ascii_digit() || c == '_';
         self.cursor.eat_while(is_digit);
 
@@ -234,6 +244,10 @@ impl<'src> Lexer<'src> {
         self.cursor.eat_while(unicode_ident::is_xid_continue);
         match self.cursor.slice_from(start) {
             "_" => TokenKind::Underscore,
+            "b" if self.cursor.eat('"') => match self.lex_string(start) {
+                TokenKind::StringLit(content) => TokenKind::ByteStrLit(content),
+                other => other,
+            },
             name => Keyword::try_from(name).map_or(TokenKind::Ident(name), TokenKind::Keyword),
         }
     }

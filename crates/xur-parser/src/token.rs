@@ -35,6 +35,8 @@ pub enum TokenKind<'src> {
     // --- Literals (zero-copy slices of the source) ---
     /// The raw text between the quotes; escape sequences are not yet resolved.
     StringLit(&'src str),
+    /// `b"..."`: the raw text between the quotes, escapes not yet resolved.
+    ByteStrLit(&'src str),
     /// The digits as written, including `_` separators. Always non-negative:
     /// a leading `-` is lexed as a separate `Minus`.
     IntLit(&'src str),
@@ -95,6 +97,7 @@ impl fmt::Display for TokenKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = match self {
             Self::StringLit(_) => "<string>",
+            Self::ByteStrLit(_) => "<bytes>",
             Self::IntLit(_) => "<int>",
             Self::FloatLit(_) => "<float>",
             Self::Ident(_) => "<ident>",

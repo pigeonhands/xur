@@ -269,6 +269,7 @@ fn prim_rt_type(prim: PrimTy) -> RtType {
     match prim {
         PrimTy::Bool => RtType::Bool,
         PrimTy::Str => RtType::Str,
+        PrimTy::Bytes => RtType::Bytes,
         PrimTy::F32 | PrimTy::F64 => RtType::Float,
         PrimTy::U8 => int("u8", 0, u8::MAX.into()),
         PrimTy::U16 => int("u16", 0, u16::MAX.into()),

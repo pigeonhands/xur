@@ -24,6 +24,7 @@ impl Interp<'_> {
             | (RtType::Unit, Value::Unit)
             | (RtType::Bool, Value::Bool(_))
             | (RtType::Str, Value::Str(_))
+            | (RtType::Bytes, Value::Bytes(_))
             | (RtType::Float, Value::Float(_))
             | (RtType::List, Value::List(_)) => true,
             (RtType::Int { min, max, .. }, Value::Int(i)) => (min..=max).contains(&i),

@@ -412,3 +412,35 @@ fn unwritten_and_generic_types_are_not_checked() {
     let src = "fn id<T>(x: T) -> T { x }\nfn any(x: _) {}\nfn main() { id(1); id(\"a\"); any([]); let l = |x| x; l(1); }";
     assert_eq!(run(src), Ok(String::new()));
 }
+
+#[test]
+fn bytes_are_shared_mutable_buffers() {
+    let src = "
+        fn main() {
+            let header = b\"MZ\\x90\\x00\";
+            let alias = header;
+            alias[2] = 0x41;
+            let typed: bytes = header + b\"!\";
+            std::io::println(\"{} {} {} {}\", header, header[0], header[1..3], typed);
+            for byte in b\"ab\" { std::io::print(\"{} \", byte); }
+            std::io::println(\"{}\", b\"x\" == b\"x\");
+        }";
+    assert_eq!(
+        run(src),
+        Ok("b\"MZA\\x00\" 77 b\"ZA\" b\"MZA\\x00!\"\n97 98 true\n".into())
+    );
+    assert_eq!(
+        run("fn main() { let b = b\"a\"; b[0] = 256; }"),
+        Err("256 is not a byte (0 to 255)".into())
+    );
+}
+
+#[test]
+fn ranges_slice_lists_strings_and_tuples() {
+    let src = "fn main() { std::io::println(\"{} {} {} {}\", [1, 2, 3, 4][1..], [1, 2, 3][..=1], \"héllo\"[1..3], (1, 2, 3)[1..]); }";
+    assert_eq!(run(src), Ok("[2, 3, 4] [1, 2] él (2, 3)\n".into()));
+    assert_eq!(
+        run("fn main() { [1, 2][1..5]; }"),
+        Err("range 1..5 is out of range for length 2".into())
+    );
+}

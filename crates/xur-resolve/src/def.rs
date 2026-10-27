@@ -64,6 +64,7 @@ impl DefKind {
 pub enum PrimTy {
     Bool,
     Str,
+    Bytes,
     U8,
     U16,
     U32,
@@ -79,9 +80,10 @@ pub enum PrimTy {
 }
 
 impl PrimTy {
-    pub const ALL: [PrimTy; 14] = [
+    pub const ALL: [PrimTy; 15] = [
         Self::Bool,
         Self::Str,
+        Self::Bytes,
         Self::U8,
         Self::U16,
         Self::U32,
@@ -100,6 +102,7 @@ impl PrimTy {
         match self {
             Self::Bool => "bool",
             Self::Str => "str",
+            Self::Bytes => "bytes",
             Self::U8 => "u8",
             Self::U16 => "u16",
             Self::U32 => "u32",

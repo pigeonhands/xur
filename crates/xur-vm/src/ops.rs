@@ -1,13 +1,14 @@
 //! Operators on values, checked at runtime.
 //!
 //! As in Rust, integers and floats don't mix, and integer overflow and
-//! division by zero are errors rather than wrapping. Strings can be
-//! concatenated with `+` and compared.
+//! division by zero are errors rather than wrapping. Strings, lists and
+//! bytes can be concatenated with `+`, and indexed with a range to slice
+//! them.
 
 use std::cmp::Ordering;
 
 use xur_ast::{BinOpKind, UnOp};
-use xur_runtime::{RunResult, RuntimeError, Value, lock};
+use xur_runtime::{Range, RunResult, RuntimeError, Value, lock};
 
 use crate::interp::Interp;
 
@@ -43,6 +44,12 @@ impl Interp<'_> {
                 }))
             }
             (Add, Value::Str(a), Value::Str(b)) => Some(Value::str(&format!("{a}{b}"))),
+            (Add, Value::List(a), Value::List(b)) => {
+                Some(Value::list([lock(a).clone(), lock(b).clone()].concat()))
+            }
+            (Add, Value::Bytes(a), Value::Bytes(b)) => {
+                Some(Value::bytes([lock(a).clone(), lock(b).clone()].concat()))
+            }
             (Lt | Le | Gt | Ge, _, _) => compare(lhs, rhs).map(|ordering| {
                 Value::Bool(match op {
                     Lt => ordering.is_lt(),
@@ -109,7 +116,28 @@ pub(crate) fn index(base: &Value, index: &Value) -> RunResult<Value> {
             let items = lock(items);
             position(*i, items.len()).map(|i| items[i].clone())
         }
+        (Value::Bytes(bytes), Value::Int(i)) => {
+            let bytes = lock(bytes);
+            position(*i, bytes.len()).map(|i| Value::Int(bytes[i].into()))
+        }
         (Value::Tuple(items), Value::Int(i)) => position(*i, items.len()).map(|i| items[i].clone()),
+        (Value::List(items), Value::Range(range)) => {
+            let items = lock(items);
+            Ok(Value::list(items[slice(range, items.len())?].to_vec()))
+        }
+        (Value::Bytes(bytes), Value::Range(range)) => {
+            let bytes = lock(bytes);
+            Ok(Value::bytes(bytes[slice(range, bytes.len())?].to_vec()))
+        }
+        (Value::Tuple(items), Value::Range(range)) => {
+            Ok(Value::tuple(items[slice(range, items.len())?].to_vec()))
+        }
+        (Value::Str(s), Value::Range(range)) => {
+            // Strings are sliced by character, not byte.
+            let chars: Vec<char> = s.chars().collect();
+            let text: String = chars[slice(range, chars.len())?].iter().collect();
+            Ok(Value::str(&text))
+        }
         _ => Err(RuntimeError::new(format!(
             "cannot index {} with {}",
             base.kind(),
@@ -126,11 +154,46 @@ pub(crate) fn set_index(base: &Value, index: &Value, value: Value) -> RunResult<
             items[i] = value;
             Ok(())
         }
+        (Value::Bytes(bytes), Value::Int(i)) => {
+            let byte = match value {
+                Value::Int(byte) => u8::try_from(byte)
+                    .map_err(|_| RuntimeError::new(format!("{byte} is not a byte (0 to 255)")))?,
+                other => {
+                    return Err(RuntimeError::new(format!(
+                        "expected a byte, found {}",
+                        other.kind()
+                    )));
+                }
+            };
+            let mut bytes = lock(bytes);
+            let i = position(*i, bytes.len())?;
+            bytes[i] = byte;
+            Ok(())
+        }
         _ => Err(RuntimeError::new(format!(
             "cannot assign to an index of {}",
             base.kind()
         ))),
     }
+}
+
+/// The positions a range covers in a sequence of length `len`: a missing
+/// start is 0 and a missing end is `len`.
+fn slice(range: &Range, len: usize) -> RunResult<std::ops::Range<usize>> {
+    let bound = |b: i64| {
+        usize::try_from(b).map_err(|_| RuntimeError::new(format!("{b} is not a valid index")))
+    };
+    let start = range.start.map_or(Ok(0), bound)?;
+    let end = match range.end {
+        Some(end) => bound(end)? + usize::from(range.inclusive),
+        None => len,
+    };
+    if start > end || end > len {
+        return Err(RuntimeError::new(format!(
+            "range {start}..{end} is out of range for length {len}"
+        )));
+    }
+    Ok(start..end)
 }
 
 fn position(index: i64, len: usize) -> RunResult<usize> {

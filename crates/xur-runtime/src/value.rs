@@ -30,6 +30,8 @@ pub enum Value {
     Str(Arc<str>),
     Tuple(Arc<[Value]>),
     List(Arc<Mutex<Vec<Value>>>),
+    /// A byte buffer, shared and mutable like a list (Python's `bytearray`).
+    Bytes(Arc<Mutex<Vec<u8>>>),
     /// An instance of a struct or enum variant defined in Xur.
     Adt(Arc<Adt>),
     /// A value of a registered Rust type, held as the Rust value itself.
@@ -162,6 +164,10 @@ impl Value {
         Self::List(Arc::new(Mutex::new(items)))
     }
 
+    pub fn bytes(bytes: Vec<u8>) -> Self {
+        Self::Bytes(Arc::new(Mutex::new(bytes)))
+    }
+
     pub fn tuple(items: Vec<Value>) -> Self {
         Self::Tuple(items.into())
     }
@@ -180,6 +186,7 @@ impl Value {
             Self::Str(_) => "string",
             Self::Tuple(_) => "tuple",
             Self::List(_) => "list",
+            Self::Bytes(_) => "bytes",
             Self::Adt(_) => "struct or enum",
             Self::Native(_) => "native object",
             Self::Record(_) => "record",
@@ -202,6 +209,7 @@ pub enum BuiltinType {
     Str,
     Tuple,
     List,
+    Bytes,
     Range,
 }
 
@@ -215,6 +223,7 @@ impl Value {
             Self::Str(_) => BuiltinType::Str,
             Self::Tuple(_) => BuiltinType::Tuple,
             Self::List(_) => BuiltinType::List,
+            Self::Bytes(_) => BuiltinType::Bytes,
             Self::Range(_) => BuiltinType::Range,
             _ => return None,
         })
@@ -233,6 +242,7 @@ impl PartialEq for Value {
             (Self::Str(a), Self::Str(b)) => a == b,
             (Self::Tuple(a), Self::Tuple(b)) => a == b,
             (Self::List(a), Self::List(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
+            (Self::Bytes(a), Self::Bytes(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
             (Self::Adt(a), Self::Adt(b)) => a.ctor == b.ctor && a.fields == b.fields,
             // Native objects are compared by identity here; the interpreter
             // compares their Rust values when the type supports it.

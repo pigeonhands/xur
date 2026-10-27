@@ -3,6 +3,8 @@
 //! A literal that fails to decode is reported here and becomes
 //! [`LitKind::Err`], so parsing carries on as if it were valid.
 
+use std::num::IntErrorKind;
+
 use xur_ast::{Lit, LitKind};
 use xur_errors::Diag;
 use xur_span::{Span, Symbol};
@@ -10,7 +12,7 @@ use xur_span::{Span, Symbol};
 use super::expected::Expected;
 use super::{PResult, Parser};
 use crate::token::{Keyword, TokenKind};
-use crate::unescape::unescape_str;
+use crate::unescape::{unescape_bytes, unescape_str};
 
 impl Parser<'_> {
     pub fn parse_lit(&mut self) -> PResult<Lit> {
@@ -30,6 +32,7 @@ impl Parser<'_> {
             TokenKind::IntLit(text) => self.decode_int(text, span),
             TokenKind::FloatLit(text) => LitKind::Float(Symbol::intern(&text.replace('_', ""))),
             TokenKind::StringLit(text) => self.decode_str(text, span),
+            TokenKind::ByteStrLit(text) => self.decode_bytes(text, span),
             TokenKind::Keyword(Keyword::True) => LitKind::Bool(true),
             TokenKind::Keyword(Keyword::False) => LitKind::Bool(false),
             _ => return None,
@@ -38,16 +41,56 @@ impl Parser<'_> {
         Some(Lit { kind, span })
     }
 
+    /// Decodes a decimal, hex (`0x`), octal (`0o`) or binary (`0b`) integer.
     fn decode_int(&mut self, text: &str, span: Span) -> LitKind {
-        match text.replace('_', "").parse() {
-            Ok(value) => LitKind::Int(value),
-            Err(_) => {
-                self.report(
-                    Diag::error("integer literal is too large", span)
-                        .with_label(span, "does not fit in 64 bits"),
-                );
-                LitKind::Err
+        let digits = text.replace('_', "");
+        let (radix, digits) = match digits.get(..2) {
+            Some("0x") => (16, &digits[2..]),
+            Some("0o") => (8, &digits[2..]),
+            Some("0b") => (2, &digits[2..]),
+            _ => (10, &digits[..]),
+        };
+        let error = match u64::from_str_radix(digits, radix) {
+            Ok(value) => return LitKind::Int(value),
+            Err(error) => error,
+        };
+        let (message, label) = match error.kind() {
+            IntErrorKind::Empty => (
+                "missing digits after the integer base prefix",
+                "expected digits".to_owned(),
+            ),
+            IntErrorKind::InvalidDigit => (
+                "invalid digit in integer literal",
+                format!("not a base {radix} digit"),
+            ),
+            _ => (
+                "integer literal is too large",
+                "does not fit in 64 bits".to_owned(),
+            ),
+        };
+        self.report(Diag::error(message, span).with_label(span, label));
+        LitKind::Err
+    }
+
+    /// Decodes the contents of a byte string literal token spanning `span`,
+    /// reporting every invalid escape.
+    fn decode_bytes(&mut self, contents: &str, span: Span) -> LitKind {
+        let contents_start = span.start + 2; // skip the `b"`
+        let mut value = Vec::with_capacity(contents.len());
+        let mut valid = true;
+        unescape_bytes(contents, |range, result| match result {
+            Ok(byte) => value.push(byte),
+            Err(error) => {
+                valid = false;
+                let span = Span::new(contents_start + range.start, contents_start + range.end);
+                self.diags
+                    .push(Diag::error(error.to_string(), span).with_label(span, error.label()));
             }
+        });
+        if valid {
+            LitKind::ByteStr(value.into())
+        } else {
+            LitKind::Err
         }
     }
 

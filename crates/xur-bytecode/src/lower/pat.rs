@@ -45,13 +45,14 @@ impl Lowerer<'_> {
                 }
             },
             PatKind::Lit(lit) => {
-                let constant = match lit.kind {
+                let constant = match &lit.kind {
                     LitKind::Str(s) => Constant::Str(s.as_str().into()),
-                    LitKind::Int(i) => Constant::Int(i64::try_from(i).unwrap_or(i64::MAX)),
+                    LitKind::ByteStr(bytes) => Constant::Bytes(bytes.clone()),
+                    &LitKind::Int(i) => Constant::Int(i64::try_from(i).unwrap_or(i64::MAX)),
                     LitKind::Float(digits) => {
                         Constant::Float(digits.as_str().parse().unwrap_or(f64::NAN))
                     }
-                    LitKind::Bool(b) => Constant::Bool(b),
+                    &LitKind::Bool(b) => Constant::Bool(b),
                     LitKind::Err => Constant::Unit,
                 };
                 let constant = self.constant(constant, span);

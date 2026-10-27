@@ -1,4 +1,4 @@
-//! Decoding of escape sequences in string literals, after
+//! Decoding of escape sequences in string and byte-string literals, after
 //! `rustc_lexer::unescape`.
 //!
 //! The decoder reports each character or error together with the byte range
@@ -28,6 +28,16 @@ pub enum EscapeError {
     OverlongUnicodeEscape,
     #[error("invalid unicode character escape")]
     InvalidUnicodeEscape,
+    #[error("numeric character escape is too short")]
+    TooShortHexEscape,
+    #[error("invalid character in numeric character escape: `{0}`")]
+    InvalidCharInHexEscape(char),
+    #[error("out of range hex escape")]
+    OutOfRangeHexEscape,
+    #[error("non-ASCII character in byte string literal")]
+    NonAsciiInByteString(char),
+    #[error("unicode escape in byte string")]
+    UnicodeEscapeInByteString,
 }
 
 impl EscapeError {
@@ -42,6 +52,11 @@ impl EscapeError {
             Self::InvalidCharInUnicodeEscape(_) => "not a hexadecimal digit",
             Self::OverlongUnicodeEscape => "must have at most 6 hex digits",
             Self::InvalidUnicodeEscape => "not a valid unicode scalar value",
+            Self::TooShortHexEscape => "a hex escape takes two digits, as in `\\x7F`",
+            Self::InvalidCharInHexEscape(_) => "not a hexadecimal digit",
+            Self::OutOfRangeHexEscape => "must be at most `\\x7F` in a string",
+            Self::NonAsciiInByteString(_) => "write non-ASCII bytes as hex escapes, like `\\xFF`",
+            Self::UnicodeEscapeInByteString => "write bytes as hex escapes, like `\\xFF`",
         }
     }
 }
@@ -49,21 +64,55 @@ impl EscapeError {
 /// Decodes the contents of a string literal (without the quotes), calling
 /// `callback` with the byte range and result of each character or escape.
 pub fn unescape_str(src: &str, mut callback: impl FnMut(Range<usize>, Result<char, EscapeError>)) {
+    unescape(src, Mode::Str, |range, result| {
+        let result = result.map(|code| char::from_u32(code).expect("decoded a valid char"));
+        callback(range, result);
+    });
+}
+
+/// Like [`unescape_str`], for the contents of a byte string literal: each
+/// result is one byte.
+pub fn unescape_bytes(src: &str, mut callback: impl FnMut(Range<usize>, Result<u8, EscapeError>)) {
+    unescape(src, Mode::Bytes, |range, result| {
+        let result = result.map(|code| u8::try_from(code).expect("decoded a byte"));
+        callback(range, result);
+    });
+}
+
+/// What a literal's characters and escapes decode to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// Characters, for `"..."`.
+    Str,
+    /// Bytes, for `b"..."`: ASCII characters and escapes up to `\xFF`.
+    Bytes,
+}
+
+/// Decodes `src`, calling `callback` with each character's code point (in
+/// [`Mode::Str`]) or byte value (in [`Mode::Bytes`]).
+fn unescape(
+    src: &str,
+    mode: Mode,
+    mut callback: impl FnMut(Range<usize>, Result<u32, EscapeError>),
+) {
     let offset = |rest: &Chars<'_>| src.len() - rest.as_str().len();
     let mut chars = src.chars();
     loop {
         let start = offset(&chars);
         let result = match chars.next() {
             None => return,
-            Some('\\') => scan_escape(&mut chars),
-            Some(c) => Ok(c),
+            Some('\\') => scan_escape(&mut chars, mode),
+            Some(c) if mode == Mode::Bytes && !c.is_ascii() => {
+                Err(EscapeError::NonAsciiInByteString(c))
+            }
+            Some(c) => Ok(c.into()),
         };
         callback(start..offset(&chars), result);
     }
 }
 
 /// Decodes an escape whose `\` was already consumed.
-fn scan_escape(chars: &mut Chars<'_>) -> Result<char, EscapeError> {
+fn scan_escape(chars: &mut Chars<'_>, mode: Mode) -> Result<u32, EscapeError> {
     let c = match chars.next().ok_or(EscapeError::LoneBackslash)? {
         'n' => '\n',
         'r' => '\r',
@@ -72,10 +121,28 @@ fn scan_escape(chars: &mut Chars<'_>) -> Result<char, EscapeError> {
         '\\' => '\\',
         '"' => '"',
         '\'' => '\'',
-        'u' => return scan_unicode(chars),
+        'x' => return scan_hex(chars, mode),
+        'u' if mode == Mode::Bytes => return Err(EscapeError::UnicodeEscapeInByteString),
+        'u' => return scan_unicode(chars).map(u32::from),
         other => return Err(EscapeError::UnknownEscape(other)),
     };
-    Ok(c)
+    Ok(c.into())
+}
+
+/// Decodes the two hex digits after `\x`.
+fn scan_hex(chars: &mut Chars<'_>, mode: Mode) -> Result<u32, EscapeError> {
+    let mut value = 0;
+    for _ in 0..2 {
+        let c = chars.next().ok_or(EscapeError::TooShortHexEscape)?;
+        let digit = c
+            .to_digit(16)
+            .ok_or(EscapeError::InvalidCharInHexEscape(c))?;
+        value = value * 16 + digit;
+    }
+    if mode == Mode::Str && value > 0x7F {
+        return Err(EscapeError::OutOfRangeHexEscape);
+    }
+    Ok(value)
 }
 
 /// Decodes `{XXXX}` after `\u`.
@@ -146,6 +213,30 @@ mod tests {
     }
 
     #[test]
+    fn hex_escapes() {
+        assert_eq!(unescape_ok(r"\x41\x7f"), "A\x7f");
+    }
+
+    #[test]
+    fn byte_strings() {
+        let mut bytes = Vec::new();
+        unescape_bytes(r"a\xff\n", |_, result| bytes.push(result.unwrap()));
+        assert_eq!(bytes, [b'a', 0xff, b'\n']);
+        let error = |src| {
+            let mut first = None;
+            unescape_bytes(src, |_, result| {
+                first = first.or(result.err());
+            });
+            first
+        };
+        assert_eq!(error("é"), Some(EscapeError::NonAsciiInByteString('é')));
+        assert_eq!(
+            error(r"\u{41}"),
+            Some(EscapeError::UnicodeEscapeInByteString)
+        );
+    }
+
+    #[test]
     fn errors() {
         let error = |src| unescape(src).into_iter().find_map(|(_, r)| r.err());
         assert_eq!(error(r"\q"), Some(EscapeError::UnknownEscape('q')));
@@ -162,5 +253,11 @@ mod tests {
             Some(EscapeError::OverlongUnicodeEscape)
         );
         assert_eq!(error(r"\u{D800}"), Some(EscapeError::InvalidUnicodeEscape));
+        assert_eq!(error(r"\x8"), Some(EscapeError::TooShortHexEscape));
+        assert_eq!(
+            error(r"\xg0"),
+            Some(EscapeError::InvalidCharInHexEscape('g'))
+        );
+        assert_eq!(error(r"\x80"), Some(EscapeError::OutOfRangeHexEscape));
     }
 }

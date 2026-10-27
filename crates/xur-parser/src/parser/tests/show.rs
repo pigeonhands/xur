@@ -25,8 +25,9 @@ impl<T: Show> Show for Box<T> {
 
 impl Show for Lit {
     fn show(&self) -> String {
-        match self.kind {
+        match &self.kind {
             LitKind::Str(value) => format!("{:?}", value.as_str()),
+            LitKind::ByteStr(bytes) => format!("b\"{}\"", bytes.escape_ascii()),
             LitKind::Int(value) => value.to_string(),
             LitKind::Float(digits) => digits.to_string(),
             LitKind::Bool(value) => value.to_string(),

@@ -76,6 +76,7 @@ pub enum Constant {
     Int(i64),
     Float(f64),
     Str(Arc<str>),
+    Bytes(Arc<[u8]>),
 }
 
 /// A definition used as a value.
@@ -101,6 +102,7 @@ pub enum RtType {
     Unit,
     Bool,
     Str,
+    Bytes,
     Float,
     /// An integer type, with the range its values must be in.
     Int {
@@ -281,6 +283,7 @@ impl std::fmt::Display for RtType {
             Self::Unit => f.write_str("()"),
             Self::Bool => f.write_str("bool"),
             Self::Str => f.write_str("str"),
+            Self::Bytes => f.write_str("bytes"),
             Self::Float => f.write_str("float"),
             Self::Int { name, .. } => f.write_str(name),
             Self::Tuple(tys) => {

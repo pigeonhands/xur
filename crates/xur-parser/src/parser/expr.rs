@@ -83,6 +83,7 @@ fn can_begin_expr(kind: TokenKind<'_>) -> bool {
         | TokenKind::IntLit(_)
         | TokenKind::FloatLit(_)
         | TokenKind::StringLit(_)
+        | TokenKind::ByteStrLit(_)
         | TokenKind::LParen
         | TokenKind::LBracket
         | TokenKind::LBrace

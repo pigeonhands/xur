@@ -8,6 +8,7 @@
 //! | `String`, `&str`, `char`           | strings                      |
 //! | `()`                               | `()`                         |
 //! | tuples                             | tuples                       |
+//! | `Vec<u8>`                          | bytes                        |
 //! | `Vec<T>`, arrays, slices           | lists                        |
 //! | `Option<T>`, `Result<T, E>`        | the prelude's `Option`, `Result` |
 //! | registered types                   | native objects               |
@@ -64,6 +65,10 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
     }
     if let Some(scalar) = peek.scalar_type() {
         return scalar_to_value(peek, scalar);
+    }
+    if shape == <Vec<u8>>::SHAPE {
+        let bytes: &Vec<u8> = peek.get().map_err(reflect_error)?;
+        return Ok(Value::bytes(bytes.clone()));
     }
     let lang = cx.lang();
     match shape.def {
@@ -163,6 +168,12 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
     }
     if let Some(scalar) = ScalarType::try_from_shape(shape) {
         return set_scalar(partial, scalar, value);
+    }
+    if shape == <Vec<u8>>::SHAPE {
+        return match value {
+            Value::Bytes(bytes) => partial.set(lock(bytes).clone()).map_err(reflect_error),
+            _ => Err(mismatch(shape, value)),
+        };
     }
     let lang = cx.lang();
     match (&shape.def, value) {
@@ -374,6 +385,11 @@ mod tests {
             round_trip(Err::<u8, String>("bad".into())),
             Value::adt(lang.err, vec![Value::str("bad")])
         );
+    }
+
+    #[test]
+    fn byte_vectors_are_bytes() {
+        assert_eq!(round_trip(vec![1u8, 255]), Value::bytes(vec![1, 255]));
     }
 
     #[test]

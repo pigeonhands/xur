@@ -20,9 +20,10 @@ impl Lowerer<'_> {
     pub(super) fn expr(&mut self, expr: &Expr) -> Reg {
         let span = expr.span;
         match &expr.kind {
-            ExprKind::Lit(lit) => match lit.kind {
+            ExprKind::Lit(lit) => match &lit.kind {
                 LitKind::Str(s) => self.constant(Constant::Str(s.as_str().into()), span),
-                LitKind::Int(i) => match i64::try_from(i) {
+                LitKind::ByteStr(bytes) => self.constant(Constant::Bytes(Arc::clone(bytes)), span),
+                &LitKind::Int(i) => match i64::try_from(i) {
                     Ok(i) => self.constant(Constant::Int(i), span),
                     Err(_) => self.error(format!("{i} does not fit in a Xur integer"), span),
                 },
@@ -30,7 +31,7 @@ impl Lowerer<'_> {
                     Ok(f) => self.constant(Constant::Float(f), span),
                     Err(_) => self.error("invalid float literal", span),
                 },
-                LitKind::Bool(b) => self.constant(Constant::Bool(b), span),
+                &LitKind::Bool(b) => self.constant(Constant::Bool(b), span),
                 LitKind::Err => self.error("invalid literal", span),
             },
             ExprKind::Path(path) => self.path(path),

@@ -189,6 +189,9 @@ impl<'s> Interp<'s> {
                     Constant::Int(i) => Value::Int(*i),
                     Constant::Float(f) => Value::Float(*f),
                     Constant::Str(s) => Value::Str(Arc::clone(s)),
+                    // Each evaluation makes a new buffer, so changing one
+                    // doesn't change the literal.
+                    Constant::Bytes(bytes) => Value::bytes(bytes.to_vec()),
                 };
                 frame.set(*dst, value);
             }
@@ -346,6 +349,10 @@ fn iterate(value: &Value) -> RunResult<Arc<ValueIter>> {
     let iter = match value {
         Value::Iterator(iter) => return Ok(Arc::clone(iter)),
         Value::List(items) => ValueIter::new(lock(items).clone().into_iter()),
+        Value::Bytes(bytes) => {
+            let bytes = lock(bytes).clone();
+            ValueIter::new(bytes.into_iter().map(|byte| Value::Int(byte.into())))
+        }
         Value::Tuple(items) => {
             ValueIter::new(items.iter().cloned().collect::<Vec<_>>().into_iter())
         }

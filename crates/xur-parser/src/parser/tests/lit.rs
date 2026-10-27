@@ -28,6 +28,24 @@ fn integers() {
 }
 
 #[test]
+fn integer_bases() {
+    assert_eq!(lit_ok("0x1F"), "31");
+    assert_eq!(lit_ok("0xdead_BEEF"), "3735928559");
+    assert_eq!(lit_ok("0o17"), "15");
+    assert_eq!(lit_ok("0b1010"), "10");
+    assert_eq!(lit("0xg").1, ["invalid digit in integer literal"]);
+    assert_eq!(
+        lit("0x").1,
+        ["missing digits after the integer base prefix"]
+    );
+}
+
+#[test]
+fn byte_strings() {
+    assert_eq!(lit_ok(r#"b"MZ\x90\x00""#), r#"b"MZ\x90\x00""#);
+}
+
+#[test]
 fn integer_overflow_is_reported_and_recovered() {
     let (lit, errors) = lit("18446744073709551616");
     assert_eq!(lit.kind, LitKind::Err);
