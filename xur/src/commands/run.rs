@@ -1,10 +1,14 @@
 //! `xur run`: running a program.
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::thread;
 
 use anyhow::{Result, bail};
+use xur_resolve::Program;
+use xur_runtime::Registry;
+use xur_span::MemoryFileLoader;
 use xur_vm::Vm;
 
 use crate::diagnostics;
@@ -17,8 +21,28 @@ const STACK_SIZE: usize = 256 << 20;
 /// Loads the program rooted at `path` and runs its `main` function.
 pub fn run(path: &Path, tracing: bool) -> Result<()> {
     let (program, registry, diags) = load_program(path)?;
-    let root = path.display().to_string();
-    fail_on_errors(&program.krate.source_map, &root, diags, "compile")?;
+    run_program(program, registry, &path.display().to_string(), diags, tracing)
+}
+
+/// Runs an in-memory source as if it were at `path`.
+pub fn run_source(path: PathBuf, src: String, tracing: bool) -> Result<()> {
+    let registry = Arc::new(xur_std::registry());
+    let natives = Box::new(Arc::clone(&registry));
+    let name = path.display().to_string();
+    let loader = Box::new(MemoryFileLoader::new([(name.as_str(), src.as_str())]));
+    let (program, diags) = Program::load(&path, loader, natives)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    run_program(program, registry, &name, diags, tracing)
+}
+
+fn run_program(
+    program: Program,
+    registry: Arc<Registry>,
+    root: &str,
+    diags: Vec<xur_errors::Diag>,
+    tracing: bool,
+) -> Result<()> {
+    fail_on_errors(&program.krate.source_map, root, diags, "compile")?;
 
     let vm = Vm::new(program, registry, Box::new(io::stdout()));
     vm.set_tracing(tracing);

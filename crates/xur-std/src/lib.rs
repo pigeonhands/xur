@@ -22,7 +22,7 @@ mod sync;
 mod thread;
 mod xur;
 
-pub use xur::set_invoked_by;
+pub use xur::{set_argv, set_invoked_by};
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
@@ -39,7 +39,8 @@ pub fn register(registry: &Registry) {
         .module("std")
         .raw_function("import", import)
         .raw_function("try_import", try_import)
-        .raw_function("panic", panic);
+        .raw_function("panic", panic)
+        .raw_function("argv", argv);
     registry
         .module("std::fmt")
         .raw_function("format", format);
@@ -117,6 +118,15 @@ fn format(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         return Err(RuntimeError::new("`format` takes a format string"));
     };
     Ok(Value::str(&fmt::format(cx, template, args)?))
+}
+
+/// `std::argv()`: the program's argument list as set by `set_argv`.
+fn argv(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    if !args.is_empty() {
+        return Err(RuntimeError::new("`std::argv` takes no arguments"));
+    }
+    let items = xur::ARGV.get().cloned().unwrap_or_default();
+    Ok(Value::list(items))
 }
 
 /// `std::panic(format, args...)`: stops the program with a runtime error,

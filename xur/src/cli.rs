@@ -13,13 +13,18 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Run a program's `main` function.
+    #[command(trailing_var_arg = true)]
     Run {
-        /// The root `.xur` file of the program.
-        file: PathBuf,
+        /// The root `.xur` file, a directory (runs `main.xur` inside it),
+        /// or `-` for stdin. Defaults to `main.xur` in the current directory.
+        file: Option<PathBuf>,
         /// Don't show the `?` locations an error passed through when it
         /// reaches `main`.
         #[arg(long)]
         no_trace: bool,
+        /// Arguments passed to the program as `std::argv()`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Inspect the output of individual compiler stages.
     #[command(subcommand)]
