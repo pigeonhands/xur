@@ -949,7 +949,10 @@ name = "xur-std"
 version = "0.1.1"
 dependencies = [
  "facet",
+ "xur-ast",
+ "xur-resolve",
  "xur-runtime",
+ "xur-span",
 ]
 
 [[package]]

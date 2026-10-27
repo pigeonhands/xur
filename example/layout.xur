@@ -1,0 +1,97 @@
+// Memory layouts with `std::reflect::Layout`: reading and writing structs
+// as bytes, with C-style padding, packing, alignment, explicit offsets and
+// either byte order.
+//
+// Run it:
+//
+//     xur run example/layout.xur
+//
+// It lays out the headers of a (simplified) BMP image from struct attributes, writes a tiny
+// image to bytes and reads it back, then describes a record format at
+// runtime, from a list of field names and types.
+
+use std::io;
+use std::reflect;
+
+// A BMP file starts with this 14-byte header. It is packed: `size` would
+// otherwise be padded to offset 4.
+#[repr(packed)]
+struct FileHeader {
+    magic: u16
+    size: u32
+    reserved: u32
+    pixels_at: u32
+}
+
+// A cut-down version of the real 40-byte info header.
+#[repr(packed)]
+struct InfoHeader {
+    header_size: u32
+    width: i32
+    height: i32
+    planes: u16
+    bits_per_pixel: u16
+}
+
+struct Bitmap {
+    file: FileHeader
+    info: InfoHeader
+}
+
+struct Score {
+    id: u16
+    score: f32
+    alive: bool
+}
+
+// C's padding, and an explicit offset.
+#[repr(C)]
+struct Padded {
+    flag: u8
+    value: u32
+}
+
+#[repr(align(16))]
+#[endian(Big)]
+struct Tagged {
+    #[field(size = 4)] tag: bytes
+    #[field(offset = 8)] value: u32
+}
+
+fn main() {
+    io::println("{}", reflect::layout::<Padded>());
+    io::println("{}", reflect::layout::<Tagged>());
+    io::println("{}", reflect::layout::<Tagged>().to_bytes(Tagged { tag: b"XUR", value: 0xcafe }).to_hex());
+
+    // A 2x1 image, 24 bits per pixel: a red and a blue pixel, each row
+    // padded to 4 bytes.
+    let layout = reflect::layout::<Bitmap>();
+    io::println("{}", layout);
+    let pixels = b"\x00\x00\xff\xff\x00\x00\x00\x00";
+    let header_size = layout.size();
+    let image = Bitmap {
+        file: FileHeader { magic: 0x4d42, size: header_size + pixels.len(), reserved: 0, pixels_at: header_size },
+        info: InfoHeader { header_size: 16, width: 2, height: 1, planes: 1, bits_per_pixel: 24 }
+    };
+    let data = layout.to_bytes(image) + pixels;
+    io::println("{} bytes: {}", data.len(), data.to_hex());
+
+    let read = layout.from_bytes(data);
+    io::println("{}x{} pixels at offset {}", read.info.width, read.info.height, read.file.pixels_at);
+    for field in reflect::layout::<FileHeader>().fields() {
+        io::println("  {} {} at {}", field.name, field.ty, field.offset);
+    }
+
+    // A layout described at runtime, e.g. from a format specification.
+    let spec = [("id", "u16"), ("score", "f32"), ("alive", "bool")];
+    let record = reflect::Layout::new("Record");
+    for (name, ty) in spec {
+        record = record.field(name, ty);
+    }
+    io::println("{}", record);
+    let buffer = std::bytes::zeroed(record.size() * 2);
+    // Any value with the right fields can be written.
+    record.write(buffer, record.size(), Score { id: 7, score: 1.5, alive: true });
+    io::println("{}", buffer.to_hex());
+    io::println("{}", record.read(buffer, record.size()));
+}

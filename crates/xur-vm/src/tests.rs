@@ -639,3 +639,91 @@ fn the_reflect_example_runs() {
         .into())
     );
 }
+
+#[test]
+fn layouts_follow_repr_and_field_attributes() {
+    let src = r#"
+        use std::reflect;
+        #[repr(C)] struct C { a: u8, b: u64, c: u16 }
+        #[repr(packed)] struct P { a: u8, b: u64, c: u16 }
+        #[repr(align(32))] struct A { a: u8 }
+        #[endian(Big)] struct B { a: u16, #[field(offset = 4)] b: i8 }
+        struct N { inner: B, tail: u8 }
+        fn main() {
+            let io = std::io;
+            io::println("{}", reflect::layout::<C>());
+            io::println("{}", reflect::layout::<P>());
+            io::println("{}", reflect::layout::<A>());
+            let b = reflect::layout::<B>();
+            let data = b.to_bytes(B { a: 0x0102, b: -2 });
+            io::println("{} {}", data.to_hex(), b.from_bytes(data));
+            io::println("{}", reflect::layout_of(N { inner: B { a: 1, b: 1 }, tail: 0 }));
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok(concat!(
+            "C (size 24, align 8) { a: u8 @ 0, b: u64 @ 8, c: u16 @ 16 }\n",
+            "P (size 11, align 1) { a: u8 @ 0, b: u64 @ 1, c: u16 @ 9 }\n",
+            "A (size 32, align 32) { a: u8 @ 0 }\n",
+            "01020000fe00 B { a: 258, b: -2 }\n",
+            "N (size 8, align 2) { inner: B @ 0, tail: u8 @ 6 }\n",
+        )
+        .into())
+    );
+}
+
+#[test]
+fn layout_errors() {
+    let with =
+        |items: &str, body: &str| run(&format!("use std::reflect; {items} fn main() {{ {body} }}"));
+    assert_eq!(
+        with(
+            "struct S { a: u32, #[field(offset = 2)] b: u8 }",
+            "reflect::layout::<S>();"
+        ),
+        Err("field `b` at offset 2 overlaps the field before it, which ends at 4".into())
+    );
+    assert_eq!(
+        with("struct S { a: bytes }", "reflect::layout::<S>();"),
+        Err("field `a`: `bytes` fields need a size: `#[field(size = n)]`".into())
+    );
+    assert_eq!(
+        with("struct S { a: str }", "reflect::layout::<S>();"),
+        Err("field `a`: `str` has no layout".into())
+    );
+    assert_eq!(
+        with(
+            "struct S { a: u8 }",
+            "reflect::layout::<S>().to_bytes(S { a: 1 }); reflect::layout::<S>().write(b\"\", 0, S { a: 1 });"
+        ),
+        Err("`S` needs 1 byte(s) at offset 0, but there are only 0".into())
+    );
+    assert_eq!(
+        with(
+            "",
+            "reflect::Layout::new(\"x\").field(\"a\", \"u8\").to_bytes((300,));"
+        ),
+        Err("no field `a` on tuple".into())
+    );
+    assert_eq!(
+        with(
+            "struct S { a: i64 }",
+            "reflect::Layout::new(\"x\").field(\"a\", \"u8\").to_bytes(S { a: 300 });"
+        ),
+        Err("300 does not fit in field `a` (u8)".into())
+    );
+    assert_eq!(
+        with("", "reflect::Layout::new(\"x\").field(\"a\", \"u3\");"),
+        Err("`u3` is not a primitive type".into())
+    );
+}
+
+#[test]
+fn the_layout_example_runs() {
+    let output = run_files(&[(
+        "example/layout.xur",
+        include_str!("../../../example/layout.xur"),
+    )]);
+    assert_eq!(output, Ok("Padded (size 8, align 4) { flag: u8 @ 0, value: u32 @ 4 }\nTagged (size 16, align 16) { tag: bytes[4] @ 0, value: u32 @ 8 }\n58555200000000000000cafe00000000\nBitmap (size 30, align 1) { file: FileHeader @ 0, info: InfoHeader @ 14 }\n38 bytes: 424d26000000000000001e000000100000000200000001000000010018000000ffff00000000\n2x1 pixels at offset 30\n  magic u16 at 0\n  size u32 at 2\n  reserved u32 at 6\n  pixels_at u32 at 10\nRecord (size 12, align 4) { id: u16 @ 0, score: f32 @ 4, alive: bool @ 8 }\n000000000000000000000000070000000000c03f01000000\n{ id: 7, score: 1.5, alive: true }\n".into()));
+}

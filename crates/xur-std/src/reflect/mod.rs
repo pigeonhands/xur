@@ -12,6 +12,8 @@
 //! reflect::call(p, "norm", [])    // p.norm()
 //! ```
 
+mod layout;
+
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 use crate::option;
@@ -78,6 +80,7 @@ pub(crate) fn register(registry: &Registry) {
                 let call_args = xur_runtime::lock(call_args).clone();
                 cx.call_method(receiver.clone(), name, call_args)
             });
+        layout::register(module);
     });
 }
 

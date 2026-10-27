@@ -25,6 +25,7 @@ There are complete programs in [`example/`](example):
 | [`bytes.xur`](example/bytes.xur)           | building and parsing a binary format with `bytes` |
 | [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
 | [`reflect.xur`](example/reflect.xur)       | listing fields and calling methods by name        |
+| [`layout.xur`](example/layout.xur)         | structs as bytes: padding, packing, byte order    |
 
 ## A taste of Xur
 
@@ -190,6 +191,13 @@ struct Aligned {
     b: u32
     #[field(offset=100)] c: u32 // 100 bytes from the start of the struct
 }
+
+let layout = std::reflect::layout::<Aligned>(); // size 104, align 4
+let data = layout.to_bytes(Aligned { a: 1, b: 2, c: 3 });
+let back = layout.from_bytes(data);
+
+// or a layout made at runtime
+let entry = std::reflect::Layout::new("Entry").field("id", "u16").bytes("name", 8).packed();
 ```
 
 ## The standard library
@@ -207,7 +215,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
-| `std::reflect`| `fields`, `get`, `set`, `methods`, `call`, `type_name` of any value      |
+| `std::reflect`| `fields`, `get`, `set`, `methods`, `call` of any value; `layout::<T>()`, `Layout` |
 
 Built-in values have methods too: lists (`len`, `push`, `pop`, `get`,
 `insert`, `remove`, `contains`, `extend`, `join`, ...), strings (`len`,

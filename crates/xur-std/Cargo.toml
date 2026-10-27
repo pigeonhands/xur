@@ -11,7 +11,10 @@ name = "xur_std"
 path = "src/lib.rs"
 
 [dependencies]
+xur-ast.workspace = true
+xur-resolve.workspace = true
 xur-runtime.workspace = true
+xur-span.workspace = true
 facet.workspace = true
 
 [dev-dependencies]
