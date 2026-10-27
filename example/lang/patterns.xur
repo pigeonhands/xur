@@ -1,0 +1,77 @@
+// Pattern matching: list patterns, struct `..`, and `is` expressions.
+//
+// Run it:
+//
+//     xur run example/lang/patterns.xur
+
+use std::io;
+
+struct Point {
+    x: i64
+    y: i64
+    z: i64
+}
+
+fn describe_list(list: [i32]) {
+    match list {
+        [] => io::println("  empty"),
+        [x] => io::println("  single: {}", x),
+        [a, b] => io::println("  pair: {}, {}", a, b),
+        [first, ..] => io::println("  many, starts with {}", first),
+    }
+}
+
+fn main() -> Result<()> {
+    io::println("--- list patterns ---");
+
+    // exact destructuring
+    let nums = [10, 20, 30];
+    let [a, b, c] = nums;
+    io::println("[a, b, c] = [{}, {}, {}]", a, b, c);
+
+    // rest pattern: bind the first, ignore the rest
+    let long = [1, 2, 3, 4, 5];
+    let [first, ..] = long;
+    io::println("[first, ..] = [{}]", first);
+
+    // match with list patterns
+    io::println("");
+    io::println("--- match on lists ---");
+    describe_list([]);
+    describe_list([42]);
+    describe_list([1, 2]);
+    describe_list([10, 20, 30, 40]);
+
+    // struct patterns with `..`
+    io::println("");
+    io::println("--- struct .. ---");
+    let p = Point { x: 1, y: 2, z: 3 };
+    let Point { x, .. } = p;
+    io::println("Point {{ x, .. }} = {}", x);
+
+    let Point { z, .. } = p;
+    io::println("Point {{ z, .. }} = {}", z);
+
+    // `is` expression
+    io::println("");
+    io::println("--- is expression ---");
+    let val: Option<i32> = Some(42);
+    io::println("Some(42) is Some(_): {}", val is Some(_));
+    io::println("Some(42) is None:    {}", val is None);
+
+    let none: Option<i32> = None;
+    io::println("None is Some(_): {}", none is Some(_));
+    io::println("None is None:    {}", none is None);
+
+    let ok: Result<i32> = Ok(1);
+    io::println("Ok(1) is Ok(_):  {}", ok is Ok(_));
+    io::println("Ok(1) is Err(_): {}", ok is Err(_));
+
+    // `is` with list patterns
+    let list = [1, 2, 3];
+    io::println("list is [_, ..]:    {}", list is [_, ..]);
+    io::println("list is []:         {}", list is []);
+    io::println("list is [_, _, _]:  {}", list is [_, _, _]);
+
+    Ok(())
+}
