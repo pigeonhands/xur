@@ -6,10 +6,11 @@ use std::io;
 use std::re::pe;
 use std::re::pe::ImageFileMachine;
 
-fn main() {
+fn main() -> Result<(), str> {
     let dll = pe::ImageDef::new_dll(ImageFileMachine::Amd64);
-    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"]).unwrap();
+    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"])?;
     dll.add_section(".text", flags, b"\xc3"); // a single `ret`
-    let bytes = dll.write().unwrap();
+    let bytes = dll.write()?;
     io::println("built {} bytes, magic {}", bytes.len(), bytes.read_u16_le(0).to_hex());
+    Ok(())
 }

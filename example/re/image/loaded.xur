@@ -8,16 +8,17 @@ use std::re::pe;
 use std::re::pe::ImageFileMachine;
 use std::re::ExportLocation;
 
-fn main() {
+fn main() -> Result<(), str> {
     let dll = pe::ImageDef::new_dll(ImageFileMachine::Amd64);
-    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"]).unwrap();
+    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"])?;
     let at = dll.add_section(".text", flags, b"\xb8\x2a\x00\x00\x00\xc3"); // mov eax,42; ret
     dll.add_exports("demo.dll", [("answer", at)]);
 
-    let image = re::AnyImage::load(dll.write().unwrap()).unwrap();
-    let answer = image.exports().unwrap()[0];
+    let image = re::AnyImage::load(dll.write()?)?;
+    let answer = image.exports()?[0];
     match answer.location {
-        ExportLocation::Address(vaddr) => io::println("answer at {}: {}", vaddr.to_hex(), image.bytes(vaddr, 6).unwrap().to_hex()),
+        ExportLocation::Address(vaddr) => io::println("answer at {}: {}", vaddr.to_hex(), image.bytes(vaddr, 6)?.to_hex()),
         ExportLocation::Forwarder(target) => io::println("forwards to {}", target),
     }
+    Ok(())
 }
