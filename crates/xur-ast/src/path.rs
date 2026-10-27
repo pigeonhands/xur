@@ -11,6 +11,15 @@ pub struct Path {
 }
 
 impl Path {
+    /// The path consisting of just `ident`.
+    pub fn single(id: NodeId, ident: Ident) -> Self {
+        Self {
+            id,
+            segments: vec![PathSegment { ident, args: None }],
+            span: ident.span,
+        }
+    }
+
     /// The identifier if this path is a single segment without generic args.
     pub fn as_ident(&self) -> Option<Ident> {
         match self.segments.as_slice() {

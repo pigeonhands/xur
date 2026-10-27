@@ -106,6 +106,20 @@ impl Shared {
         self.program.write().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The field names of the struct or variant `ctor`, if it has named
+    /// fields.
+    fn field_names(&self, ctor: DefId) -> Option<Vec<Symbol>> {
+        let items = self.items.read().unwrap_or_else(PoisonError::into_inner);
+        let fields = items.named_fields(ctor)?;
+        Some(
+            fields
+                .iter()
+                .filter_map(|field| field.ident)
+                .map(|i| i.name)
+                .collect(),
+        )
+    }
+
     /// The bytecode of the function or constant `def`, lowered on first use.
     fn code(&self, def: DefId) -> RunResult<Arc<Function>> {
         if let Some(function) = self

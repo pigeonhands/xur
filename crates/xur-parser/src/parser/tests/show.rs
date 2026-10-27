@@ -79,6 +79,19 @@ impl Show for Pat {
             PatKind::Lit(lit) => lit.show(),
             PatKind::Path(path) => path.show(),
             PatKind::TupleStruct(path, fields) => format!("{}({})", path.show(), list(fields)),
+            PatKind::Struct { path, fields, rest } => {
+                let mut fields: Vec<_> = fields
+                    .iter()
+                    .map(|field| match field.shorthand {
+                        true => field.ident.to_string(),
+                        false => format!("{}: {}", field.ident, field.pat.show()),
+                    })
+                    .collect();
+                if *rest {
+                    fields.push("..".to_owned());
+                }
+                format!("{} {{ {} }}", path.show(), fields.join(", "))
+            }
             PatKind::Tuple(pats) if pats.len() == 1 => format!("({},)", pats[0].show()),
             PatKind::Tuple(pats) => format!("({})", list(pats)),
             PatKind::Paren(pat) => format!("({})", pat.show()),
@@ -123,6 +136,17 @@ impl Show for Expr {
                     args.unwrap_or_default(),
                     list(&call.args)
                 )
+            }
+            ExprKind::Struct(literal) => {
+                let fields: Vec<_> = literal
+                    .fields
+                    .iter()
+                    .map(|field| match field.shorthand {
+                        true => field.ident.to_string(),
+                        false => format!("{}: {}", field.ident, field.expr.show()),
+                    })
+                    .collect();
+                format!("{} {{ {} }}", literal.path.show(), fields.join(", "))
             }
             ExprKind::Field(expr, field) => format!("{}.{field}", expr.show()),
             ExprKind::Try(expr) => format!("{}?", expr.show()),

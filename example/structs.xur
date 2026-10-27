@@ -1,0 +1,63 @@
+// Structs with named fields: building them, reading fields and updating
+// them.
+//
+// Run it:
+//
+//     xur run example/structs.xur
+//
+// Structs are values, like tuples: `p.x = 5` gives `p` an updated copy and
+// leaves every other copy as it was.
+
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct Player {
+    name: str
+    pos: Point
+    health: u8
+}
+
+enum Event {
+    Moved { dx: i64, dy: i64 }
+    Hit { damage: u8 }
+}
+
+impl Player {
+    pub fn new(name: str) -> Self {
+        // `name` is shorthand for `name: name`.
+        Player { name, pos: Point { x: 0, y: 0 }, health: 100 }
+    }
+
+    pub fn apply(self, event: Event) -> Self {
+        let player = self;
+        match event {
+            Event::Moved { dx, dy } => {
+                // Nested fields can be assigned to as well.
+                player.pos.x = player.pos.x + dx;
+                player.pos.y = player.pos.y + dy;
+            }
+            Event::Hit { damage } => {
+                player.health = if damage > player.health { 0 } else { player.health - damage };
+            }
+        }
+        player
+    }
+}
+
+fn main() {
+    let io = std::io;
+    let start = Player::new("ada");
+    io::println("{}", start);
+
+    let events = [Event::Moved { dx: 3, dy: -1 }, Event::Hit { damage: 30 }, Event::Moved { dx: 1, dy: 1 }];
+    let player = start;
+    for event in events {
+        player = player.apply(event);
+        io::println("{} -> {} at ({}, {}), health {}", event, player.name, player.pos.x, player.pos.y, player.health);
+    }
+
+    // The original is unchanged.
+    io::println("start is still at {}", start.pos);
+}

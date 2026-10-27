@@ -34,6 +34,13 @@ impl Interp<'_> {
                 let name = self.def_name(adt.ctor);
                 if adt.fields.is_empty() {
                     name
+                } else if let Some(names) = self.shared.field_names(adt.ctor) {
+                    let fields: Vec<_> = names
+                        .iter()
+                        .zip(&adt.fields)
+                        .map(|(name, value)| format!("{name}: {}", self.repr(value)))
+                        .collect();
+                    format!("{name} {{ {} }}", fields.join(", "))
                 } else {
                     format!("{name}({})", list(&adt.fields))
                 }

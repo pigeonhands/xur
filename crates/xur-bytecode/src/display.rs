@@ -83,6 +83,12 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             format!("{dst:?} = {receiver:?}.{method}({})", regs(args))
         }
         InstKind::Field { dst, base, field } => format!("{dst:?} = {base:?}.{field}"),
+        InstKind::SetField {
+            dst,
+            base,
+            field,
+            value,
+        } => format!("{dst:?} = {base:?} with .{field} = {value:?}"),
         InstKind::Index { dst, base, index } => format!("{dst:?} = {base:?}[{index:?}]"),
         InstKind::SetIndex { base, index, value } => format!("{base:?}[{index:?}] = {value:?}"),
         InstKind::Tuple { dst, items } => format!("{dst:?} = ({})", regs(items)),

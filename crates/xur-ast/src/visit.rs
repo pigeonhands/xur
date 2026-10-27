@@ -203,6 +203,12 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
                 visitor.visit_expr(arg);
             }
         }
+        ExprKind::Struct(literal) => {
+            visitor.visit_path(&literal.path);
+            for field in &literal.fields {
+                visitor.visit_expr(&field.expr);
+            }
+        }
         ExprKind::MethodCall(call) => {
             visitor.visit_expr(&call.receiver);
             if let Some(args) = &call.seg.args {
@@ -260,6 +266,12 @@ pub fn walk_pat<'a, V: Visitor<'a>>(visitor: &mut V, pat: &'a Pat) {
             visitor.visit_path(path);
             for field in fields {
                 visitor.visit_pat(field);
+            }
+        }
+        PatKind::Struct { path, fields, .. } => {
+            visitor.visit_path(path);
+            for field in fields {
+                visitor.visit_pat(&field.pat);
             }
         }
         PatKind::Tuple(pats) => {

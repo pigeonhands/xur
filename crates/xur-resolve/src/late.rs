@@ -436,6 +436,15 @@ impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
                 self.resolve_path(path, Namespace::Value);
                 visit::walk_path(self, path);
             }
+            // A struct literal names a struct or variant, in the type
+            // namespace as in rustc.
+            ExprKind::Struct(literal) => {
+                self.resolve_path(&literal.path, Namespace::Type);
+                visit::walk_path(self, &literal.path);
+                for field in &literal.fields {
+                    self.visit_expr(&field.expr);
+                }
+            }
             ExprKind::ForLoop { pat, iter, body } => {
                 self.visit_expr(iter);
                 self.with_ribs(RibKind::Normal, |this| {
@@ -481,6 +490,11 @@ impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
             }
             PatKind::Path(path) | PatKind::TupleStruct(path, _) => {
                 self.resolve_path(path, Namespace::Value);
+                visit::walk_pat(self, pat);
+            }
+            // Like struct literals, struct patterns name a type.
+            PatKind::Struct { path, .. } => {
+                self.resolve_path(path, Namespace::Type);
                 visit::walk_pat(self, pat);
             }
             _ => visit::walk_pat(self, pat),

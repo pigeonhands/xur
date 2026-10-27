@@ -228,3 +228,28 @@ fn lists_and_indexing() {
     assert_eq!(expr("-xs[0]"), "(-xs[0])");
     assert_eq!(expr("f()[0][1]"), "f()[0][1]");
 }
+
+#[test]
+fn struct_literals() {
+    assert_eq!(expr("Point { x: 1, y }"), "Point { x: 1, y }");
+    assert_eq!(
+        expr("Event::Hit { damage: 2 + 3, }"),
+        "Event::Hit { damage: (2 + 3) }"
+    );
+    assert_eq!(expr("Empty {}"), "Empty {  }");
+    assert_eq!(expr("Point { x: 1 }.x"), "Point { x: 1 }.x");
+}
+
+#[test]
+fn no_struct_literals_before_blocks() {
+    // `x {` begins the block of the `if`, not a struct literal.
+    assert_eq!(expr("if x { 1 } else { 2 }"), "if x { 1 } else { 2 }");
+    assert_eq!(
+        expr("match p { P { x, .. } => x }"),
+        "match p { P { x, .. } => x }"
+    );
+    assert_eq!(
+        expr("if (P { x: 1 }).x == 1 { 2 }"),
+        "if ((P { x: 1 }).x == 1) { 2 }"
+    );
+}

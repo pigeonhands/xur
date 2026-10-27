@@ -8,8 +8,8 @@
 use std::ops::Bound;
 
 use xur_ast::{
-    Arm, BinOp, BinOpKind, Closure, Expr, ExprKind, Fixity, FnDecl, FnRetTy, MethodCall, Param,
-    PathSegment, Precedence, RangeLimits, Ty, TyKind, UnOp,
+    Arm, BinOp, BinOpKind, Closure, Expr, ExprField, ExprKind, Fixity, FnDecl, FnRetTy, MethodCall,
+    Param, Path, PathSegment, Precedence, RangeLimits, StructExpr, Ty, TyKind, UnOp,
 };
 use xur_errors::Diag;
 use xur_span::Span;
@@ -335,7 +335,14 @@ impl Parser<'_> {
             return Ok(mk_expr(ExprKind::Lit(lit), lo));
         }
         let kind = match self.token.kind {
-            TokenKind::Ident(_) => ExprKind::Path(self.parse_path(PathStyle::Expr)?),
+            TokenKind::Ident(_) => {
+                let path = self.parse_path(PathStyle::Expr)?;
+                if self.at_struct_literal() {
+                    self.parse_struct_literal(path)?
+                } else {
+                    ExprKind::Path(path)
+                }
+            }
             TokenKind::LParen => self.parse_expr_paren_or_tuple()?,
             TokenKind::LBracket => {
                 self.bump();
@@ -376,6 +383,46 @@ impl Parser<'_> {
             }
         };
         Ok(mk_expr(kind, lo.to(self.prev_token.span)))
+    }
+
+    /// Whether a `{` after a path starts a struct literal: not in the head
+    /// of an `if`, `while`, `match` or `for`, where it starts the body, and
+    /// only if it looks like one (`{}`, `{ name:`, `{ name,` or `{ name }`).
+    fn at_struct_literal(&self) -> bool {
+        if self.token.kind != TokenKind::LBrace || self.restrictions.before_block {
+            return false;
+        }
+        matches!(
+            (self.look_ahead(1), self.look_ahead(2)),
+            (TokenKind::RBrace, _)
+                | (
+                    TokenKind::Ident(_),
+                    TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+                )
+        )
+    }
+
+    /// `{ name: expr, name }` after the struct's path.
+    fn parse_struct_literal(&mut self, path: Path) -> PResult<ExprKind> {
+        self.expect(TokenKind::LBrace)?;
+        let fields = self.parse_delimited(TokenKind::RBrace, |this| {
+            let lo = this.token.span;
+            let ident = this.parse_ident()?;
+            let (expr, shorthand) = if this.eat(TokenKind::Colon) {
+                (this.parse_expr()?, false)
+            } else {
+                let path = Path::single(this.next_id(), ident);
+                let expr = mk_expr(ExprKind::Path(path), ident.span);
+                (expr, true)
+            };
+            Ok(ExprField {
+                ident,
+                expr,
+                shorthand,
+                span: lo.to(this.prev_token.span),
+            })
+        })?;
+        Ok(ExprKind::Struct(Box::new(StructExpr { path, fields })))
     }
 
     /// The optional value of `return` or `break`.

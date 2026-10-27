@@ -1,6 +1,6 @@
 //! Lowering patterns to tests and bindings.
 
-use xur_ast::{LitKind, Pat, PatKind, Path};
+use xur_ast::{LitKind, Pat, PatField, PatKind, Path, VariantData};
 use xur_resolve::{DefKind, Res};
 
 use super::Lowerer;
@@ -62,6 +62,10 @@ impl Lowerer<'_> {
             PatKind::TupleStruct(path, fields) => {
                 self.pat_path(path, value, fail);
                 self.pat_fields(fields, value, fail);
+            }
+            PatKind::Struct { path, fields, rest } => {
+                self.pat_path(path, value, fail);
+                self.pat_named_fields(path, fields, *rest, value, fail);
             }
             PatKind::Tuple(pats) => {
                 let is = self.new_reg();
@@ -135,6 +139,67 @@ impl Lowerer<'_> {
                 field.span,
             );
             self.pat(field, element, fail);
+        }
+    }
+
+    /// Matches the fields named in a struct pattern; without `..`, every
+    /// field must be named.
+    fn pat_named_fields(
+        &mut self,
+        path: &Path,
+        fields: &[PatField],
+        rest: bool,
+        value: Reg,
+        fail: BlockId,
+    ) {
+        let declared = match self.resolutions.res.get(&path.id).copied() {
+            Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
+                match self.ctor_shape(ctor) {
+                    Some(VariantData::Struct(declared)) => declared,
+                    _ => {
+                        self.error("this has no named fields; use `Name(...)`", path.span);
+                        return;
+                    }
+                }
+            }
+            // `pat_path` has reported it.
+            _ => return,
+        };
+        let position = |name| {
+            declared
+                .iter()
+                .position(|d| d.ident.map(|i| i.name) == Some(name))
+        };
+        if !rest {
+            let missing: Vec<_> = declared
+                .iter()
+                .filter_map(|d| d.ident)
+                .filter(|ident| fields.iter().all(|field| field.ident.name != ident.name))
+                .map(|ident| format!("`{ident}`"))
+                .collect();
+            if !missing.is_empty() {
+                let message = format!("pattern does not mention field(s) {}", missing.join(", "));
+                self.error(message, path.span);
+                return;
+            }
+        }
+        for field in fields {
+            let Some(index) = position(field.ident.name) else {
+                let message = format!("no field `{}` in this struct", field.ident);
+                self.error(message, field.span);
+                return;
+            };
+            let element = self.new_reg();
+            let index = index as u32;
+            self.emit(
+                InstKind::Project {
+                    dst: element,
+                    value,
+                    index,
+                },
+                field.span,
+            );
+            self.pat(&field.pat, element, fail);
         }
     }
 

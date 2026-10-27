@@ -487,3 +487,90 @@ fn the_bytes_example_runs() {
         Ok("00000000  58 55 52 21 01 00 03 00 ad de 00 00 ef be 00 00\n00000010  2a 00 00 00\nentries: Ok([57005, 48879, 1337])\nErr(\"not a XUR! file\")\nmagic at 1\n".into())
     );
 }
+
+#[test]
+fn structs_have_named_fields() {
+    let src = r#"
+        struct Point { x: i64, y: i64 }
+        enum Shape { Circle { r: f64 }, Rect { w: f64, h: f64 } }
+        fn area(s: Shape) -> f64 {
+            match s { Shape::Circle { r } => 3.0 * r * r, Shape::Rect { w, h: height } => w * height }
+        }
+        fn main() {
+            let y = 2;
+            let p = Point { y, x: 1 };
+            let q = p;
+            p.x = 10;
+            let Point { x, .. } = p;
+            std::io::println("{} {} {} {}", p, q.x, x, area(Shape::Rect { w: 2.0, h: 3.0 }));
+        }
+    "#;
+    assert_eq!(run(src), Ok("Point { x: 10, y: 2 } 1 10 6\n".into()));
+}
+
+#[test]
+fn nested_fields_are_assigned_through_copies() {
+    let src = r#"
+        struct Inner { n: i64 }
+        struct Outer { inner: Inner, items: [i64] }
+        fn main() {
+            let o = Outer { inner: Inner { n: 1 }, items: [1] };
+            o.inner.n = 5;
+            o.items[0] = 7;
+            std::io::println("{}", o);
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok("Outer { inner: Inner { n: 5 }, items: [7] }\n".into())
+    );
+}
+
+#[test]
+fn struct_literal_errors() {
+    let with = |body: &str| {
+        run(&format!(
+            "struct P {{ x: u8, y: u8 }} fn main() {{ {body} }}"
+        ))
+    };
+    assert_eq!(with("P { x: 1 };"), Err("missing field(s) `y`".into()));
+    assert_eq!(
+        with("P { x: 1, y: 2, z: 3 };"),
+        Err("no field `z` in this struct".into())
+    );
+    assert_eq!(
+        with("P { x: 1, x: 2, y: 3 };"),
+        Err("field `x` specified more than once".into())
+    );
+    assert_eq!(
+        with("P { x: 300, y: 0 };"),
+        Err("expected `u8`, found 300".into())
+    );
+    assert_eq!(
+        with("let p = P { x: 1, y: 2 }; p.z;"),
+        Err("no field `z` on `P`".into())
+    );
+    assert_eq!(
+        with("let P { x } = P { x: 1, y: 2 };"),
+        Err("pattern does not mention field(s) `y`".into())
+    );
+}
+
+#[test]
+fn the_structs_example_runs() {
+    let output = run_files(&[(
+        "example/structs.xur",
+        include_str!("../../../example/structs.xur"),
+    )]);
+    assert_eq!(
+        output,
+        Ok(concat!(
+            "Player { name: \"ada\", pos: Point { x: 0, y: 0 }, health: 100 }\n",
+            "Moved { dx: 3, dy: -1 } -> ada at (3, -1), health 100\n",
+            "Hit { damage: 30 } -> ada at (3, -1), health 70\n",
+            "Moved { dx: 1, dy: 1 } -> ada at (4, 0), health 70\n",
+            "start is still at Point { x: 0, y: 0 }\n",
+        )
+        .into())
+    );
+}

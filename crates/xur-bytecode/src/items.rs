@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use xur_ast::visit::{self, Visitor};
-use xur_ast::{ConstItem, Fn, Item, ItemKind, NodeId, Variant, VariantData};
+use xur_ast::{ConstItem, FieldDef, Fn, Item, ItemKind, NodeId, Variant, VariantData};
 use xur_resolve::{DefId, ModuleIdx, Program, Resolutions};
 
 /// What lowering needs to know about a definition.
@@ -53,6 +53,15 @@ impl ItemIndex {
 
     pub fn get(&self, def: DefId) -> Option<ItemRef> {
         self.items.get(&def).copied()
+    }
+
+    /// The named fields of the struct or variant `def`, in declaration
+    /// order, or `None` if it has no named fields.
+    pub fn named_fields(&self, def: DefId) -> Option<&'static [FieldDef]> {
+        match self.get(def)? {
+            ItemRef::Ctor(VariantData::Struct(fields)) => Some(fields),
+            _ => None,
+        }
     }
 
     /// Every indexed definition.

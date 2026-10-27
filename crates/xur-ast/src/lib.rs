@@ -22,7 +22,7 @@ mod ty;
 pub mod visit;
 
 pub use attr::{Attribute, MetaItem, MetaItemInner, MetaItemKind};
-pub use expr::{Arm, Closure, Expr, ExprKind, MethodCall, RangeLimits};
+pub use expr::{Arm, Closure, Expr, ExprField, ExprKind, MethodCall, RangeLimits, StructExpr};
 pub use item::{
     ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Impl, Item,
     ItemKind, Module, Param, UseTree, Variant, VariantData, Visibility,
@@ -30,7 +30,7 @@ pub use item::{
 pub use lit::{Lit, LitKind};
 pub use node_id::{NodeId, NodeIdGen};
 pub use op::{BinOp, BinOpKind, Fixity, Precedence, UnOp};
-pub use pat::{Pat, PatKind};
+pub use pat::{Pat, PatField, PatKind};
 pub use path::{GenericArgs, Path, PathSegment};
 pub use stmt::{Block, Local, Stmt, StmtKind};
 pub use ty::{Ty, TyKind};

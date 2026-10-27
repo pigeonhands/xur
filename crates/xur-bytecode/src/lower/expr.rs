@@ -6,7 +6,7 @@ use std::sync::Arc;
 use xur_ast::visit::{self, Visitor};
 use xur_ast::{
     Arm, BinOpKind, Block as AstBlock, Closure, Expr, ExprKind, GenericArgs, LitKind, Local,
-    NodeId, Pat, PatKind, Path, RangeLimits, StmtKind, Ty, TyKind, VariantData,
+    NodeId, Pat, PatKind, Path, RangeLimits, StmtKind, StructExpr, Ty, TyKind, VariantData,
 };
 use xur_resolve::{DefId, DefKind, Res};
 use xur_span::Span;
@@ -90,6 +90,7 @@ impl Lowerer<'_> {
                 dst
             }
             ExprKind::Call(callee, args) => self.call(callee, args, span),
+            ExprKind::Struct(literal) => self.struct_literal(literal, span),
             ExprKind::MethodCall(call) => {
                 let receiver = self.expr(&call.receiver);
                 let args = self.exprs(&call.args);
@@ -219,7 +220,7 @@ impl Lowerer<'_> {
         dst
     }
 
-    fn ctor_shape(&self, def: DefId) -> Option<&'static VariantData> {
+    pub(super) fn ctor_shape(&self, def: DefId) -> Option<&'static VariantData> {
         match self.items.get(def)? {
             ItemRef::Ctor(data) => Some(data),
             _ => None,
@@ -332,26 +333,98 @@ impl Lowerer<'_> {
     }
 
     fn assign(&mut self, place: &Expr, value: &Expr, span: Span) -> Reg {
+        let value = self.expr(value);
+        self.assign_to(place, value, span);
+        self.unit(span)
+    }
+
+    /// Stores `value` in `place`: a local variable, a field of a place, or
+    /// an element of a list or bytes.
+    fn assign_to(&mut self, place: &Expr, value: Reg, span: Span) {
         match &place.kind {
-            ExprKind::Path(path) => {
-                let value = self.expr(value);
-                match self.resolutions.res.get(&path.id) {
-                    Some(Res::Local(binding)) if self.locals.contains_key(binding) => {
-                        let dst = self.locals[binding];
-                        self.emit(InstKind::Copy { dst, src: value }, span);
-                    }
-                    _ => return self.error("only local variables can be assigned to", place.span),
+            ExprKind::Path(path) => match self.resolutions.res.get(&path.id) {
+                Some(Res::Local(binding)) if self.locals.contains_key(binding) => {
+                    let dst = self.locals[binding];
+                    self.emit(InstKind::Copy { dst, src: value }, span);
                 }
+                _ => {
+                    self.error("only local variables can be assigned to", place.span);
+                }
+            },
+            // Structs are values: update a copy and store that back.
+            ExprKind::Field(base, field) => {
+                let current = self.expr(base);
+                let dst = self.new_reg();
+                let field = field.name;
+                self.emit(
+                    InstKind::SetField {
+                        dst,
+                        base: current,
+                        field,
+                        value,
+                    },
+                    span,
+                );
+                self.assign_to(base, dst, span);
             }
+            // Lists and bytes are shared, so they change in place.
             ExprKind::Index(base, index) => {
                 let base = self.expr(base);
                 let index = self.expr(index);
-                let value = self.expr(value);
                 self.emit(InstKind::SetIndex { base, index, value }, span);
             }
-            _ => return self.error("this cannot be assigned to", place.span),
+            ExprKind::Paren(inner) => self.assign_to(inner, value, span),
+            _ => {
+                self.error("this cannot be assigned to", place.span);
+            }
         }
-        self.unit(span)
+    }
+
+    /// `Path { field: value, ... }`. The values are evaluated in the order
+    /// written, checked against the fields' types and stored in declaration
+    /// order.
+    fn struct_literal(&mut self, literal: &StructExpr, span: Span) -> Reg {
+        let ctor = match self.resolutions.res.get(&literal.path.id) {
+            Some(&Res::Def(DefKind::Struct | DefKind::Variant, ctor)) => ctor,
+            Some(Res::Err) | None => return self.error("unresolved struct", span),
+            Some(other) => {
+                let message = format!("expected a struct, found a {}", other.descr());
+                return self.error(message, span);
+            }
+        };
+        let Some(VariantData::Struct(declared)) = self.ctor_shape(ctor) else {
+            return self.error("this has no named fields; use `Name(...)`", span);
+        };
+        let mut values: Vec<Option<Reg>> = vec![None; declared.len()];
+        for field in &literal.fields {
+            let name = field.ident.name;
+            let Some(index) = declared
+                .iter()
+                .position(|d| d.ident.map(|i| i.name) == Some(name))
+            else {
+                return self.error(format!("no field `{name}` in this struct"), field.span);
+            };
+            if values[index].is_some() {
+                let message = format!("field `{name}` specified more than once");
+                return self.error(message, field.span);
+            }
+            let value = self.expr(&field.expr);
+            self.check_type(value, &declared[index].ty, field.span);
+            values[index] = Some(value);
+        }
+        let missing: Vec<_> = declared
+            .iter()
+            .zip(&values)
+            .filter(|(_, value)| value.is_none())
+            .filter_map(|(field, _)| field.ident.map(|ident| format!("`{ident}`")))
+            .collect();
+        if !missing.is_empty() {
+            return self.error(format!("missing field(s) {}", missing.join(", ")), span);
+        }
+        let fields = values.into_iter().flatten().collect();
+        let dst = self.new_reg();
+        self.emit(InstKind::Adt { dst, ctor, fields }, span);
+        dst
     }
 
     /// `value?`: the `Ok` or `Some` value, or else return the `Err` or

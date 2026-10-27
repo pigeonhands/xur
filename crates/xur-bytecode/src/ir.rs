@@ -174,11 +174,20 @@ pub enum InstKind {
         method: Symbol,
         args: Vec<Reg>,
     },
-    /// `base.field`: a field of a native value, or a module's member.
+    /// `base.field`: a named field of a struct or native value, an element
+    /// of a tuple by number, or a module's member.
     Field {
         dst: Reg,
         base: Reg,
         field: Symbol,
+    },
+    /// A copy of `base` with `field` set to `value`. Structs are values, so
+    /// `p.x = 1` stores an updated copy back in `p`.
+    SetField {
+        dst: Reg,
+        base: Reg,
+        field: Symbol,
+        value: Reg,
     },
     Index {
         dst: Reg,

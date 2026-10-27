@@ -254,6 +254,15 @@ impl<'s> Interp<'s> {
                 let value = self.field(frame.get(*base), *field)?;
                 frame.set(*dst, value);
             }
+            InstKind::SetField {
+                dst,
+                base,
+                field,
+                value,
+            } => {
+                let value = self.set_field(frame.get(*base), *field, frame.get(*value).clone())?;
+                frame.set(*dst, value);
+            }
             InstKind::Index { dst, base, index } => {
                 let value = crate::ops::index(frame.get(*base), frame.get(*index))?;
                 frame.set(*dst, value);

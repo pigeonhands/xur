@@ -22,6 +22,8 @@ There are complete programs in [`example/`](example):
 | [`main.xur`](example/main.xur)             | most of the language, using `math.xur`            |
 | [`channels.xur`](example/channels.xur)     | threads sending results back over a channel       |
 | [`echo_server.xur`](example/echo_server.xur) | a TCP echo server, to try with `nc`             |
+| [`bytes.xur`](example/bytes.xur)           | building and parsing a binary format with `bytes` |
+| [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
 
 ## A taste of Xur
 
@@ -142,6 +144,21 @@ xs[0] = 10;
 let offset = 10;
 let shift = |x| x * 2 + offset;
 io::println("{} {}", xs, shift(4)); // [10, 2, 3, 4] 18
+```
+
+### Structs
+
+Structs are values, like tuples: assigning to a field gives the variable an
+updated copy, and other copies keep their old value.
+
+```rust
+struct Point { x: i64, y: i64 }
+
+let p = Point { x: 1, y: 2 };
+let q = p;
+p.x = 10;
+let Point { x, .. } = p;
+io::println("{} {} {}", p, q.x, x); // Point { x: 10, y: 2 } 1 10
 ```
 
 ### Threads, channels and sockets

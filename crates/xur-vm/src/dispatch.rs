@@ -89,7 +89,12 @@ impl Interp<'_> {
     /// `base.field`: a field of a native object or record, an element of a
     /// tuple or struct by number, or a module's member.
     pub(crate) fn field(&mut self, base: &Value, field: Symbol) -> RunResult<Value> {
-        let missing = || RuntimeError::new(format!("no field `{field}` on {}", base.kind()));
+        let missing = || {
+            RuntimeError::new(format!(
+                "no field `{field}` on {}",
+                self.describe_type(base)
+            ))
+        };
         match base {
             Value::Module(module) => self.module_member(*module, field),
             Value::Native(object) => {
@@ -100,9 +105,41 @@ impl Interp<'_> {
             }
             Value::Record(record) => record.field(field).cloned().ok_or_else(missing),
             Value::Tuple(items) => numbered(items, field).ok_or_else(missing),
-            Value::Adt(adt) => numbered(&adt.fields, field).ok_or_else(missing),
+            Value::Adt(adt) => match self.shared.field_names(adt.ctor) {
+                Some(names) => names
+                    .iter()
+                    .position(|&name| name == field)
+                    .map(|index| adt.fields[index].clone())
+                    .ok_or_else(missing),
+                None => numbered(&adt.fields, field).ok_or_else(missing),
+            },
             _ => Err(missing()),
         }
+    }
+
+    /// A copy of the struct `base` with `field` set to `value`.
+    pub(crate) fn set_field(&self, base: &Value, field: Symbol, value: Value) -> RunResult<Value> {
+        let missing = || {
+            RuntimeError::new(format!(
+                "no field `{field}` on {}",
+                self.describe_type(base)
+            ))
+        };
+        let Value::Adt(adt) = base else {
+            return Err(missing());
+        };
+        let index = match self.shared.field_names(adt.ctor) {
+            Some(names) => names.iter().position(|&name| name == field),
+            None => field
+                .as_str()
+                .parse()
+                .ok()
+                .filter(|&i| i < adt.fields.len()),
+        }
+        .ok_or_else(missing)?;
+        let mut fields = adt.fields.clone();
+        fields[index] = value;
+        Ok(Value::adt(adt.ctor, fields))
     }
 
     /// The value named `name` in `module`, which modules-as-values expose

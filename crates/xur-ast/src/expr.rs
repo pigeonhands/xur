@@ -61,6 +61,8 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     /// `receiver.method(args)`
     MethodCall(Box<MethodCall>),
+    /// `Point { x: 1, y }`
+    Struct(Box<StructExpr>),
     /// `expr.field`
     Field(Box<Expr>, Ident),
     /// `expr?`
@@ -93,6 +95,24 @@ pub enum ExprKind {
     Ret(Option<Box<Expr>>),
     /// An expression that failed to parse; the error has already been reported.
     Err,
+}
+
+/// A struct literal, `Point { x: 1, y }`, for a struct or variant with
+/// named fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructExpr {
+    pub path: Path,
+    pub fields: Vec<ExprField>,
+}
+
+/// `name: expr` in a struct literal. In the shorthand `name`, `expr` is a
+/// path to the variable of the same name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExprField {
+    pub ident: Ident,
+    pub expr: Expr,
+    pub shorthand: bool,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

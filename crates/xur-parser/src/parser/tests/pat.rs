@@ -39,6 +39,20 @@ fn tuple_struct_patterns() {
 }
 
 #[test]
+fn struct_patterns() {
+    assert_eq!(pat("Point { x, y: 0 }"), "Point { x, y: 0 }");
+    assert_eq!(
+        pat("Event::Hit { damage, .. }"),
+        "Event::Hit { damage, .. }"
+    );
+    assert_eq!(pat("Empty {}"), "Empty {  }");
+    assert_eq!(
+        parse_errors("P { .., x }", Parser::parse_pat),
+        ["`..` must be the last field of a pattern"]
+    );
+}
+
+#[test]
 fn tuple_and_paren_patterns() {
     assert_eq!(pat("()"), "()");
     assert_eq!(pat("(a)"), "(a)");
