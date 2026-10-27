@@ -48,7 +48,18 @@ fn main() -> Result<()> {
     assert::is_eq(parsed.sequence, 1001);
     assert::is_eq(parsed.tag, b"PING");
     assert::is_eq(parsed.checksum, 0xabcd);
-    io::println("Round-trip: all fields match");
+    io::println("Field assertions: ok");
+
+    // Serialize the parsed record back and check the bytes match.
+    let data2 = layout.to_bytes(parsed);
+    assert::is_eq(data, data2);
+    io::println("Byte-level round-trip: ok");
+
+    // Parse the same bytes twice and compare the records directly.
+    let a = layout.from_bytes(data);
+    let b = layout.from_bytes(data2);
+    assert::is_true(a == b);
+    io::println("Record equality: ok");
 
     // Runtime-built layout with record literals.
     let pair_layout = reflect::Layout::new("Pair")
@@ -59,6 +70,9 @@ fn main() -> Result<()> {
     let pair = pair_layout.from_bytes(pair_bytes);
     assert::is_eq(pair.x, 42);
     assert::is_eq(pair.y, -1);
+
+    let pair_bytes2 = pair_layout.to_bytes(pair);
+    assert::is_eq(pair_bytes, pair_bytes2);
     io::println("Pair round-trip: ok");
 
     Ok(())
