@@ -5,10 +5,12 @@
 //     xur run example/reflect/parse_bytes.xur
 //
 // Defines a packet header struct with layout attributes, constructs
-// one, serializes it to bytes, then parses those bytes back.
+// one, serializes it to bytes, then parses those bytes back and
+// asserts the round-trip is correct.
 
 use std::io;
 use std::reflect;
+use std::assert;
 
 #[repr(packed)]
 #[endian(Big)]
@@ -25,12 +27,6 @@ fn main() -> Result<()> {
     let layout = reflect::layout::<PacketHeader>();
     io::println("Layout: {}", layout);
     io::println("Size:   {} bytes", layout.size());
-    io::println("");
-
-    for f in layout.fields() {
-        io::println("  +{}  {}  {}", f.offset, f.name, f.ty);
-    }
-    io::println("");
 
     // Construct a header and serialize it.
     let header = PacketHeader {
@@ -44,28 +40,26 @@ fn main() -> Result<()> {
     let data = layout.to_bytes(header);
     io::println("Encoded: {}", data.to_hex());
 
-    // Parse the bytes back into a record.
+    // Parse the bytes back and verify the round-trip.
     let parsed = layout.from_bytes(data);
-    io::println("Decoded:");
-    io::println("  version  = {}", parsed.version);
-    io::println("  kind     = {}", parsed.kind);
-    io::println("  length   = {}", parsed.length);
-    io::println("  sequence = {}", parsed.sequence);
-    io::println("  tag      = {}", parsed.tag);
-    io::println("  checksum = {}", parsed.checksum);
-    io::println("");
+    assert::is_eq(parsed.version, 1);
+    assert::is_eq(parsed.kind, 0x10);
+    assert::is_eq(parsed.length, 64);
+    assert::is_eq(parsed.sequence, 1001);
+    assert::is_eq(parsed.tag, b"PING");
+    assert::is_eq(parsed.checksum, 0xabcd);
+    io::println("Round-trip: all fields match");
 
-    // Also works the other way: build a layout at runtime and write
-    // a record literal into it.
-    let runtime_layout = reflect::Layout::new("Pair")
+    // Runtime-built layout with record literals.
+    let pair_layout = reflect::Layout::new("Pair")
         .field("x", "i32")
         .field("y", "i32");
 
-    let pair_bytes = runtime_layout.to_bytes(@{ x: 42, y: -1 });
-    io::println("Pair bytes: {}", pair_bytes.to_hex());
-
-    let pair = runtime_layout.from_bytes(pair_bytes);
-    io::println("Pair back:  x={}, y={}", pair.x, pair.y);
+    let pair_bytes = pair_layout.to_bytes(@{ x: 42, y: -1 });
+    let pair = pair_layout.from_bytes(pair_bytes);
+    assert::is_eq(pair.x, 42);
+    assert::is_eq(pair.y, -1);
+    io::println("Pair round-trip: ok");
 
     Ok(())
 }

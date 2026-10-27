@@ -5,6 +5,7 @@
 //! alongside it. Each submodule registers itself.
 
 mod any;
+mod assert;
 mod bytes;
 #[cfg(feature = "cli")]
 mod cli;
@@ -54,6 +55,7 @@ pub fn register(registry: &Registry) {
     sync::register(registry);
     net::register(registry);
     any::register(registry);
+    assert::register(registry);
     reflect::register(registry);
     json::register(registry);
     re::register(registry);
