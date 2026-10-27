@@ -17,7 +17,7 @@
 use std::sync::Arc;
 
 use facet::{Facet, Peek};
-use procodile::{Access, Address, Module, Process, ProcessHandle, Protection, Region};
+use procodile::{Access, Address, LoadMethod, Module, Process, ProcessHandle, Protection, Region};
 use xur_runtime::convert::{ConvertCx, reflect_error, to_value};
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Record, Registry, RunResult, RuntimeError, Value};
@@ -181,6 +181,18 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
         })
         .method("module_at", |h: &Handle, address: u64| {
             h.0.module_at(addr(address)).map_err(error_text)
+        })
+        // `method` is a `LoadMethod` value: `LoadMethod::Loader` (the OS
+        // loader) or `LoadMethod::ManualMap` (mapped directly, without the
+        // OS loader's involvement or module-list entry).
+        .method(
+            "load_library",
+            |h: &Handle, path: String, method: LoadMethod| {
+                h.0.load_library(path, method).map_err(error_text)
+            },
+        )
+        .method("map_image", |h: &Handle, bytes: Vec<u8>| {
+            h.0.map_image(&bytes).map_err(error_text)
         });
 }
 

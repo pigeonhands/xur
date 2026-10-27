@@ -829,6 +829,22 @@ fn re_proc_examples_run() {
     }
 }
 
+// pid and the loaded base address vary per run, so this checks the stable
+// prefix rather than exact output.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn re_proc_inject_example_runs() {
+    let output = run_files(&[(
+        "example/re/proc/inject.xur",
+        include_str!("../../../example/re/proc/inject.xur"),
+    )])
+    .unwrap();
+    assert!(
+        output.starts_with("loaded libc.so.6 into pid "),
+        "{output:?}"
+    );
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn proc_inspects_the_current_process() {
@@ -1064,4 +1080,42 @@ fn question_mark_traces_to_main_by_default() {
     );
     // The runtime can turn tracing off.
     assert!(run_for_error(src, false).notes.is_empty());
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn std_process_spawns_and_waits_for_a_child() {
+    let src = r#"
+        fn main() -> Result<(), str> {
+            let io = std::io;
+            let child = std::process::spawn("true", [])?;
+            io::println("pid > 0: {}", child.pid() > 0);
+            io::println("exit code: {}", child.wait()?);
+            Ok(())
+        }
+    "#;
+    assert_eq!(run(src), Ok("pid > 0: true\nexit code: 0\n".into()));
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn std_process_spawn_reports_a_missing_program() {
+    let src = r#"fn main() { std::io::println("{}", std::process::spawn("this-program-does-not-exist", []).is_err()); }"#;
+    assert_eq!(run(src), Ok("true\n".into()));
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn std_process_kill_stops_a_running_child() {
+    let src = r#"
+        fn main() -> Result<(), str> {
+            let child = std::process::spawn("sleep", ["5"])?;
+            let still_running = child.try_wait()?;
+            std::io::println("{}", still_running);
+            child.kill()?;
+            child.wait()?;
+            Ok(())
+        }
+    "#;
+    assert_eq!(run(src), Ok("None\n".into()));
 }

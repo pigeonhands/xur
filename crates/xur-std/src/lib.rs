@@ -13,6 +13,7 @@ mod list;
 mod math;
 mod net;
 mod num;
+mod process;
 mod re;
 mod reflect;
 mod str;
@@ -36,6 +37,7 @@ pub fn register(registry: &Registry) {
         .raw_function("panic", panic);
     io::register(registry);
     fs::register(registry);
+    process::register(registry);
     thread::register(registry);
     sync::register(registry);
     net::register(registry);

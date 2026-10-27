@@ -550,9 +550,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pewter"
-version = "0.0.9"
+version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a9d3a260e2557520fda93d9ce5ce87a1cfe73e12d4f64e55096bc585b90d42"
+checksum = "724bcf2cd618457ca0e0e82789354837e73c6927d4c6a2b57dc20e7e1468bbcf"
 dependencies = [
  "bitflags 2.13.2",
  "facet",
@@ -576,6 +576,7 @@ checksum = "15c16097b46c8d0233bb7453fa4a4518578e6bbf5355e445f09470630a0ad59b"
 dependencies = [
  "facet",
  "libc",
+ "pewter",
  "thiserror",
  "windows-sys 0.61.2",
 ]

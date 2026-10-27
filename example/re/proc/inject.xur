@@ -1,0 +1,36 @@
+// Loading a shared library into another process with `handle.load_library`.
+//
+//     xur run example/re/proc/inject.xur
+//
+// The example spawns its own short-lived child process (`sleep`) so it has
+// a consenting, disposable target, then loads `libc` into it — a library
+// already loaded in virtually every process, so this just confirms the
+// mechanism rather than changing anything about the child's behavior.
+// `load_library` needs write access to the target, hence "readwrite".
+
+use std::io;
+use std::re::proc;
+use std::re::proc::LoadMethod;
+
+fn main() -> Result<(), str> {
+    // Find a library already loaded in this process to re-load into the
+    // child; any real tool would point at its own library instead.
+    let library = "";
+    for module in proc::open_current()?.modules()? {
+        if module.name == "libc.so.6" {
+            library = module.path;
+        }
+    }
+
+    let child = std::process::spawn("sleep", ["5"])?;
+    let handle = proc::open(child.pid(), "readwrite")?;
+
+    // `LoadMethod::Loader` uses the target's own OS loader (`dlopen`), so
+    // the library shows up in its normal module list afterward.
+    let loaded = handle.load_library(library, LoadMethod::Loader)?;
+    io::println("loaded {} into pid {} at {}", loaded.name, child.pid(), loaded.base.to_hex());
+
+    child.kill()?;
+    child.wait()?;
+    Ok(())
+}

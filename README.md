@@ -233,6 +233,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::fs`     | `read_to_string`, `write`, `append`, `exists`, `remove`, `read_dir`, `File` |
 | `std::net`    | `TcpListener`, `TcpStream`, `UdpSocket`, `UnixListener`, `UnixStream`    |
 | `std::thread` | `spawn`, `sleep`, `JoinHandle::join`                                     |
+| `std::process`| `spawn(program, args)` an OS child process; `Process::pid/kill/wait`    |
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
