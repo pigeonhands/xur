@@ -55,6 +55,12 @@ pub struct Function {
     /// For each parameter, the type-parameter index it uses, if any.
     /// Enables runtime inference of generic args from argument values.
     pub param_type_params: Vec<Option<u32>>,
+    /// The declared name of each parameter, for reflection.
+    pub param_names: Vec<Option<Symbol>>,
+    /// The declared type of each parameter, for reflection.
+    pub param_types: Vec<Option<RtType>>,
+    /// The declared return type, for reflection.
+    pub ret_type: Option<RtType>,
     pub blocks: Vec<Block>,
     /// The bodies of closures created by this function, by index.
     pub closures: Vec<Arc<Function>>,

@@ -83,6 +83,8 @@ struct Lowerer<'a> {
     closures: Vec<Arc<Function>>,
     /// For each parameter, which type param index it uses.
     param_type_params: Vec<Option<u32>>,
+    param_names: Vec<Option<Symbol>>,
+    param_types: Vec<Option<RtType>>,
     /// The declared return type, checked on return.
     ret_ty: Option<RtType>,
     /// A type hint from a `let x: Type = call()` binding, passed as a type
@@ -108,6 +110,8 @@ impl<'a> Lowerer<'a> {
             type_param_required: Vec::new(),
             closures: Vec::new(),
             param_type_params: Vec::new(),
+            param_names: Vec::new(),
+            param_types: Vec::new(),
             ret_ty: None,
             hint_type_arg: None,
         };
@@ -137,6 +141,9 @@ impl<'a> Lowerer<'a> {
             type_params: self.type_param_names,
             type_param_required: self.type_param_required,
             param_type_params: self.param_type_params,
+            param_names: self.param_names,
+            param_types: self.param_types,
+            ret_type: self.ret_ty,
             blocks,
             closures: self.closures,
             span,
@@ -149,6 +156,12 @@ impl<'a> Lowerer<'a> {
         let registers: Vec<_> = params.iter().map(|_| self.new_reg()).collect();
         for (param, reg) in params.iter().zip(registers) {
             self.param_type_params.push(self.type_param_index(&param.ty));
+            let name = match &param.pat.kind {
+                xur_ast::PatKind::Ident(ident) => Some(ident.name),
+                _ => None,
+            };
+            self.param_names.push(name);
+            self.param_types.push(self.rt_type(&param.ty));
             self.check_type(reg, &param.ty, param.span);
             self.bind_irrefutable(&param.pat, reg);
         }
