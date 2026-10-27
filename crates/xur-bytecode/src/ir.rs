@@ -280,6 +280,14 @@ pub enum InstKind {
         value: Reg,
         len: u32,
     },
+    /// Whether `value` is a list of exactly `len` elements, or at least
+    /// `len` when `at_least` is true.
+    IsList {
+        dst: Reg,
+        value: Reg,
+        len: u32,
+        at_least: bool,
+    },
     /// Element `index` of a tuple, or field `index` of a struct or variant.
     Project {
         dst: Reg,

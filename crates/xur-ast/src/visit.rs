@@ -285,7 +285,7 @@ pub fn walk_pat<'a, V: Visitor<'a>>(visitor: &mut V, pat: &'a Pat) {
                 visitor.visit_pat(&field.pat);
             }
         }
-        PatKind::Tuple(pats) => {
+        PatKind::Tuple(pats) | PatKind::List(pats, _) => {
             for pat in pats {
                 visitor.visit_pat(pat);
             }

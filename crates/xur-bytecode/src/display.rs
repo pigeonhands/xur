@@ -143,6 +143,10 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             format!("{dst:?} = {value:?} is record of {len}")
         }
         InstKind::IsTuple { dst, value, len } => format!("{dst:?} = {value:?} is tuple of {len}"),
+        InstKind::IsList { dst, value, len, at_least } => {
+            let op = if *at_least { ">=" } else { "==" };
+            format!("{dst:?} = {value:?} is list {op} {len}")
+        }
         InstKind::Project { dst, value, index } => format!("{dst:?} = {value:?}.{index}"),
         InstKind::IterStart { dst, iterable } => format!("{dst:?} = iter {iterable:?}"),
         InstKind::CheckType { value, ty, coerce } => {

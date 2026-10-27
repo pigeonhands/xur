@@ -119,6 +119,21 @@ impl Lowerer<'_> {
                 self.test(is, fail, span);
                 self.pat_fields(pats, value, fail);
             }
+            PatKind::List(pats, rest) => {
+                let is = self.new_reg();
+                let len = pats.len() as u32;
+                self.emit(
+                    InstKind::IsList {
+                        dst: is,
+                        value,
+                        len,
+                        at_least: *rest,
+                    },
+                    span,
+                );
+                self.test(is, fail, span);
+                self.pat_fields(pats, value, fail);
+            }
             PatKind::Paren(inner) => self.pat(inner, value, fail),
             PatKind::Err => self.terminate(Terminator::Goto(fail), span),
         }

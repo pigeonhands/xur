@@ -20,6 +20,8 @@ impl Parser<'_> {
             } else {
                 PatKind::Tuple(pats)
             }
+        } else if self.eat_noexpect(TokenKind::LBracket) {
+            self.parse_pat_list()?
         } else if matches!(self.token.kind, TokenKind::Ident(_)) {
             self.parse_pat_path()?
         } else {
@@ -48,6 +50,28 @@ impl Parser<'_> {
             Some(ident) => PatKind::Ident(ident),
             None => PatKind::Path(path),
         })
+    }
+
+    /// `[a, b]` or `[a, ..]`, after the `[`.
+    fn parse_pat_list(&mut self) -> PResult<PatKind> {
+        let mut rest = None;
+        let pats = self.parse_delimited(TokenKind::RBracket, |this| {
+            if this.eat(TokenKind::DotDot) {
+                rest = Some(this.prev_token.span);
+                return Ok(None);
+            }
+            if let Some(span) = rest {
+                this.report(Diag::error(
+                    "`..` must be the last element of a list pattern",
+                    span,
+                ));
+            }
+            Ok(Some(this.parse_pat()?))
+        })?;
+        Ok(PatKind::List(
+            pats.into_iter().flatten().collect(),
+            rest.is_some(),
+        ))
     }
 
     /// The fields of a struct pattern, after the `{`; `..` may come last.

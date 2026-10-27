@@ -584,11 +584,31 @@ impl<'s> Interp<'s> {
                 let is = matches!(frame.get(*value), Value::Tuple(items) if items.len() == *len as usize);
                 frame.set(*dst, Value::Bool(is));
             }
+            InstKind::IsList {
+                dst,
+                value,
+                len,
+                at_least,
+            } => {
+                let is = match frame.get(*value) {
+                    Value::List(list) => {
+                        let list = list.lock().unwrap();
+                        if *at_least {
+                            list.len() >= *len as usize
+                        } else {
+                            list.len() == *len as usize
+                        }
+                    }
+                    _ => false,
+                };
+                frame.set(*dst, Value::Bool(is));
+            }
             InstKind::Project { dst, value, index } => {
                 let index = *index as usize;
                 let element = match frame.get(*value) {
                     Value::Tuple(items) => items.get(index).cloned(),
                     Value::Adt(adt) => adt.fields.get(index).cloned(),
+                    Value::List(list) => list.lock().unwrap().get(index).cloned(),
                     _ => None,
                 };
                 let element =

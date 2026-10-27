@@ -95,6 +95,16 @@ impl Show for Pat {
             }
             PatKind::Tuple(pats) if pats.len() == 1 => format!("({},)", pats[0].show()),
             PatKind::Tuple(pats) => format!("({})", list(pats)),
+            PatKind::List(pats, rest) => {
+                let mut items = list(pats);
+                if *rest {
+                    if !pats.is_empty() {
+                        items.push_str(", ");
+                    }
+                    items.push_str("..");
+                }
+                format!("[{}]", items)
+            }
             PatKind::Paren(pat) => format!("({})", pat.show()),
             PatKind::Err => "<err>".to_owned(),
         }
