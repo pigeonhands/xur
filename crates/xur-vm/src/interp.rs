@@ -150,7 +150,9 @@ impl<'s> Interp<'s> {
             )));
         }
         if !function.type_params.is_empty() {
-            if type_args.len() < function.type_params.len() {
+            let needs_inference = type_args.len() < function.type_params.len()
+                || type_args.iter().any(|t| t.def.is_none());
+            if needs_inference {
                 self.infer_type_args(function, &args, &mut type_args);
             }
             self.check_generic_args(function, &mut args, &type_args)?;
