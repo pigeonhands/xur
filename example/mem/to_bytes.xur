@@ -1,0 +1,42 @@
+// Struct ↔ bytes conversion with std::mem.
+//
+// Run it:
+//
+//     xur run example/mem/to_bytes.xur
+
+use std::io;
+use std::mem;
+use std::assert;
+
+#[repr(packed)]
+#[endian(Big)]
+struct Header {
+    magic: u16
+    version: u8
+    flags: u8
+    length: u32
+}
+
+fn main() -> Result<()> {
+    let h = Header { magic: 0xCAFE, version: 1, flags: 0x80, length: 256 };
+
+    // Struct to bytes via mem::to_bytes.
+    let data = mem::to_bytes(h);
+    io::println("Encoded: {}", data.to_hex());
+    assert::is_eq(data.len(), 8);
+
+    // Bytes back to struct via mem::from_bytes.
+    let h2 = mem::from_bytes::<Header>(data) as Header;
+    assert::is_eq(h, h2);
+    io::println("Round-trip: ok");
+
+    // The same works as a method on the struct.
+    let data2 = h.to_bytes();
+    assert::is_eq(data, data2);
+    io::println("Method to_bytes: ok");
+
+    assert::is_eq(h.byte_size(), 8);
+    io::println("byte_size: {}", h.byte_size());
+
+    Ok(())
+}

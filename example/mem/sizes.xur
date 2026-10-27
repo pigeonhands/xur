@@ -1,0 +1,49 @@
+// Querying struct sizes and alignment with std::mem.
+//
+// Run it:
+//
+//     xur run example/mem/sizes.xur
+
+use std::io;
+use std::mem;
+use std::assert;
+
+struct Point {
+    x: i32
+    y: i32
+}
+
+#[repr(packed)]
+struct Packed {
+    flag: u8
+    value: u32
+}
+
+#[repr(C)]
+struct Padded {
+    flag: u8
+    value: u32
+}
+
+#[repr(align(16))]
+struct Aligned {
+    x: u8
+}
+
+fn main() {
+    io::println("Point:   size={}, align={}", mem::size_of::<Point>(), mem::align_of::<Point>());
+    io::println("Packed:  size={}, align={}", mem::size_of::<Packed>(), mem::align_of::<Packed>());
+    io::println("Padded:  size={}, align={}", mem::size_of::<Padded>(), mem::align_of::<Padded>());
+    io::println("Aligned: size={}, align={}", mem::size_of::<Aligned>(), mem::align_of::<Aligned>());
+
+    assert::is_eq(mem::size_of::<Point>(), 8);
+    assert::is_eq(mem::size_of::<Packed>(), 5);
+    assert::is_eq(mem::size_of::<Padded>(), 8);
+    assert::is_eq(mem::align_of::<Aligned>(), 16);
+
+    let p = Point { x: 1, y: 2 };
+    assert::is_eq(mem::size_of_val(p), 8);
+    io::println("size_of_val(Point {{ x: 1, y: 2 }}) = {}", mem::size_of_val(p));
+
+    io::println("ok");
+}

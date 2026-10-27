@@ -29,7 +29,7 @@ use xur_ast::{Attribute, LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use xur_resolve::DefId;
 use xur_runtime::convert::into_value;
 use xur_runtime::{
-    AdtInfo, BuiltinType, Context, Record, Registry, RunResult, RuntimeError, TypeRef, Value, lock,
+    AdtInfo, Context, Record, RunResult, RuntimeError, TypeRef, Value, lock,
 };
 use xur_span::Symbol;
 
@@ -162,6 +162,14 @@ impl LayoutData {
 }
 
 impl Layout {
+    pub(crate) fn byte_size(&self) -> usize {
+        self.0.size
+    }
+
+    pub(crate) fn alignment(&self) -> usize {
+        self.0.align
+    }
+
     /// A copy of the layout's description, to build a changed layout from.
     fn data(&self) -> LayoutData {
         LayoutData::clone(&self.0)
@@ -177,7 +185,7 @@ impl Layout {
 
     /// The value at `offset` in `data`: a struct if the layout came from
     /// one, or else a record.
-    fn read(&self, data: &[u8], offset: usize) -> RunResult<Value> {
+    pub(crate) fn read(&self, data: &[u8], offset: usize) -> RunResult<Value> {
         let end = offset + self.0.size;
         if end > data.len() {
             return Err(RuntimeError::new(format!(
@@ -244,7 +252,7 @@ impl Layout {
 
     /// Writes the fields of `value` at `offset` in `data`, leaving padding
     /// as it was.
-    fn write(
+    pub(crate) fn write(
         &self,
         cx: &mut dyn Context,
         data: &mut Vec<u8>,
@@ -392,7 +400,7 @@ fn int_fits(i: i64, size: usize, signed: bool) -> bool {
 // Layouts of Xur structs.
 
 /// The layout of the struct `def`, from its attributes.
-fn layout_of_def(cx: &dyn Context, def: DefId, depth: usize) -> RunResult<Layout> {
+pub(crate) fn layout_of_def(cx: &dyn Context, def: DefId, depth: usize) -> RunResult<Layout> {
     let Some(info) = cx.adt_info(def) else {
         return Err(RuntimeError::new(
             "only structs and enum variants have layouts",
@@ -656,61 +664,9 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         });
 }
 
-/// What every struct can do with its layout: `std::mem`, and the methods
-/// `to_bytes` and `byte_size` of every struct value.
-pub(crate) fn register_mem(registry: &Registry) {
-    registry
-        .module("std::mem")
-        .raw_function("size_of", |cx, args| {
-            let layout = type_arg_layout(cx, args, "size_of")?;
-            Ok(Value::Int(layout.0.size as i64))
-        })
-        .raw_function("align_of", |cx, args| {
-            let layout = type_arg_layout(cx, args, "align_of")?;
-            Ok(Value::Int(layout.0.align as i64))
-        })
-        .raw_function("from_bytes", |cx, args| {
-            let [Value::Bytes(data)] = args else {
-                return Err(RuntimeError::new(
-                    "`from_bytes` takes bytes: `from_bytes::<T>(data)`",
-                ));
-            };
-            let layout = type_arg_layout(cx, &[], "from_bytes")?;
-            layout.read(&lock(data), 0)
-        })
-        .raw_function("size_of_val", |cx, args| {
-            let [Value::Adt(adt)] = args else {
-                return Err(RuntimeError::new("`size_of_val` takes a struct"));
-            };
-            Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.0.size as i64))
-        })
-        .raw_function("to_bytes", struct_to_bytes);
-    registry
-        .builtin(BuiltinType::Struct)
-        .raw_function("to_bytes", struct_to_bytes)
-        .raw_function("byte_size", |cx, args| {
-            let [Value::Adt(adt)] = args else {
-                return Err(RuntimeError::new("`byte_size` takes no arguments"));
-            };
-            Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.0.size as i64))
-        });
-}
-
-/// `value.to_bytes()`: a struct's bytes, laid out by its attributes, with
-/// padding zeroed.
-fn struct_to_bytes(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [value @ Value::Adt(adt)] = args else {
-        return Err(RuntimeError::new("`to_bytes` takes a struct"));
-    };
-    let layout = layout_of_def(cx, adt.ctor, 0)?;
-    let mut buffer = vec![0; layout.0.size];
-    layout.write(cx, &mut buffer, 0, value)?;
-    Ok(Value::Bytes(Arc::new(buffer.into())))
-}
-
 /// The layout of a function's one type argument, which takes no other
 /// arguments than `args`.
-fn type_arg_layout(cx: &dyn Context, args: &[Value], name: &str) -> RunResult<Layout> {
+pub(crate) fn type_arg_layout(cx: &dyn Context, args: &[Value], name: &str) -> RunResult<Layout> {
     let ([ty], []) = (cx.type_args(), args) else {
         return Err(RuntimeError::new(format!(
             "`{name}` takes a type argument: `{name}::<T>()`"

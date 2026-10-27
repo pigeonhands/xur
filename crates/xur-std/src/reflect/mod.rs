@@ -15,14 +15,13 @@
 //! `methods` lists a type's own methods, not `to_bytes` and `byte_size`,
 //! which every struct has (see [`layout`]).
 
-mod layout;
+pub(crate) mod layout;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 use crate::option;
 
 pub(crate) fn register(registry: &Registry) {
-    layout::register_mem(registry);
     registry.lazy_module("std::reflect", |module| {
         module
             .raw_function("type_name", |cx, args| {
