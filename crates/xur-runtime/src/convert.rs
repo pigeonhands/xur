@@ -58,7 +58,8 @@ pub fn from_value<T: Facet<'static>>(cx: &dyn ConvertCx, value: &Value) -> RunRe
     heap_value.materialize::<T>().map_err(reflect_error)
 }
 
-pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value> {
+/// Converts the value `peek` looks at, as [`to_value`] does.
+pub fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value> {
     let shape = peek.shape();
     let registry = cx.registry();
     if let Some(ty) = registry.type_of_shape(shape) {
@@ -66,6 +67,9 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
             .object_from_peek(ty, peek)
             .ok_or_else(|| unsupported(shape))?;
         return Ok(Value::Native(object.into()));
+    }
+    if let Some(convert) = registry.converter_of(shape) {
+        return convert(cx, peek);
     }
     if let Some(scalar) = peek.scalar_type() {
         return scalar_to_value(peek, scalar);
@@ -562,5 +566,16 @@ mod tests {
         );
         // Not a native object: `Drawing` was registered by shape only.
         assert_eq!(cx.1.type_of_shape(Drawing::SHAPE), None);
+    }
+
+    #[test]
+    fn converters_replace_the_conversion_of_a_shape() {
+        let cx = cx();
+        cx.1.converter(Label::SHAPE, |_, peek| {
+            let label: &Label = peek.get().map_err(reflect_error)?;
+            Ok(Value::str(&label.text.to_uppercase()))
+        });
+        let label = Label { text: "hi".into() };
+        assert_eq!(to_value(&cx, &label), Ok(Value::str("HI")));
     }
 }

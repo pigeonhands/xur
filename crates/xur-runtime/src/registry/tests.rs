@@ -150,3 +150,17 @@ fn registries_can_be_shared_between_threads() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<Registry>();
 }
+
+#[test]
+fn lazy_modules_can_fill_in_submodules() {
+    let registry = Registry::new();
+    registry.lazy_module("lib", |module| {
+        module.function("top", || 1i64);
+        module.submodule("inner").function("deep", || 2i64);
+    });
+    assert!(registry.decls()[0].lazy);
+    let expanded = registry.expand(&["lib".to_owned()]);
+    assert_eq!(expanded.functions[0].name, "top");
+    assert_eq!(expanded.modules[0].name, "inner");
+    assert_eq!(expanded.modules[0].functions[0].name, "deep");
+}

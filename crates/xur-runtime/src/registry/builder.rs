@@ -18,6 +18,16 @@ impl<'r> ModuleBuilder<'r> {
     pub(super) fn new(registry: &'r Registry, module: usize) -> Self {
         Self { registry, module }
     }
+
+    /// The submodule `name` of this module, created if needed. A lazy
+    /// module can fill in submodules as well as itself.
+    pub fn submodule(&self, name: &str) -> ModuleBuilder<'r> {
+        let parent = self.module;
+        let module = self
+            .registry
+            .with_inner(|inner| inner.child(Some(parent), name));
+        ModuleBuilder::new(self.registry, module)
+    }
 }
 
 impl ModuleBuilder<'_> {

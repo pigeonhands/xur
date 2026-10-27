@@ -146,7 +146,12 @@ struct Inner {
     modules: Vec<ModuleData>,
     /// Modules that are not submodules of another, like `std`.
     roots: Vec<usize>,
+    /// Conversions to Xur for shapes facet cannot see inside.
+    converters: Vec<(&'static Shape, Converter)>,
 }
+
+/// Converts a value of some shape to Xur, given a peek at it.
+pub type Converter = fn(&dyn ConvertCx, Peek<'_, 'static>) -> RunResult<Value>;
 
 impl Registry {
     pub fn new() -> Self {
@@ -267,6 +272,20 @@ impl Registry {
             .iter()
             .position(|ty| ty.shape == shape && ty.hooks.is_none())?;
         Some(NativeTypeId(index as u32))
+    }
+
+    /// Converts values of `shape` to Xur with `convert`, for types facet
+    /// cannot see inside, such as opaque ones. Such values cannot be
+    /// converted back.
+    pub fn converter(&self, shape: &'static Shape, convert: Converter) {
+        self.write().converters.push((shape, convert));
+    }
+
+    /// The conversion registered for `shape`, if any.
+    pub(crate) fn converter_of(&self, shape: &'static Shape) -> Option<Converter> {
+        let inner = self.read();
+        let (_, convert) = inner.converters.iter().find(|(s, _)| *s == shape)?;
+        Some(*convert)
     }
 
     /// Whether any type, of either kind, is registered for `shape`.
