@@ -95,5 +95,25 @@ fn main() -> Result<()> {
     io::println("{}", buffer.to_hex());
     io::println("{}", record.read(buffer, record.size()));
 
+    // Get a struct's layout and override its endianness at runtime.
+    let le = reflect::layout::<FileHeader>();
+    let be = le.big_endian();
+    io::println("LE layout: {}", le);
+    io::println("BE layout: {}", be);
+
+    let header = FileHeader { magic: 0x4d42, size: 100, reserved: 0, pixels_at: 54 };
+    let le_bytes = le.to_bytes(header);
+    let be_bytes = be.to_bytes(header);
+    io::println("LE bytes: {}", le_bytes.to_hex());
+    io::println("BE bytes: {}", be_bytes.to_hex());
+
+    // Parse the BE bytes back — multi-byte fields are swapped.
+    let from_be = be.from_bytes(be_bytes) as FileHeader;
+    io::println("From BE: magic={}, size={}, pixels_at={}", from_be.magic, from_be.size, from_be.pixels_at);
+
+    // Parse the same BE bytes with the LE layout — values differ.
+    let misread = le.from_bytes(be_bytes) as FileHeader;
+    io::println("BE bytes read as LE: magic={}, size={}", misread.magic, misread.size);
+
     Ok(())
 }
