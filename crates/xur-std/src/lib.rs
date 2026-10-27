@@ -9,6 +9,7 @@ mod bytes;
 mod fmt;
 mod fs;
 mod io;
+mod json;
 mod list;
 mod math;
 mod net;
@@ -49,6 +50,7 @@ pub fn register(registry: &Registry) {
     net::register(registry);
     any::register(registry);
     reflect::register(registry);
+    json::register(registry);
     re::register(registry);
     math::register(registry);
     list::register(registry);

@@ -23,6 +23,8 @@ hao.workspace = true
 hao-il2cpp.workspace = true
 hao-runtime.workspace = true
 iced-x86.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 xur-runtime = { workspace = true, features = ["testing"] }

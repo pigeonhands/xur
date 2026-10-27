@@ -1,0 +1,40 @@
+// JSON parsing and serialisation with std::json.
+//
+// Run it:
+//
+//     xur run example/json.xur
+
+struct Address {
+    city: str
+    zip: u32
+}
+
+struct Person {
+    name: str
+    age: u32
+    address: Address
+    tags: [str]
+}
+
+fn main() -> Result<(), str> {
+    let io = std::io;
+
+    // parse a JSON string into a struct
+    let person: Person = std::json::parse("{\"name\": \"Alice\", \"age\": 30, \"address\": {\"city\": \"Portland\", \"zip\": 97201}, \"tags\": [\"admin\", \"dev\"]}")?;
+    io::println("name: {}", person.name);
+    io::println("age:  {}", person.age);
+    io::println("city: {}", person.address.city);
+    io::println("tags: {}", person.tags);
+
+    // turn a value back into JSON
+    let back = std::json::stringify(person)?;
+    io::println("json: {}", back);
+
+    // parse errors are Results
+    match std::json::parse("not valid json") {
+        Ok(_) => io::println("unexpected success"),
+        Err(e) => io::println("parse error (expected): {}", e),
+    }
+
+    Ok(())
+}
