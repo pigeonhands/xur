@@ -19,6 +19,9 @@ mod reflect;
 mod str;
 mod sync;
 mod thread;
+mod xur;
+
+pub use xur::set_invoked_by;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
@@ -52,6 +55,7 @@ pub fn register(registry: &Registry) {
     bytes::register(registry);
     str::register(registry);
     num::register(registry);
+    xur::register(registry);
 }
 
 /// `std::import(path)`: loads a module, which may be computed at runtime.
