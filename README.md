@@ -24,6 +24,7 @@ There are complete programs in [`example/`](example):
 | [`echo_server.xur`](example/echo_server.xur) | a TCP echo server, to try with `nc`             |
 | [`bytes.xur`](example/bytes.xur)           | building and parsing a binary format with `bytes` |
 | [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
+| [`reflect.xur`](example/reflect.xur)       | listing fields and calling methods by name        |
 
 ## A taste of Xur
 
@@ -206,6 +207,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
+| `std::reflect`| `fields`, `get`, `set`, `methods`, `call`, `type_name` of any value      |
 
 Built-in values have methods too: lists (`len`, `push`, `pop`, `get`,
 `insert`, `remove`, `contains`, `extend`, `join`, ...), strings (`len`,

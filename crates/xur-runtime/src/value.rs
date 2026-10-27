@@ -71,7 +71,7 @@ pub struct Closure {
     /// The values of the variables it captured when it was created.
     pub captures: Vec<Value>,
     /// The type arguments in effect where it was created.
-    pub type_args: Vec<String>,
+    pub type_args: Vec<crate::TypeRef>,
 }
 
 /// A shared iterator over values.

@@ -128,8 +128,9 @@ pub enum RtType {
 /// A type argument of a call, as in `type_name::<T>()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeArg {
-    /// A type known when the code was lowered, by name.
-    Named(String),
+    /// A type known when the code was lowered: its name, and the struct,
+    /// enum or native type it is, if any.
+    Named { name: String, def: Option<DefId> },
     /// The caller's type parameter with this index.
     Param(u32),
 }

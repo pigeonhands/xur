@@ -115,6 +115,23 @@ impl Resolutions {
             _ => None,
         }
     }
+
+    /// Every function of the struct, enum or native type `ty`, in the order
+    /// they were defined.
+    pub fn assoc_fns(&self, ty: DefId) -> Vec<(Symbol, DefId)> {
+        let Some(scope) = self.scopes.get(&ty) else {
+            return Vec::new();
+        };
+        let mut fns: Vec<_> = scope
+            .iter(Namespace::Value)
+            .filter_map(|(name, binding)| match binding.res {
+                Res::Def(DefKind::Fn | DefKind::NativeFn(_), def) => Some((name, def)),
+                _ => None,
+            })
+            .collect();
+        fns.sort_by_key(|&(_, def)| def);
+        fns
+    }
 }
 
 /// Resolves the modules `new` of `krate`, which were added since

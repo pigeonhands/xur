@@ -8,6 +8,7 @@ mod display;
 pub mod ir;
 mod items;
 mod lower;
+mod types;
 
 pub use display::display_function;
 pub use ir::{
@@ -15,6 +16,7 @@ pub use ir::{
 };
 pub use items::{ItemIndex, ItemRef};
 pub use lower::lower;
+pub use types::{type_def, type_name};
 
 #[cfg(test)]
 mod tests;

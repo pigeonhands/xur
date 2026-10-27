@@ -207,7 +207,7 @@ impl Lowerer<'_> {
                 }
                 Some(VariantData::Tuple(_)) => DefRef::Ctor(def),
                 _ => {
-                    return self.error("structs with named fields cannot be constructed yet", span);
+                    return self.error("this has named fields; use `Name { field: value }`", span);
                 }
             },
             Res::Err => return self.error("unresolved name", span),
@@ -222,7 +222,7 @@ impl Lowerer<'_> {
 
     pub(super) fn ctor_shape(&self, def: DefId) -> Option<&'static VariantData> {
         match self.items.get(def)? {
-            ItemRef::Ctor(data) => Some(data),
+            ItemRef::Ctor { data, .. } => Some(data),
             _ => None,
         }
     }
@@ -274,24 +274,9 @@ impl Lowerer<'_> {
         {
             return TypeArg::Param(index as u32);
         }
-        TypeArg::Named(self.type_name(ty))
-    }
-
-    /// How a type is named at runtime, e.g. by `type_name`.
-    fn type_name(&self, ty: &Ty) -> String {
-        match &ty.kind {
-            TyKind::Path(path) => match self.resolutions.res.get(&path.id) {
-                Some(Res::Def(_, def)) => self.resolutions.defs.get(*def).name.to_string(),
-                Some(Res::PrimTy(prim)) => prim.name().to_owned(),
-                _ => "_".to_owned(),
-            },
-            TyKind::Tuple(tys) => {
-                let names: Vec<_> = tys.iter().map(|ty| self.type_name(ty)).collect();
-                format!("({})", names.join(", "))
-            }
-            TyKind::Paren(ty) => self.type_name(ty),
-            TyKind::List(ty) => format!("[{}]", self.type_name(ty)),
-            TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => "_".to_owned(),
+        TypeArg::Named {
+            name: crate::type_name(self.resolutions, ty),
+            def: crate::type_def(self.resolutions, ty),
         }
     }
 

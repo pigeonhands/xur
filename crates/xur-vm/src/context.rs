@@ -4,10 +4,10 @@ use std::path::Path;
 use std::sync::{Arc, PoisonError};
 use std::thread::{self, JoinHandle};
 
-use xur_resolve::LangItems;
+use xur_resolve::{DefId, LangItems};
 use xur_runtime::convert::ConvertCx;
-use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value, lock};
-use xur_span::Span;
+use xur_runtime::{AdtInfo, Context, Registry, RunResult, RuntimeError, TypeRef, Value, lock};
+use xur_span::{Span, Symbol};
 
 use crate::interp::Interp;
 
@@ -57,7 +57,7 @@ impl Context for Interp<'_> {
         self.display_value(value)
     }
 
-    fn type_args(&self) -> &[String] {
+    fn type_args(&self) -> &[TypeRef] {
         &self.native_type_args
     }
 
@@ -84,5 +84,29 @@ impl Context for Interp<'_> {
         lock(&self.shared.stdout)
             .write_all(text.as_bytes())
             .map_err(|error| RuntimeError::new(format!("couldn't write to stdout: {error}")))
+    }
+
+    fn describe_type(&self, value: &Value) -> String {
+        Interp::describe_type(self, value)
+    }
+
+    fn adt_info(&self, def: DefId) -> Option<AdtInfo> {
+        Interp::adt_info(self, def)
+    }
+
+    fn methods(&self, value: &Value) -> Vec<String> {
+        self.methods_of(value)
+    }
+
+    fn field(&mut self, value: &Value, name: &str) -> RunResult<Value> {
+        Interp::field(self, value, Symbol::intern(name))
+    }
+
+    fn set_field(&mut self, value: &Value, name: &str, new: Value) -> RunResult<Value> {
+        Interp::set_field(self, value, Symbol::intern(name), new)
+    }
+
+    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
+        Interp::call_method(self, receiver, Symbol::intern(name), args, Span::default())
     }
 }

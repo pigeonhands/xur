@@ -8,12 +8,13 @@ use xur_span::MemoryFileLoader;
 
 use crate::convert::ConvertCx;
 use crate::registry::Context;
-use crate::{LangItems, Registry, RunResult, RuntimeError, Value};
+use crate::{AdtInfo, LangItems, Registry, RunResult, RuntimeError, TypeRef, Value};
+use xur_resolve::DefId;
 
 pub struct TestCx<'r> {
     pub registry: &'r Registry,
     pub lang: LangItems,
-    pub type_args: Vec<String>,
+    pub type_args: Vec<TypeRef>,
     pub stdout: Vec<u8>,
 }
 
@@ -71,7 +72,7 @@ impl Context for TestCx<'_> {
         }
     }
 
-    fn type_args(&self) -> &[String] {
+    fn type_args(&self) -> &[TypeRef] {
         &self.type_args
     }
 
@@ -91,6 +92,58 @@ impl Context for TestCx<'_> {
 
     fn spawn(&mut self, _f: Value) -> RunResult<std::thread::JoinHandle<RunResult<Value>>> {
         Err(RuntimeError::new("cannot spawn threads in tests"))
+    }
+
+    fn describe_type(&self, value: &Value) -> String {
+        value.kind().to_owned()
+    }
+
+    fn adt_info(&self, _def: DefId) -> Option<AdtInfo> {
+        None
+    }
+
+    fn methods(&self, value: &Value) -> Vec<String> {
+        match value {
+            Value::Native(object) => self.registry.type_methods(object.ty),
+            other => other
+                .builtin_type()
+                .map(|ty| self.registry.builtin_methods(ty))
+                .unwrap_or_default(),
+        }
+    }
+
+    fn field(&mut self, value: &Value, name: &str) -> RunResult<Value> {
+        let missing = || RuntimeError::new(format!("no field `{name}` on {}", value.kind()));
+        match value {
+            Value::Record(record) => record
+                .field(xur_span::Symbol::intern(name))
+                .cloned()
+                .ok_or_else(missing),
+            Value::Native(object) => {
+                let registry = self.registry;
+                registry.field(self, object, name).ok_or_else(missing)?
+            }
+            _ => Err(missing()),
+        }
+    }
+
+    fn set_field(&mut self, value: &Value, name: &str, _new: Value) -> RunResult<Value> {
+        Err(RuntimeError::new(format!(
+            "cannot set `{name}` of {} in tests",
+            value.kind()
+        )))
+    }
+
+    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
+        let id = match &receiver {
+            Value::Native(object) => self.registry.type_function(object.ty, name),
+            other => other
+                .builtin_type()
+                .and_then(|ty| self.registry.builtin_method(ty, name)),
+        }
+        .ok_or_else(|| RuntimeError::new(format!("no method `{name}` on {}", receiver.kind())))?;
+        let args: Vec<_> = std::iter::once(receiver).chain(args).collect();
+        self.call(id, &args)
     }
 }
 

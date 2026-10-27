@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use xur_bytecode::{Constant, DefRef, Function, InstKind, Reg, Terminator, TypeArg};
 use xur_resolve::{DefId, ModuleIdx};
-use xur_runtime::{Closure, Range, RunResult, RuntimeError, Value, ValueIter, lock};
+use xur_runtime::{Closure, Range, RunResult, RuntimeError, TypeRef, Value, ValueIter, lock};
 use xur_span::Span;
 
 use crate::Shared;
@@ -19,7 +19,7 @@ pub(crate) struct Interp<'s> {
     /// The module of the function running, for module-relative imports.
     pub(crate) module: Option<ModuleIdx>,
     /// The type arguments of the native function being called.
-    pub(crate) native_type_args: Vec<String>,
+    pub(crate) native_type_args: Vec<TypeRef>,
     depth: usize,
 }
 
@@ -27,7 +27,7 @@ pub(crate) struct Interp<'s> {
 struct Frame<'f> {
     function: &'f Function,
     regs: Vec<Value>,
-    type_args: Vec<String>,
+    type_args: Vec<TypeRef>,
 }
 
 impl Frame<'_> {
@@ -59,7 +59,7 @@ impl<'s> Interp<'s> {
         &mut self,
         def: DefId,
         args: Vec<Value>,
-        type_args: Vec<String>,
+        type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         let function = self.shared.code(def)?;
         self.run(&function, Vec::new(), args, type_args)
@@ -92,7 +92,7 @@ impl<'s> Interp<'s> {
         function: &Function,
         captures: Vec<Value>,
         args: Vec<Value>,
-        type_args: Vec<String>,
+        type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         if args.len() != function.params as usize {
             return Err(RuntimeError::new(format!(
@@ -228,12 +228,15 @@ impl<'s> Interp<'s> {
                 let type_args = type_args
                     .iter()
                     .map(|arg| match arg {
-                        TypeArg::Named(name) => name.clone(),
+                        TypeArg::Named { name, def } => TypeRef {
+                            name: name.clone(),
+                            def: *def,
+                        },
                         TypeArg::Param(index) => frame
                             .type_args
                             .get(*index as usize)
                             .cloned()
-                            .unwrap_or_else(|| "_".to_owned()),
+                            .unwrap_or_else(|| TypeRef::named("_")),
                     })
                     .collect();
                 let value = self.call_value(&callee, args, type_args, span)?;

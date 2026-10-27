@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use xur_ast::visit::{self, Visitor};
-use xur_ast::{ConstItem, FieldDef, Fn, Item, ItemKind, NodeId, Variant, VariantData};
+use xur_ast::{Attribute, ConstItem, FieldDef, Fn, Item, ItemKind, NodeId, Variant, VariantData};
 use xur_resolve::{DefId, ModuleIdx, Program, Resolutions};
 
 /// What lowering needs to know about a definition.
@@ -17,8 +17,12 @@ pub enum ItemRef {
         item: &'static ConstItem,
         module: ModuleIdx,
     },
-    /// A struct or enum variant, with the shape of its constructor.
-    Ctor(&'static VariantData),
+    /// A struct or enum variant: the shape of its constructor, and the
+    /// attributes written on it.
+    Ctor {
+        data: &'static VariantData,
+        attrs: &'static [Attribute],
+    },
 }
 
 /// Every function, constant and constructor of the loaded modules, by
@@ -59,7 +63,10 @@ impl ItemIndex {
     /// order, or `None` if it has no named fields.
     pub fn named_fields(&self, def: DefId) -> Option<&'static [FieldDef]> {
         match self.get(def)? {
-            ItemRef::Ctor(VariantData::Struct(fields)) => Some(fields),
+            ItemRef::Ctor {
+                data: VariantData::Struct(fields),
+                ..
+            } => Some(fields),
             _ => None,
         }
     }
@@ -98,14 +105,18 @@ impl Visitor<'static> for Indexer<'_> {
                     module,
                 },
             ),
-            ItemKind::Struct(_, _, data) => self.add(item.id, ItemRef::Ctor(data)),
+            ItemKind::Struct(_, _, data) => {
+                let attrs = &item.attrs;
+                self.add(item.id, ItemRef::Ctor { data, attrs });
+            }
             ItemKind::Enum(..) | ItemKind::Impl(_) | ItemKind::Use(_) => {}
         }
         visit::walk_item(self, item);
     }
 
     fn visit_variant(&mut self, variant: &'static Variant) {
-        self.add(variant.id, ItemRef::Ctor(&variant.data));
+        let (data, attrs) = (&variant.data, &variant.attrs);
+        self.add(variant.id, ItemRef::Ctor { data, attrs });
         visit::walk_variant(self, variant);
     }
 }

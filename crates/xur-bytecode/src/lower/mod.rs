@@ -45,7 +45,7 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
             lowerer.terminate(Terminator::Return(value), item.expr.span);
             Some(lowerer.finish(name, 0, 0, item.expr.span))
         }
-        ItemRef::Ctor(_) => None,
+        ItemRef::Ctor { .. } => None,
     }
 }
 

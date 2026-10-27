@@ -574,3 +574,68 @@ fn the_structs_example_runs() {
         .into())
     );
 }
+
+#[test]
+fn reflection_lists_reads_and_calls() {
+    let src = r#"
+        use std::reflect;
+        struct Point { x: i64, y: i64 }
+        enum Shape { Circle(f64), Rect { w: f64, h: f64 } }
+        impl Point {
+            pub fn origin() -> Self { Point { x: 0, y: 0 } }
+            pub fn sum(self) -> i64 { self.x + self.y }
+            pub fn scaled(self, k: i64) -> Self { Point { x: self.x * k, y: self.y * k } }
+        }
+        fn main() {
+            let p = Point { x: 1, y: 2 };
+            let io = std::io;
+            io::println("{} {} {}", reflect::type_name(p), reflect::fields(p), reflect::methods(p));
+            io::println("{} {} {}", reflect::get(p, "y"), reflect::set(p, "x", 9), reflect::call(p, "scaled", [3]));
+            io::println("{} {}", reflect::fields(Shape::Rect { w: 1.0, h: 2.0 }), reflect::type_name(Shape::Circle(1.0)));
+            io::println("{} {} {}", reflect::fields((1, 2)), reflect::get((1, 2), "1"), reflect::has_method([1], "push"));
+            io::println("{} {}", reflect::try_get(p, "z"), reflect::call("a,b", "split", [","]));
+            let (sender, receiver) = std::sync::channel();
+            io::println("{} {}", reflect::type_name(sender), reflect::methods(sender));
+            reflect::call(sender, "send", [5]);
+            io::println("{}", receiver.recv());
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok(concat!(
+            "Point [\"x\", \"y\"] [\"sum\", \"scaled\"]\n",
+            "2 Point { x: 9, y: 2 } Point { x: 3, y: 6 }\n",
+            "[\"w\", \"h\"] Shape::Circle\n",
+            "[\"0\", \"1\"] 2 true\n",
+            "None [\"a\", \"b\"]\n",
+            "Sender [\"send\"]\n",
+            "Some(5)\n",
+        )
+        .into())
+    );
+    assert_eq!(
+        run("fn main() { std::reflect::call(1, \"nope\", []); }"),
+        Err("no method `nope` on integer".into())
+    );
+}
+
+#[test]
+fn the_reflect_example_runs() {
+    let output = run_files(&[(
+        "example/reflect.xur",
+        include_str!("../../../example/reflect.xur"),
+    )]);
+    assert_eq!(
+        output,
+        Ok(concat!(
+            "robot: Robot\n  name = r2\n  pos: Pos\n    x = 0\n    y = 0\n  battery = 3\n",
+            "commands: [\"forward\", \"right\", \"recharge\"]\n",
+            "forward 2: now at (0, 2), battery 2\n",
+            "right 1: now at (1, 2), battery 1\n",
+            "jump 3: unknown command\n",
+            "recharge: now at (1, 2), battery 100\n",
+            "forward 5: now at (1, 7), battery 99\n",
+        )
+        .into())
+    );
+}

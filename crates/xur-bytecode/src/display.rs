@@ -66,7 +66,7 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
                 let args: Vec<_> = type_args
                     .iter()
                     .map(|arg| match arg {
-                        TypeArg::Named(name) => name.clone(),
+                        TypeArg::Named { name, .. } => name.clone(),
                         TypeArg::Param(i) => format!("T{i}"),
                     })
                     .collect();

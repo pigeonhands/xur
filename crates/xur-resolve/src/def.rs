@@ -9,7 +9,7 @@ use xur_span::{Span, Symbol};
 
 /// Identifies a definition: a module, item, enum variant, type parameter
 /// or built-in.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DefId(u32);
 
 impl fmt::Debug for DefId {

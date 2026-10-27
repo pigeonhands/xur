@@ -35,14 +35,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::JoinHandle;
 
-use facet::{Peek, Shape};
+use facet::{Peek, Shape, StructType, Type, UserType};
 use xur_resolve::{
-    NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
+    DefId, NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
 };
 
 use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
-use crate::{BuiltinType, RunResult, Value};
+use crate::{AdtInfo, BuiltinType, RunResult, TypeRef, Value};
 
 pub use builder::{BuiltinBuilder, ModuleBuilder, TypeBuilder};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
@@ -56,9 +56,9 @@ pub trait Context: ConvertCx {
     fn import(&mut self, path: &str) -> RunResult<Value>;
     /// Formats `value` as `{}` does in format strings.
     fn display(&self, value: &Value) -> String;
-    /// The names of the generic arguments the native function was called
-    /// with, as in `type_name::<T>()`.
-    fn type_args(&self) -> &[String];
+    /// The generic arguments the native function was called with, as in
+    /// `type_name::<T>()`.
+    fn type_args(&self) -> &[TypeRef];
     /// Writes `text` to the program's standard output.
     fn print(&mut self, text: &str) -> RunResult<()>;
     /// Calls a function, closure or constructor value.
@@ -66,6 +66,21 @@ pub trait Context: ConvertCx {
     /// Calls `f`, a function or closure taking no arguments, on a new
     /// thread; joining the thread gives its result.
     fn spawn(&mut self, f: Value) -> RunResult<JoinHandle<RunResult<Value>>>;
+
+    // Reflection, for `std::reflect`.
+
+    /// How the type of `value` is named in messages, e.g. `` `Point` ``.
+    fn describe_type(&self, value: &Value) -> String;
+    /// The struct or enum variant `def`, or `None` if it is neither.
+    fn adt_info(&self, def: DefId) -> Option<AdtInfo>;
+    /// The names of the methods `value.name()` can call.
+    fn methods(&self, value: &Value) -> Vec<String>;
+    /// `value.name`.
+    fn field(&mut self, value: &Value, name: &str) -> RunResult<Value>;
+    /// A copy of the struct `value` with the field `name` set to `new`.
+    fn set_field(&mut self, value: &Value, name: &str, new: Value) -> RunResult<Value>;
+    /// `receiver.name(args)`.
+    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value>;
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;
@@ -181,6 +196,46 @@ impl Registry {
         let inner = self.read();
         let functions = &inner.types[ty.0 as usize].functions;
         functions.iter().find(|f| f.name == name).map(|f| f.id)
+    }
+
+    /// The functions of the native type `ty` that can be called as methods:
+    /// those whose first parameter is the type itself, and raw functions.
+    pub fn type_methods(&self, ty: NativeTypeId) -> Vec<String> {
+        let inner = self.read();
+        let native = &inner.types[ty.0 as usize];
+        native
+            .functions
+            .iter()
+            .filter(|decl| match &inner.fns[decl.id.0 as usize].signature {
+                Some(signature) => signature.params.first() == Some(&native.shape),
+                None => true,
+            })
+            .map(|decl| decl.name.clone())
+            .collect()
+    }
+
+    /// The names of the methods of the built-in type `ty`, sorted.
+    pub fn builtin_methods(&self, ty: BuiltinType) -> Vec<String> {
+        let mut names: Vec<_> = self
+            .read()
+            .builtin_methods
+            .keys()
+            .filter(|(builtin, _)| *builtin == ty)
+            .map(|(_, name)| name.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// The names of the fields of the native type `ty`, if it is a struct.
+    pub fn type_fields(&self, ty: NativeTypeId) -> Vec<String> {
+        let shape = self.read().types[ty.0 as usize].shape;
+        match shape.ty {
+            Type::User(UserType::Struct(StructType { fields, .. })) => {
+                fields.iter().map(|field| field.name.to_owned()).collect()
+            }
+            _ => Vec::new(),
+        }
     }
 
     pub fn function(&self, id: NativeFnId) -> Arc<NativeFn> {

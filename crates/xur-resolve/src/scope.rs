@@ -61,6 +61,13 @@ impl Scope {
         }
     }
 
+    /// Every name declared in `ns`, in no particular order.
+    pub fn iter(&self, ns: Namespace) -> impl Iterator<Item = (Symbol, Binding)> + '_ {
+        self.names(ns)
+            .iter()
+            .map(|(&name, &binding)| (name, binding))
+    }
+
     fn names(&self, ns: Namespace) -> &HashMap<Symbol, Binding> {
         match ns {
             Namespace::Type => &self.types,

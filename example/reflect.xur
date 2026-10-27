@@ -1,0 +1,78 @@
+// Looking inside values at runtime with `std::reflect`.
+//
+// Run it:
+//
+//     xur run example/reflect.xur
+//
+// It prints any value as a tree of its fields, then drives a robot by
+// calling its methods by name, as a command interpreter would.
+
+use std::io;
+use std::reflect;
+
+struct Pos {
+    x: i64
+    y: i64
+}
+
+struct Robot {
+    name: str
+    pos: Pos
+    battery: u8
+}
+
+impl Robot {
+    pub fn forward(self, steps: i64) -> Self {
+        let robot = self;
+        robot.pos.y = robot.pos.y + steps;
+        robot.battery = robot.battery - 1;
+        robot
+    }
+
+    pub fn right(self, steps: i64) -> Self {
+        let robot = self;
+        robot.pos.x = robot.pos.x + steps;
+        robot.battery = robot.battery - 1;
+        robot
+    }
+
+    pub fn recharge(self) -> Self {
+        reflect::set(self, "battery", 100)
+    }
+}
+
+// Prints `value` and, recursively, every field it has.
+fn dump(name: str, value: _, depth: i64) {
+    let indent = "  ".repeat(depth);
+    let fields = reflect::fields(value);
+    if fields.is_empty() {
+        io::println("{}{} = {}", indent, name, value);
+    } else {
+        io::println("{}{}: {}", indent, name, reflect::type_name(value));
+        for field in fields {
+            dump(field, reflect::get(value, field), depth + 1);
+        }
+    }
+}
+
+fn main() {
+    let robot = Robot { name: "r2", pos: Pos { x: 0, y: 0 }, battery: 3 };
+    dump("robot", robot, 0);
+    io::println("commands: {}", reflect::methods(robot));
+
+    let script = ["forward 2", "right 1", "jump 3", "recharge", "forward 5"];
+    for line in script {
+        let words = line.split(" ");
+        let command = words[0];
+        let args = [];
+        for word in words[1..] {
+            args.push(word.parse_int().unwrap());
+        }
+        if reflect::has_method(robot, command) {
+            robot = reflect::call(robot, command, args);
+            io::println("{}: now at ({}, {}), battery {}", line, robot.pos.x, robot.pos.y, robot.battery);
+        } else {
+            io::println("{}: unknown command", line);
+        }
+    }
+}

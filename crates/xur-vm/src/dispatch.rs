@@ -1,7 +1,7 @@
 //! Calls, method calls and field access, dispatched on values at runtime.
 
 use xur_resolve::{DefId, DefKind, Namespace, Res};
-use xur_runtime::{RunResult, RuntimeError, Value};
+use xur_runtime::{Record, RunResult, RuntimeError, TypeRef, Value};
 use xur_span::{Span, Symbol};
 
 use crate::interp::Interp;
@@ -11,7 +11,7 @@ impl Interp<'_> {
         &mut self,
         callee: &Value,
         args: Vec<Value>,
-        type_args: Vec<String>,
+        type_args: Vec<TypeRef>,
         span: Span,
     ) -> RunResult<Value> {
         match callee {
@@ -117,7 +117,7 @@ impl Interp<'_> {
         }
     }
 
-    /// A copy of the struct `base` with `field` set to `value`.
+    /// A copy of the struct or record `base` with `field` set to `value`.
     pub(crate) fn set_field(&self, base: &Value, field: Symbol, value: Value) -> RunResult<Value> {
         let missing = || {
             RuntimeError::new(format!(
@@ -125,8 +125,18 @@ impl Interp<'_> {
                 self.describe_type(base)
             ))
         };
-        let Value::Adt(adt) = base else {
-            return Err(missing());
+        let adt = match base {
+            Value::Adt(adt) => adt,
+            Value::Record(record) => {
+                let mut fields = record.fields.clone();
+                let (_, slot) = fields
+                    .iter_mut()
+                    .find(|(name, _)| *name == field)
+                    .ok_or_else(missing)?;
+                *slot = value;
+                return Ok(Value::Record(Record { fields }.into()));
+            }
+            _ => return Err(missing()),
         };
         let index = match self.shared.field_names(adt.ctor) {
             Some(names) => names.iter().position(|&name| name == field),
