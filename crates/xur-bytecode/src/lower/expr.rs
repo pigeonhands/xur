@@ -544,12 +544,23 @@ impl Lowerer<'_> {
     }
 
     fn local(&mut self, local: &Local) {
-        let init = self.expr_or_unit(local.init.as_deref(), local.span);
+        let try_bind = self.is_try_bind(local);
+        let init_expr = if try_bind {
+            local.init.as_deref().and_then(|e| match &e.kind {
+                ExprKind::Try(inner) => Some(inner.as_ref()),
+                _ => None,
+            })
+        } else {
+            None
+        };
+        let init = if let Some(inner) = init_expr {
+            self.expr(inner)
+        } else {
+            self.expr_or_unit(local.init.as_deref(), local.span)
+        };
         if let (Some(ty), Some(_)) = (&local.ty, &local.init) {
             self.check_type(init, ty, local.span);
         }
-        // The initializer may be another variable's register, as in
-        // `let x = y;`; the new variable needs its own.
         let value = self.new_reg();
         self.emit(
             InstKind::Copy {
@@ -558,7 +569,24 @@ impl Lowerer<'_> {
             },
             local.span,
         );
-        self.bind_irrefutable(&local.pat, value);
+        if try_bind {
+            self.bind_try(&local.pat, value);
+        } else {
+            self.bind_irrefutable(&local.pat, value);
+        }
+    }
+
+    /// `let Ok(x) = expr?;` — a refutable pattern with a `?` init.
+    fn is_try_bind(&self, local: &Local) -> bool {
+        let is_refutable = !matches!(
+            local.pat.kind,
+            PatKind::Ident(_) | PatKind::Wild | PatKind::Tuple(_) | PatKind::Paren(_)
+        );
+        let is_try = local
+            .init
+            .as_deref()
+            .is_some_and(|e| matches!(e.kind, ExprKind::Try(_)));
+        is_refutable && is_try
     }
 
     fn if_(&mut self, cond: &Expr, then: &AstBlock, otherwise: Option<&Expr>, span: Span) -> Reg {

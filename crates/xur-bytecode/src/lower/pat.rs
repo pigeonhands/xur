@@ -142,6 +142,16 @@ impl Lowerer<'_> {
         self.switch_to(current);
     }
 
+    /// `let Ok(x) = expr?;` — binds the pattern or early-returns the value.
+    pub(super) fn bind_try(&mut self, pat: &Pat, value: Reg) {
+        let fail = self.new_block();
+        self.pat(pat, value, fail);
+        let current = self.current;
+        self.switch_to(fail);
+        self.terminate(Terminator::TryReturn(value), pat.span);
+        self.switch_to(current);
+    }
+
     fn pat_path(&mut self, path: &Path, value: Reg, fail: BlockId) {
         match self.resolutions.res.get(&path.id).copied() {
             Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {

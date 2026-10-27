@@ -50,4 +50,11 @@ fn main() {
         Ok(v) => io::println("unexpected success: {}", v),
         Err(e) => io::println("strict coercion failed (expected): {}", e),
     }
+
+    let Ok(truncated_data) = any::try_cast::<SmallData>(full_data)?;
+    io::println("small (from full): {}", truncated_data);
+
+    // convert to untyped record, then let the type annotation coerce it
+    let small_from_record: SmallData = any::record(full_data);
+    io::println("small (from record): {}", small_from_record);
 }
