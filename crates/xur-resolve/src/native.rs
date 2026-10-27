@@ -70,4 +70,23 @@ pub struct NativeTypeDecl {
     pub name: String,
     pub id: NativeTypeId,
     pub functions: Vec<NativeFnDecl>,
+    /// For an enum registered from Rust, its variants, which are in its
+    /// scope as `Type::Variant` and build and match its values.
+    pub variants: Vec<NativeVariantDecl>,
+}
+
+/// A variant of a native enum.
+#[derive(Debug, Clone)]
+pub struct NativeVariantDecl {
+    pub name: String,
+    pub kind: NativeVariantKind,
+}
+
+/// The shape of a native variant's fields, which decides how it is
+/// written: `E::A`, `E::B(x)` or `E::C { x }`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeVariantKind {
+    Unit,
+    Tuple,
+    Named,
 }

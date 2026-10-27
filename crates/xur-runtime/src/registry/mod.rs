@@ -35,10 +35,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::JoinHandle;
 
-use facet::{Peek, Shape, StructType, Type, UserType};
+use facet::{Peek, Shape, StructKind, StructType, Type, UserType};
 use xur_resolve::{
     DefId, NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
+    NativeVariantDecl, NativeVariantKind,
 };
+
+use xur_span::Symbol;
 
 use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
@@ -148,6 +151,36 @@ struct Inner {
     roots: Vec<usize>,
     /// Conversions to Xur for shapes facet cannot see inside.
     converters: Vec<(&'static Shape, Converter)>,
+}
+
+/// The fields a record of a type registered by shape is built with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordCtor {
+    pub kind: NativeVariantKind,
+    /// In declaration order; `0`, `1`, ... for tuple fields.
+    pub fields: Vec<Symbol>,
+}
+
+/// The variants of an enum's shape, as resolution declares them.
+fn variant_decls(shape: &'static Shape) -> Vec<NativeVariantDecl> {
+    let Type::User(UserType::Enum(en)) = shape.ty else {
+        return Vec::new();
+    };
+    en.variants
+        .iter()
+        .map(|variant| NativeVariantDecl {
+            name: variant.name.to_owned(),
+            kind: variant_kind(variant.data.kind),
+        })
+        .collect()
+}
+
+fn variant_kind(kind: StructKind) -> NativeVariantKind {
+    match kind {
+        StructKind::Unit => NativeVariantKind::Unit,
+        StructKind::Tuple | StructKind::TupleStruct => NativeVariantKind::Tuple,
+        StructKind::Struct => NativeVariantKind::Named,
+    }
 }
 
 /// Converts a value of some shape to Xur, given a peek at it.
@@ -293,6 +326,31 @@ impl Registry {
         Some(*convert)
     }
 
+    /// How a value of the type `ty`, registered by shape, is built: the
+    /// fields of the struct itself, or of its enum variant `variant`.
+    /// `None` if there is no such struct or variant.
+    pub fn record_ctor(&self, ty: NativeTypeId, variant: Option<Symbol>) -> Option<RecordCtor> {
+        let shape = self.read().types[ty.0 as usize].shape;
+        let data = match (shape.ty, variant) {
+            (Type::User(UserType::Struct(st)), None) => st,
+            (Type::User(UserType::Enum(en)), Some(variant)) => {
+                en.variants
+                    .iter()
+                    .find(|v| v.name == variant.as_str())?
+                    .data
+            }
+            _ => return None,
+        };
+        Some(RecordCtor {
+            kind: variant_kind(data.kind),
+            fields: data
+                .fields
+                .iter()
+                .map(|field| Symbol::intern(field.name))
+                .collect(),
+        })
+    }
+
     /// Whether any type, of either kind, is registered for `shape`.
     pub fn has_shape(&self, shape: &'static Shape) -> bool {
         self.read().types.iter().any(|ty| ty.shape == shape)
@@ -436,6 +494,10 @@ impl Inner {
                         name: ty.name.clone(),
                         id,
                         functions: ty.functions.clone(),
+                        variants: match ty.hooks {
+                            None => variant_decls(ty.shape),
+                            Some(_) => Vec::new(),
+                        },
                     }
                 })
                 .collect(),

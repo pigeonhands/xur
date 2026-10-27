@@ -208,6 +208,30 @@ fn native_types_and_their_functions() {
 }
 
 #[test]
+fn native_enum_variants_are_values_and_types() {
+    let resolved = resolve_src(
+        "use geo::Machine;\n\
+         fn f(m: Machine) {\n\
+             Machine::Amd64; Machine::Other(1); Machine::Named { x: 1 };\n\
+             match m { Machine::Amd64 => 1, Machine::Other(n) => n, Machine::Named { x } => x, }\n\
+         }",
+    );
+    resolved.assert_no_errors();
+    assert_eq!(
+        resolved.res_of("Machine::Amd64"),
+        "variant geo::Machine::Amd64"
+    );
+    assert_eq!(
+        resolved.res_of("Machine::Named"),
+        "variant geo::Machine::Named"
+    );
+    assert_eq!(
+        resolved.res_of("Machine::Other"),
+        "variant geo::Machine::Other"
+    );
+}
+
+#[test]
 fn grouped_imports_import_each_path() {
     let resolved = resolve_src(
         "use std::{io, any::type_name};\nfn f() { io::println(\"\"); type_name::<i32>(); }",

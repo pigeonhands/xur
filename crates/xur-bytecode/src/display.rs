@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use xur_resolve::Resolutions;
 
-use crate::ir::{Constant, DefRef, Function, InstKind, Reg, Terminator, TypeArg};
+use crate::ir::{Constant, DefRef, Function, InstKind, RecordFields, Reg, Terminator, TypeArg};
 
 /// Lists `function` and the closures it creates.
 pub fn display_function(function: &Function, resolutions: &Resolutions) -> String {
@@ -114,6 +114,30 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             format!("{dst:?} = closure#{function}({})", regs(captures))
         }
         InstKind::IsCtor { dst, value, ctor } => format!("{dst:?} = {value:?} is {}", path(*ctor)),
+        InstKind::Record {
+            dst,
+            ty,
+            variant,
+            fields,
+        } => {
+            let fields = match fields {
+                RecordFields::Positional(regs) => format!("({})", self::regs(regs)),
+                RecordFields::Named(fields) => {
+                    let fields: Vec<_> = fields
+                        .iter()
+                        .map(|(name, reg)| format!("{name}: {reg:?}"))
+                        .collect();
+                    format!(" {{ {} }}", fields.join(", "))
+                }
+            };
+            format!("{dst:?} = record {}{fields}", record_name(*ty, *variant))
+        }
+        InstKind::IsRecord {
+            dst,
+            value,
+            ty,
+            variant,
+        } => format!("{dst:?} = {value:?} is {}", record_name(*ty, *variant)),
         InstKind::IsTuple { dst, value, len } => format!("{dst:?} = {value:?} is tuple of {len}"),
         InstKind::Project { dst, value, index } => format!("{dst:?} = {value:?}.{index}"),
         InstKind::IterStart { dst, iterable } => format!("{dst:?} = iter {iterable:?}"),
@@ -154,5 +178,13 @@ fn term_text(term: &Terminator) -> String {
         }
         Terminator::NoMatch => "no match".to_owned(),
         Terminator::Unreachable => "unreachable".to_owned(),
+    }
+}
+
+/// A native record type, as `native#3` or `native#3::Variant`.
+fn record_name(ty: xur_resolve::NativeTypeId, variant: Option<xur_span::Symbol>) -> String {
+    match variant {
+        Some(variant) => format!("{ty:?}::{variant}"),
+        None => format!("{ty:?}"),
     }
 }

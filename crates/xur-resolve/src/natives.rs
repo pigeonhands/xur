@@ -6,7 +6,7 @@ use xur_span::Symbol;
 
 use crate::create_scoped_def;
 use crate::def::{DefData, DefId, DefKind, Definitions, Namespace, Res};
-use crate::native::{NativeFnDecl, NativeModule};
+use crate::native::{NativeFnDecl, NativeModule, NativeTypeDecl, NativeVariantKind};
 use crate::scope::{Binding, Scope, Vis};
 
 /// Creates definitions and scopes for `modules` and everything in them,
@@ -62,6 +62,7 @@ impl Declarer<'_> {
             let kind = DefKind::NativeType(ty.id);
             let ty_def = self.scoped(kind, &ty.name, Some(def), Some(def));
             self.functions(ty_def, &ty.functions);
+            self.variants(ty_def, ty);
             self.bind(def, Namespace::Type, &ty.name, Res::Def(kind, ty_def));
         }
         for child in &module.modules {
@@ -75,6 +76,29 @@ impl Declarer<'_> {
                 &child.name,
                 Res::Def(DefKind::Mod, child_def),
             );
+        }
+    }
+
+    /// Declares the variants of a native enum in its scope. As with Xur's
+    /// enums, unit and tuple variants are values as well as names for
+    /// patterns; variants with named fields are only in the type
+    /// namespace, like structs.
+    fn variants(&mut self, scope: DefId, ty: &NativeTypeDecl) {
+        for variant in &ty.variants {
+            let kind = DefKind::NativeVariant(ty.id);
+            let def = self.defs.create(DefData {
+                kind,
+                name: Symbol::intern(&variant.name),
+                parent: Some(scope),
+                span: None,
+            });
+            let namespaces = match variant.kind {
+                NativeVariantKind::Unit | NativeVariantKind::Tuple => Namespace::BOTH,
+                NativeVariantKind::Named => Namespace::TYPE,
+            };
+            for &ns in namespaces {
+                self.bind(scope, ns, &variant.name, Res::Def(kind, def));
+            }
         }
     }
 

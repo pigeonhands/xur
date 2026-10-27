@@ -43,6 +43,7 @@ pub use loader::{Crate, LoadedModule, ModuleIdx};
 pub use names::{NameRef, names};
 pub use native::{
     NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
+    NativeVariantDecl, NativeVariantKind,
 };
 pub use program::Program;
 

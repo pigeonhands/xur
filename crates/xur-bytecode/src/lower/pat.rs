@@ -3,6 +3,8 @@
 use xur_ast::{LitKind, Pat, PatField, PatKind, Path, VariantData};
 use xur_resolve::{DefKind, Res};
 
+use xur_span::Symbol;
+
 use super::Lowerer;
 use crate::ir::{BlockId, Constant, DefRef, InstKind, Reg, Terminator};
 
@@ -28,6 +30,9 @@ impl Lowerer<'_> {
                 // A unit variant, unit struct or constant named alone.
                 Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
                     self.test_ctor(value, ctor, fail, span)
+                }
+                Some(res @ Res::Def(DefKind::NativeVariant(_), _)) => {
+                    self.test_record(res, value, fail, span)
                 }
                 Some(Res::Def(DefKind::Const, def)) => {
                     let constant = self.new_reg();
@@ -61,11 +66,27 @@ impl Lowerer<'_> {
             PatKind::Path(path) => self.pat_path(path, value, fail),
             PatKind::TupleStruct(path, fields) => {
                 self.pat_path(path, value, fail);
-                self.pat_fields(fields, value, fail);
+                if self.is_native_ctor(path) {
+                    // A record's tuple fields are named `0`, `1`, ...
+                    for (index, field) in fields.iter().enumerate() {
+                        let name = Symbol::intern(&index.to_string());
+                        self.pat_record_field(name, field, value, fail);
+                    }
+                } else {
+                    self.pat_fields(fields, value, fail);
+                }
             }
             PatKind::Struct { path, fields, rest } => {
                 self.pat_path(path, value, fail);
-                self.pat_named_fields(path, fields, *rest, value, fail);
+                if self.is_native_ctor(path) {
+                    // The VM finds the fields by name; a field the record
+                    // lacks makes the pattern a runtime error.
+                    for field in fields {
+                        self.pat_record_field(field.ident.name, &field.pat, value, fail);
+                    }
+                } else {
+                    self.pat_named_fields(path, fields, *rest, value, fail);
+                }
             }
             PatKind::Tuple(pats) => {
                 let is = self.new_reg();
@@ -108,6 +129,9 @@ impl Lowerer<'_> {
         match self.resolutions.res.get(&path.id).copied() {
             Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
                 self.test_ctor(value, ctor, fail, path.span)
+            }
+            Some(res @ Res::Def(DefKind::NativeVariant(_) | DefKind::NativeType(_), _)) => {
+                self.test_record(res, value, fail, path.span)
             }
             Some(Res::Def(DefKind::Const, def)) => {
                 let constant = self.new_reg();
@@ -201,6 +225,42 @@ impl Lowerer<'_> {
             );
             self.pat(&field.pat, element, fail);
         }
+    }
+
+    fn is_native_ctor(&self, path: &Path) -> bool {
+        let res = self.resolutions.res.get(&path.id).copied();
+        res.and_then(|res| self.native_ctor(res)).is_some()
+    }
+
+    /// Tests that `value` is a record of the native struct or variant `res`.
+    fn test_record(&mut self, res: Res, value: Reg, fail: BlockId, span: xur_span::Span) {
+        let Some((ty, variant)) = self.native_ctor(res) else {
+            return;
+        };
+        let is = self.new_reg();
+        self.emit(
+            InstKind::IsRecord {
+                dst: is,
+                value,
+                ty,
+                variant,
+            },
+            span,
+        );
+        self.test(is, fail, span);
+    }
+
+    fn pat_record_field(&mut self, name: Symbol, pat: &Pat, value: Reg, fail: BlockId) {
+        let field = self.new_reg();
+        self.emit(
+            InstKind::Field {
+                dst: field,
+                base: value,
+                field: name,
+            },
+            pat.span,
+        );
+        self.pat(pat, field, fail);
     }
 
     fn test_ctor(

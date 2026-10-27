@@ -8,7 +8,10 @@ use std::path::Path;
 
 use xur_span::MemoryFileLoader;
 
-use crate::{NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId, Program, names};
+use crate::{
+    NativeFnDecl, NativeFnId, NativeModule, NativeTypeDecl, NativeTypeId, NativeVariantDecl,
+    NativeVariantKind, Program, names,
+};
 
 /// A program loaded from memory and resolved. The first file is the root.
 pub(crate) struct Resolved {
@@ -88,11 +91,30 @@ pub(crate) fn natives() -> Vec<NativeModule> {
         ],
     );
     let geo = NativeModule {
-        types: vec![NativeTypeDecl {
-            name: "Point".to_owned(),
-            id: NativeTypeId(0),
-            functions: vec![f("new"), f("norm")],
-        }],
+        types: vec![
+            NativeTypeDecl {
+                name: "Point".to_owned(),
+                id: NativeTypeId(0),
+                functions: vec![f("new"), f("norm")],
+                variants: Vec::new(),
+            },
+            NativeTypeDecl {
+                name: "Machine".to_owned(),
+                id: NativeTypeId(1),
+                functions: Vec::new(),
+                variants: [
+                    ("Amd64", NativeVariantKind::Unit),
+                    ("Other", NativeVariantKind::Tuple),
+                    ("Named", NativeVariantKind::Named),
+                ]
+                .into_iter()
+                .map(|(name, kind)| NativeVariantDecl {
+                    name: name.to_owned(),
+                    kind,
+                })
+                .collect(),
+            },
+        ],
         ..module("geo", Vec::new(), Vec::new())
     };
     vec![std, geo]

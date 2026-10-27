@@ -125,6 +125,15 @@ pub enum RtType {
     },
 }
 
+/// The fields a record is built with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordFields {
+    /// `E::V(a, b)`, or none for `E::V`.
+    Positional(Vec<Reg>),
+    /// `E::V { x: a, y: b }`, as written.
+    Named(Vec<(Symbol, Reg)>),
+}
+
 /// A type argument of a call, as in `type_name::<T>()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeArg {
@@ -232,6 +241,22 @@ pub enum InstKind {
         dst: Reg,
         value: Reg,
         ctor: DefId,
+    },
+    /// A record of the native type `ty`, registered from a Rust type's
+    /// shape: of its enum variant `variant`, or the struct itself. The VM
+    /// checks the fields against the shape.
+    Record {
+        dst: Reg,
+        ty: NativeTypeId,
+        variant: Option<Symbol>,
+        fields: RecordFields,
+    },
+    /// Whether `value` is a record of `ty`, and of `variant` if given.
+    IsRecord {
+        dst: Reg,
+        value: Reg,
+        ty: NativeTypeId,
+        variant: Option<Symbol>,
     },
     /// Whether `value` is a tuple of `len` elements.
     IsTuple {

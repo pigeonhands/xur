@@ -8,11 +8,11 @@ use xur_ast::{
     Arm, BinOpKind, Block as AstBlock, Closure, Expr, ExprKind, GenericArgs, LitKind, Local,
     NodeId, Pat, PatKind, Path, RangeLimits, StmtKind, StructExpr, Ty, TyKind, VariantData,
 };
-use xur_resolve::{DefId, DefKind, Res};
-use xur_span::Span;
+use xur_resolve::{DefId, DefKind, NativeTypeId, Res};
+use xur_span::{Span, Symbol};
 
 use super::{LoopScope, Lowerer};
-use crate::ir::{BlockId, Constant, DefRef, InstKind, Reg, Terminator, TypeArg};
+use crate::ir::{BlockId, Constant, DefRef, InstKind, RecordFields, Reg, Terminator, TypeArg};
 use crate::items::ItemRef;
 
 impl Lowerer<'_> {
@@ -192,6 +192,11 @@ impl Lowerer<'_> {
             Res::Def(DefKind::NativeFn(id), _) => DefRef::Native(id),
             Res::Def(DefKind::Const, def) => DefRef::Const(def),
             Res::Def(DefKind::Mod, def) => DefRef::Module(def),
+            // A unit variant of a native enum; the VM rejects other kinds.
+            Res::Def(DefKind::NativeVariant(ty), def) => {
+                let variant = Some(self.resolutions.defs.get(def).name);
+                return self.record(ty, variant, RecordFields::Positional(Vec::new()), span);
+            }
             Res::Def(DefKind::Struct | DefKind::Variant, def) => match self.ctor_shape(def) {
                 Some(VariantData::Unit) => {
                     let dst = self.new_reg();
@@ -220,6 +225,38 @@ impl Lowerer<'_> {
         dst
     }
 
+    fn record(
+        &mut self,
+        ty: NativeTypeId,
+        variant: Option<Symbol>,
+        fields: RecordFields,
+        span: Span,
+    ) -> Reg {
+        let dst = self.new_reg();
+        self.emit(
+            InstKind::Record {
+                dst,
+                ty,
+                variant,
+                fields,
+            },
+            span,
+        );
+        dst
+    }
+
+    /// The native type and variant a path to a native struct or variant
+    /// names.
+    pub(super) fn native_ctor(&self, res: Res) -> Option<(NativeTypeId, Option<Symbol>)> {
+        match res {
+            Res::Def(DefKind::NativeVariant(ty), def) => {
+                Some((ty, Some(self.resolutions.defs.get(def).name)))
+            }
+            Res::Def(DefKind::NativeType(ty), _) => Some((ty, None)),
+            _ => None,
+        }
+    }
+
     pub(super) fn ctor_shape(&self, def: DefId) -> Option<&'static VariantData> {
         match self.items.get(def)? {
             ItemRef::Ctor { data, .. } => Some(data),
@@ -238,6 +275,14 @@ impl Lowerer<'_> {
             let dst = self.new_reg();
             self.emit(InstKind::Adt { dst, ctor, fields }, span);
             return dst;
+        }
+        if let ExprKind::Path(path) = &callee.kind
+            && let Some(&Res::Def(DefKind::NativeVariant(ty), def)) =
+                self.resolutions.res.get(&path.id)
+        {
+            let variant = Some(self.resolutions.defs.get(def).name);
+            let fields = RecordFields::Positional(self.exprs(args));
+            return self.record(ty, variant, fields, span);
         }
         let type_args = match &callee.kind {
             ExprKind::Path(path) => path
@@ -371,6 +416,15 @@ impl Lowerer<'_> {
     fn struct_literal(&mut self, literal: &StructExpr, span: Span) -> Reg {
         let ctor = match self.resolutions.res.get(&literal.path.id) {
             Some(&Res::Def(DefKind::Struct | DefKind::Variant, ctor)) => ctor,
+            Some(&res @ Res::Def(DefKind::NativeType(_) | DefKind::NativeVariant(_), _)) => {
+                let (ty, variant) = self.native_ctor(res).expect("matched a native ctor");
+                let fields = literal
+                    .fields
+                    .iter()
+                    .map(|field| (field.ident.name, self.expr(&field.expr)))
+                    .collect();
+                return self.record(ty, variant, RecordFields::Named(fields), span);
+            }
             Some(Res::Err) | None => return self.error("unresolved struct", span),
             Some(other) => {
                 let message = format!("expected a struct, found a {}", other.descr());

@@ -31,6 +31,8 @@ pub enum DefKind {
     NativeFn(NativeFnId),
     /// A type implemented in Rust; its functions are in its scope.
     NativeType(NativeTypeId),
+    /// A variant of an enum registered from Rust, of the native type.
+    NativeVariant(NativeTypeId),
 }
 
 impl DefKind {
@@ -46,6 +48,7 @@ impl DefKind {
             Self::TyParam => "type parameter",
             Self::NativeFn(_) => "native function",
             Self::NativeType(_) => "native type",
+            Self::NativeVariant(_) => "variant",
         }
     }
 

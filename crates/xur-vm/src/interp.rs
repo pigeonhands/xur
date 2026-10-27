@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use xur_bytecode::{Constant, DefRef, Function, InstKind, Reg, Terminator, TypeArg};
+use xur_bytecode::{Constant, DefRef, Function, InstKind, RecordFields, Reg, Terminator, TypeArg};
+
+use crate::records::RecordArgs;
 use xur_resolve::{DefId, ModuleIdx};
 use xur_runtime::{Closure, Range, RunResult, RuntimeError, TypeRef, Value, ValueIter, lock};
 use xur_span::Span;
@@ -327,6 +329,37 @@ impl<'s> Interp<'s> {
             }
             InstKind::IsCtor { dst, value, ctor } => {
                 let is = matches!(frame.get(*value), Value::Adt(adt) if adt.ctor == *ctor);
+                frame.set(*dst, Value::Bool(is));
+            }
+            InstKind::Record {
+                dst,
+                ty,
+                variant,
+                fields,
+            } => {
+                let fields = match fields {
+                    RecordFields::Positional(regs) => RecordArgs::Positional(frame.values(regs)),
+                    RecordFields::Named(fields) => RecordArgs::Named(
+                        fields
+                            .iter()
+                            .map(|(name, reg)| (*name, frame.get(*reg).clone()))
+                            .collect(),
+                    ),
+                };
+                let record = self.build_record(*ty, *variant, fields)?;
+                frame.set(*dst, record);
+            }
+            InstKind::IsRecord {
+                dst,
+                value,
+                ty,
+                variant,
+            } => {
+                let is = matches!(
+                    frame.get(*value),
+                    Value::Record(record)
+                        if record.ty == Some(*ty) && (variant.is_none() || record.variant == *variant)
+                );
                 frame.set(*dst, Value::Bool(is));
             }
             InstKind::IsTuple { dst, value, len } => {

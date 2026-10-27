@@ -481,7 +481,13 @@ impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
                 let existing = self.resolve_ident(Namespace::Value, ident.name);
                 match existing.map(|binding| binding.res) {
                     Some(
-                        res @ Res::Def(DefKind::Variant | DefKind::Struct | DefKind::Const, _),
+                        res @ Res::Def(
+                            DefKind::Variant
+                            | DefKind::NativeVariant(_)
+                            | DefKind::Struct
+                            | DefKind::Const,
+                            _,
+                        ),
                     ) => {
                         self.r.res.insert(pat.id, res);
                     }

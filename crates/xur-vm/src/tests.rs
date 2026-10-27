@@ -787,7 +787,7 @@ fn structs_know_their_bytes() {
 #[test]
 fn the_re_example_runs() {
     let output = run_files(&[("example/re.xur", include_str!("../../../example/re.xur"))]);
-    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nfields: OptionalHeaderWindowsSpecificFields64\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn ElfMachine::X86_64, 64-bit: X86_64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
 }
 
 #[test]
@@ -797,8 +797,8 @@ fn std_re_reports_bad_input() {
         Ok("true\n".into())
     );
     assert_eq!(
-        run("fn main() { std::re::pe::ImageDef::new_dll(\"Vax\"); }"),
-        Err("unknown machine; try \"Amd64\" or \"I386\"".into())
+        run("fn main() { std::re::pe::ImageDef::new_dll(\"Amd64\"); }"),
+        Err("expected `ImageFileMachine`, found string".into())
     );
     assert_eq!(
         run("fn main() { std::io::println(\"{}\", std::re::pe::section_flags([\"NOPE\"])); }"),
@@ -825,5 +825,68 @@ fn tuple_fields_are_read_and_assigned_by_number() {
     assert_eq!(
         run("fn main() { (1, 2).2; }"),
         Err("no field `2` on tuple".into())
+    );
+}
+
+#[test]
+fn rust_types_are_built_and_matched_like_xur_ones() {
+    let src = r#"
+        use std::re::{ExportLocation, pe::ImageFileMachine, pe::ImageDataDirectory};
+        fn describe(m: ImageFileMachine) -> str {
+            match m {
+                ImageFileMachine::Amd64 => "x86-64",
+                ImageFileMachine::Other(n) => "other " + n.to_hex(),
+                _ => "something else",
+            }
+        }
+        fn main() {
+            let io = std::io;
+            let dll = std::re::pe::ImageDef::new_dll(ImageFileMachine::Amd64);
+            io::println("{} {}", dll.coff_header.machine == ImageFileMachine::Amd64, dll.coff_header.machine);
+            io::println("{} {} {}", describe(ImageFileMachine::Amd64), describe(ImageFileMachine::Other(0x1234)), describe(ImageFileMachine::I386));
+            let at = ExportLocation::Address(4096);
+            match at {
+                ExportLocation::Address(a) => io::println("{} {}", a, at.0),
+                ExportLocation::Forwarder(name) => io::println("{}", name),
+            }
+            let dir = ImageDataDirectory { size: 16, virtual_address: 0x1000 };
+            let ImageDataDirectory { virtual_address, .. } = dir;
+            io::println("{} {} {}", dir, virtual_address, std::reflect::type_name(dir));
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok(concat!(
+            "true ImageFileMachine::Amd64\n",
+            "x86-64 other 1234 something else\n",
+            "4096 4096\n",
+            "ImageDataDirectory { virtual_address: 4096, size: 16 } 4096 ImageDataDirectory\n",
+        )
+        .into())
+    );
+    let with = |body: &str| {
+        run(&format!(
+            "use std::re::{{ExportLocation, pe::ImageDataDirectory}}; fn main() {{ {body} }}"
+        ))
+    };
+    assert_eq!(
+        with("ExportLocation::Address(1, 2);"),
+        Err("`ExportLocation::Address` takes 1 field(s), but 2 were given".into())
+    );
+    assert_eq!(
+        with("ExportLocation::Address;"),
+        Err("`ExportLocation::Address` takes 1 field(s), but 0 were given".into())
+    );
+    assert_eq!(
+        with("ImageDataDirectory { size: 1 };"),
+        Err("missing field `virtual_address` for `ImageDataDirectory`".into())
+    );
+    assert_eq!(
+        with("ImageDataDirectory { size: 1, virtual_address: 2, extra: 3 };"),
+        Err("`ImageDataDirectory` has no field `extra`".into())
+    );
+    assert_eq!(
+        with("std::re::pe::ImageDef::new_dll(std::re::pe::ImageFileMachine::Other(-1));"),
+        Err("-1 does not fit in `u16`".into())
     );
 }

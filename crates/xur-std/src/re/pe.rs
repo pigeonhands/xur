@@ -7,16 +7,16 @@ use std::sync::Arc;
 
 use facet::{Facet, Peek};
 use pewter::PEFile;
-use pewter::pe::coff::{ImageFileCharacteristics, ImageFileMachine};
+use pewter::pe::coff::ImageFileCharacteristics;
 use pewter::pe::file::definition::{PEImageDef, SectionHeap};
 use pewter::pe::optional_header::{
     ImageDllCharacteristics, OptVariant, OptionalHeaderWindowsSpecificFields, Pe32, Pe32Plus,
 };
 use pewter::pe::sections::edata::ExportDef;
 use pewter::pe::sections::{SectionFlags, SectionRow};
-use xur_runtime::convert::{ConvertCx, from_value, into_value, to_value};
+use xur_runtime::convert::{ConvertCx, to_value};
 use xur_runtime::registry::ModuleBuilder;
-use xur_runtime::{Record, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::{Record, Registry, RunResult, Value};
 use xur_span::Symbol;
 
 use super::flags::register_flags;
@@ -117,28 +117,7 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
         });
 
     pe.ty::<PEImageDef>("ImageDef")
-        .raw_function("new_dll", |cx, args| {
-            let machine = match args {
-                // A machine by its variant's name, like `"Amd64"`.
-                [Value::Str(name)] => Value::Record(
-                    Record {
-                        ty: None,
-                        variant: Some(Symbol::intern(name)),
-                        fields: Vec::new(),
-                    }
-                    .into(),
-                ),
-                [machine @ Value::Record(_)] => machine.clone(),
-                _ => {
-                    return Err(RuntimeError::new(
-                        "`new_dll` takes a machine, such as \"Amd64\"",
-                    ));
-                }
-            };
-            let machine: ImageFileMachine = from_value(cx, &machine)
-                .map_err(|_| RuntimeError::new("unknown machine; try \"Amd64\" or \"I386\""))?;
-            into_value(cx, PEImageDef::new_dll(machine))
-        })
+        .function("new_dll", PEImageDef::new_dll)
         .function("parse", |data: Vec<u8>| {
             PEImageDef::parse(&data).map_err(error_text)
         })
