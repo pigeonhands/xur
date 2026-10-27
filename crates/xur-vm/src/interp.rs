@@ -138,7 +138,7 @@ impl<'s> Interp<'s> {
         &mut self,
         function: &Function,
         captures: Vec<Value>,
-        args: Vec<Value>,
+        mut args: Vec<Value>,
         mut type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         if args.len() != function.params as usize {
@@ -149,8 +149,11 @@ impl<'s> Interp<'s> {
                 args.len()
             )));
         }
-        if !function.type_params.is_empty() && type_args.len() < function.type_params.len() {
-            self.infer_type_args(function, &args, &mut type_args);
+        if !function.type_params.is_empty() {
+            if type_args.len() < function.type_params.len() {
+                self.infer_type_args(function, &args, &mut type_args);
+            }
+            self.check_generic_args(function, &mut args, &type_args)?;
         }
         if self.depth >= MAX_DEPTH {
             return Err(RuntimeError::new(format!(
@@ -194,6 +197,31 @@ impl<'s> Interp<'s> {
                 }
             }
         }
+    }
+
+    fn check_generic_args(
+        &self,
+        function: &Function,
+        args: &mut [Value],
+        type_args: &[TypeRef],
+    ) -> RunResult<()> {
+        for (i, arg) in args.iter_mut().enumerate() {
+            let Some(tp_index) = function.param_type_params.get(i).copied().flatten() else {
+                continue;
+            };
+            let idx = tp_index as usize;
+            let Some(expected) = type_args.get(idx) else { continue };
+            let Some(expected_def) = expected.def else { continue };
+            let program = self.shared.program();
+            let name = program.resolutions().def_path(expected_def);
+            let ty = xur_bytecode::RtType::Adt { def: expected_def, name };
+            match self.check_type(arg, &ty) {
+                Ok(Some(coerced)) => *arg = coerced,
+                Ok(None) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     fn type_ref_of(&self, value: &Value) -> Option<TypeRef> {
