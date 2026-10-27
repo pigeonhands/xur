@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Values, native-function registry and facet conversions for the Xur language"
 
 [lib]
 name = "xur_runtime"

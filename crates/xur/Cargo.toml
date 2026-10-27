@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The Xur programming language: run and inspect .xur programs"
+readme = "../../README.md"
+keywords = ["language", "interpreter", "scripting"]
+categories = ["compilers", "command-line-utilities"]
 
 [dependencies]
 xur-ast.workspace = true
