@@ -434,7 +434,11 @@ impl<'s> Interp<'s> {
                     element.ok_or_else(|| RuntimeError::new(format!("no field {index}")))?;
                 frame.set(*dst, element);
             }
-            InstKind::CheckType { value, ty } => self.check_type(frame.get(*value), ty)?,
+            InstKind::CheckType { value, ty } => {
+                if let Some(coerced) = self.check_type(frame.get(*value), ty)? {
+                    frame.set(*value, coerced);
+                }
+            }
             InstKind::IterStart { dst, iterable } => {
                 let iter = iterate(frame.get(*iterable))?;
                 frame.set(*dst, Value::Iterator(iter));
