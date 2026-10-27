@@ -79,9 +79,11 @@ fn main() -> Result<()> {
     // Function reflection: inspect any function's signature.
     io::println("\n--- function reflection ---");
     let func = std::reflect::func;
-    io::println("Robot::forward params: {}", func::param_names(Robot::forward));
-    io::println("Robot::forward types:  {}", func::param_types(Robot::forward));
-    io::println("Robot::forward return: {}", func::return_type(Robot::forward));
+    io::println("Robot::forward:");
+    io::println("  params:      {}", func::params(Robot::forward));
+    io::println("  param_names: {}", func::param_names(Robot::forward));
+    io::println("  param_types: {}", func::param_types(Robot::forward));
+    io::println("  return_type: {}", func::return_type(Robot::forward));
 
     Ok(())
 }

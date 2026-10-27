@@ -256,12 +256,18 @@ impl Interp<'_> {
                 }
             }
             if **sig_ret != RtType::Any {
-                if let Some(actual_ret) = &fn_ret_type {
-                    if actual_ret != sig_ret.as_ref() {
+                match &fn_ret_type {
+                    Some(actual_ret) if actual_ret != sig_ret.as_ref() => {
                         return Ok(self.result_err(format!(
                             "`{name_str}` returns {actual_ret}, expected {sig_ret}"
                         )));
                     }
+                    None => {
+                        return Ok(self.result_err(format!(
+                            "`{name_str}` has no return type, expected {sig_ret}"
+                        )));
+                    }
+                    _ => {}
                 }
             }
         }

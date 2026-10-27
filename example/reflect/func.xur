@@ -1,5 +1,5 @@
 // Function reflection with `std::reflect::func`: inspect the name,
-// parameter names, parameter types, and return type of any function
+// parameter count, names, types, and return type of any function
 // at runtime.
 //
 //     xur run example/reflect/func.xur
@@ -13,32 +13,35 @@ fn greet(name: str) -> str { "hello, " + name }
 
 fn nothing() {}
 
-fn main() {
+fn show(f: _) {
+    io::println("  name:        {}", func::name(f));
+    io::println("  params:      {}", func::params(f));
+    io::println("  param_names: {}", func::param_names(f));
+    io::println("  param_types: {}", func::param_types(f));
+    io::println("  return_type: {}", func::return_type(f));
+}
+
+fn main() -> Result<()> {
     io::println("--- add ---");
-    io::println("  name:        {}", func::name(add));
-    io::println("  params:      {}", func::params(add));
-    io::println("  param_names: {}", func::param_names(add));
-    io::println("  param_types: {}", func::param_types(add));
-    io::println("  return_type: {}", func::return_type(add));
+    show(add);
 
     io::println("\n--- greet ---");
-    io::println("  name:        {}", func::name(greet));
-    io::println("  param_types: {}", func::param_types(greet));
-    io::println("  return_type: {}", func::return_type(greet));
+    show(greet);
 
     io::println("\n--- nothing ---");
-    io::println("  name:        {}", func::name(nothing));
-    io::println("  params:      {}", func::params(nothing));
-    io::println("  return_type: {}", func::return_type(nothing));
+    show(nothing);
 
     // Closures carry reflection data too.
     let double = |n: i64| -> i64 { n * 2 };
     io::println("\n--- closure ---");
-    io::println("  name:        {}", func::name(double));
-    io::println("  param_types: {}", func::param_types(double));
-    io::println("  return_type: {}", func::return_type(double));
+    show(double);
 
     // Type values from param_types can be compared.
+    io::println("\n--- type comparison ---");
     let types = func::param_types(add);
-    io::println("\nadd's first param is u32: {}", types[0] == u32);
+    io::println("  add's first param is u32: {}", types[0] == u32);
+    io::println("  add takes {} params", func::params(add));
+    io::println("  nothing takes {} params", func::params(nothing));
+
+    Ok(())
 }

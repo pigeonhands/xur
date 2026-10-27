@@ -13,7 +13,7 @@ fn describe(t: type) {
     io::println("type: {}", t);
 }
 
-fn main() {
+fn main() -> Result<()> {
     // Primitive types as values.
     let t = u32;
     io::println("t = {}", t);
@@ -40,4 +40,6 @@ fn main() {
     // The `type` annotation ensures only types are passed.
     let my_type: type = i64;
     io::println("my_type = {}", my_type);
+
+    Ok(())
 }

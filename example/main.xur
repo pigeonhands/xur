@@ -7,7 +7,7 @@ use std::thread;
 
 fn run_example(p: str) -> Result<()> {
     let module = std::try_import(p)?;
-    let main = module.get_method("main")?;
+    let main = module.get_method("main", fn() -> Result<()>)?;
     main()
 }
 
@@ -31,50 +31,56 @@ fn all_examples() -> [str] {
     examples
 }
 
+enum ExampleResult {
+    Skipped(str, str)
+    Passed(str)
+    Failed(str, str)
+}
+
 fn test_all() {
     let examples = all_examples();
     let (tx, rx) = sync::channel();
+    let total = examples.len();
 
-    let skipped = 0;
-    let runnable = [];
     for example in examples {
-        match std::try_import(example) {
-            Err(e) => {
-                io::println("  {}  {}  {}", io::yellow("skip"), io::dim(example), e);
-                skipped = skipped + 1;
-            }
-            Ok(module) => {
-                match module.get_method("main") {
-                    Err(_) => {
-                        io::println("  {}  {}  no main", io::yellow("skip"), io::dim(example));
-                        skipped = skipped + 1;
-                    }
-                    Ok(main) => {
-                        runnable = runnable + [(example, main)];
+        let tx = tx;
+        thread::spawn(|| {
+            match std::try_import(example) {
+                Err(e) => {
+                    tx.send(ExampleResult::Skipped(example, e.to_string())).unwrap();
+                }
+                Ok(module) => {
+                    match module.get_method("main", fn() -> Result<()>) {
+                        Err(_) => {
+                            tx.send(ExampleResult::Skipped(example, "no main() -> Result<()>")).unwrap();
+                        }
+                        Ok(main) => {
+                            match main() {
+                                Ok(_) => tx.send(ExampleResult::Passed(example)).unwrap(),
+                                Err(e) => tx.send(ExampleResult::Failed(example, e.to_string())).unwrap(),
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
-
-    for (example, main) in runnable {
-        thread::spawn(|| {
-            let result = main();
-            tx.send((example, result)).unwrap();
         });
     }
 
     let passed = 0;
     let failed = 0;
-    for _ in runnable {
-        let (name, result) = rx.recv().unwrap();
-        match result {
-            Ok(_) => {
+    let skipped = 0;
+    for _ in examples {
+        match rx.recv().unwrap() {
+            ExampleResult::Skipped(name, reason) => {
+                io::println("  {}  {}  {}", io::yellow("skip"), io::dim(name), reason);
+                skipped = skipped + 1;
+            }
+            ExampleResult::Passed(name) => {
                 io::println("  {}  {}", io::green("ok"), name);
                 passed = passed + 1;
             }
-            Err(e) => {
-                io::println("  {}  {}  {}", io::red("FAIL"), name, e);
+            ExampleResult::Failed(name, err) => {
+                io::println("  {}  {}  {}", io::red("FAIL"), name, err);
                 failed = failed + 1;
             }
         }
@@ -83,7 +89,7 @@ fn test_all() {
     io::println("");
     io::println("{} passed, {} failed, {} skipped, {} total",
         io::green(passed.to_string()), io::red(failed.to_string()),
-        io::yellow(skipped.to_string()), passed + failed + skipped);
+        io::yellow(skipped.to_string()), total);
     if failed > 0 {
         std::panic("{} example(s) failed", failed);
     }

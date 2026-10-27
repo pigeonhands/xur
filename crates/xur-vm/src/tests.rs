@@ -640,9 +640,11 @@ fn the_reflect_example_runs() {
             "recharge: now at (1, 2), battery 100\n",
             "forward 5: now at (1, 7), battery 99\n",
             "\n--- function reflection ---\n",
-            "Robot::forward params: [\"self\", \"steps\"]\n",
-            "Robot::forward types:  [(), i64]\n",
-            "Robot::forward return: Robot\n",
+            "Robot::forward:\n",
+            "  params:      2\n",
+            "  param_names: [\"self\", \"steps\"]\n",
+            "  param_types: [(), i64]\n",
+            "  return_type: Robot\n",
         )
         .into())
     );
