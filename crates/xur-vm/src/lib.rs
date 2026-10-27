@@ -86,32 +86,42 @@ impl Vm {
 
     /// Runs the root module's `main` function.
     pub fn run_main(&self) -> RunResult<Value> {
-        let main = {
+        self.run_fn("main")
+            .unwrap_or_else(|| Err(RuntimeError::new("the program has no `main` function")))
+    }
+
+    /// Runs the root module's function `name`, if it exists. Returns
+    /// `None` when no such function is defined.
+    pub fn run_fn(&self, name: &str) -> Option<RunResult<Value>> {
+        let def = {
             let program = self.shared.program();
             let resolutions = program.resolutions();
             let root = resolutions.module_defs[program.krate.root.0];
-            match resolutions.lookup(root, Namespace::Value, Symbol::intern("main")) {
-                Some(Res::Def(DefKind::Fn, main)) => main,
-                _ => return Err(RuntimeError::new("the program has no `main` function")),
+            match resolutions.lookup(root, Namespace::Value, Symbol::intern(name)) {
+                Some(Res::Def(DefKind::Fn, def)) => def,
+                _ => return None,
             }
         };
         let mut interp = Interp::new(&self.shared);
-        let value = interp.call_fn(main, Vec::new(), Vec::new())?;
-        // A `main` that returns a `Result` fails the program on `Err`, like
-        // Rust's. Any other value, including `Ok`, is a success.
+        let value = match interp.call_fn(def, Vec::new(), Vec::new()) {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
         if let Value::Adt(adt) = &value {
             let lang = self.shared.lang;
             if adt.ctor == lang.err {
                 let inner = adt.fields.first().cloned().unwrap_or(Value::Unit);
                 let shown = interp.display_value(&inner);
-                let mut error = RuntimeError::new(format!("main returned an error: {shown}"));
+                let mut error = RuntimeError::new(format!(
+                    "{name} returned an error: {shown}"
+                ));
                 for note in interp.try_trace() {
                     error = error.with_note(note);
                 }
-                return Err(error);
+                return Some(Err(error));
             }
         }
-        Ok(value)
+        Some(Ok(value))
     }
 
     /// Diagnostics for modules imported while the program ran.
