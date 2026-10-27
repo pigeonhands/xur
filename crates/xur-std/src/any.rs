@@ -1,6 +1,9 @@
 //! `std::any`: reflection.
 
-use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
+use std::sync::Arc;
+
+use xur_runtime::{Context, Record, Registry, RunResult, RuntimeError, Value};
+use xur_span::Symbol;
 
 use crate::result;
 
@@ -8,7 +11,8 @@ pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::any")
         .raw_function("type_name", type_name)
-        .raw_function("try_cast", try_cast);
+        .raw_function("try_cast", try_cast)
+        .raw_function("record", record);
 }
 
 /// `type_name::<T>()`: the name of `T`.
@@ -36,6 +40,41 @@ fn try_cast(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         }
         _ => Err(RuntimeError::new(
             "`try_cast` takes one type argument and one value: `try_cast::<T>(v)`",
+        )),
+    }
+}
+
+/// `record(value)`: convert a struct into an untyped record.
+fn record(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    match args {
+        [value] => match value {
+            Value::Record(_) => Ok(value.clone()),
+            Value::Adt(adt) => {
+                let info = cx.adt_info(adt.ctor).ok_or_else(|| {
+                    RuntimeError::new(format!(
+                        "cannot convert {} to a record",
+                        cx.describe_type(value)
+                    ))
+                })?;
+                let fields: Vec<_> = info
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, fi)| {
+                        let name = fi.name.unwrap_or_else(|| Symbol::intern(&i.to_string()));
+                        let val = adt.fields.get(i).cloned().unwrap_or(Value::Unit);
+                        (name, val)
+                    })
+                    .collect();
+                Ok(Value::Record(Arc::new(Record::new(fields))))
+            }
+            _ => Err(RuntimeError::new(format!(
+                "cannot convert {} to a record",
+                cx.describe_type(value)
+            ))),
+        },
+        _ => Err(RuntimeError::new(
+            "`record` takes one argument: `record(value)`",
         )),
     }
 }
