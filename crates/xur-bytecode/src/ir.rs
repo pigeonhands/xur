@@ -129,6 +129,11 @@ pub enum RtType {
         id: NativeTypeId,
         name: String,
     },
+    /// A function type `fn(A, B) -> C`.
+    Fn {
+        params: Vec<RtType>,
+        ret: Box<RtType>,
+    },
 }
 
 /// The fields a record is built with.
@@ -372,6 +377,10 @@ impl std::fmt::Display for RtType {
             }
             Self::List => f.write_str("[_]"),
             Self::Adt { name, .. } | Self::Native { name, .. } => f.write_str(name),
+            Self::Fn { params, ret } => {
+                let params: Vec<_> = params.iter().map(ToString::to_string).collect();
+                write!(f, "fn({}) -> {}", params.join(", "), ret)
+            }
         }
     }
 }

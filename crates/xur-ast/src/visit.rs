@@ -312,6 +312,14 @@ pub fn walk_ty<'a, V: Visitor<'a>>(visitor: &mut V, ty: &'a Ty) {
             }
         }
         TyKind::Paren(ty) | TyKind::List(ty) => visitor.visit_ty(ty),
+        TyKind::Fn { params, ret } => {
+            for ty in params {
+                visitor.visit_ty(ty);
+            }
+            if let Some(ty) = ret {
+                visitor.visit_ty(ty);
+            }
+        }
         TyKind::Record | TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => {}
     }
 }

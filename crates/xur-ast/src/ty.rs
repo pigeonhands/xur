@@ -24,6 +24,8 @@ pub enum TyKind {
     /// `_`, or no type written at all, as for the closure parameter in
     /// `|x| x + 1`.
     Infer,
+    /// `fn(A, B) -> C`, a function type.
+    Fn { params: Vec<Ty>, ret: Option<Box<Ty>> },
     /// The type of a `self` parameter written without one; `Self`.
     ImplicitSelf,
     /// A type that failed to parse; the error has already been reported.

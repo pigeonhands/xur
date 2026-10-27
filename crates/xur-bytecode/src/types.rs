@@ -36,6 +36,13 @@ fn rt_type_or_any(resolutions: &Resolutions, ty: &Ty) -> RtType {
         ),
         TyKind::Paren(ty) => rt_type_or_any(resolutions, ty),
         TyKind::List(_) => RtType::List,
+        TyKind::Fn { params, ret } => RtType::Fn {
+            params: params.iter().map(|ty| rt_type_or_any(resolutions, ty)).collect(),
+            ret: Box::new(match ret {
+                Some(ty) => rt_type_or_any(resolutions, ty),
+                None => RtType::Unit,
+            }),
+        },
         TyKind::Record | TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => RtType::Any,
     }
 }
@@ -75,6 +82,14 @@ pub fn type_name(resolutions: &Resolutions, ty: &Ty) -> String {
         }
         TyKind::Paren(ty) => type_name(resolutions, ty),
         TyKind::List(ty) => format!("[{}]", type_name(resolutions, ty)),
+        TyKind::Fn { params, ret } => {
+            let params: Vec<_> = params.iter().map(|ty| type_name(resolutions, ty)).collect();
+            let ret = match ret {
+                Some(ty) => type_name(resolutions, ty),
+                None => "()".to_owned(),
+            };
+            format!("fn({}) -> {}", params.join(", "), ret)
+        }
         TyKind::Record => "@".to_owned(),
         TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => "_".to_owned(),
     }

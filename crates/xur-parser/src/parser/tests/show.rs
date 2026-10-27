@@ -64,6 +64,13 @@ impl Show for Ty {
             TyKind::Tuple(tys) => format!("({})", list(tys)),
             TyKind::Paren(ty) => format!("({})", ty.show()),
             TyKind::List(ty) => format!("[{}]", ty.show()),
+            TyKind::Fn { params, ret } => {
+                let params: Vec<_> = params.iter().map(|ty| ty.show()).collect();
+                match ret {
+                    Some(ty) => format!("fn({}) -> {}", params.join(", "), ty.show()),
+                    None => format!("fn({})", params.join(", ")),
+                }
+            }
             TyKind::Record => "@".to_owned(),
             TyKind::Infer => "_".to_owned(),
             TyKind::ImplicitSelf => "Self".to_owned(),
