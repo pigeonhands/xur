@@ -8,13 +8,17 @@
 //! | `String`, `&str`, `char`           | strings                      |
 //! | `()`                               | `()`                         |
 //! | tuples                             | tuples                       |
-//! | `Vec<u8>`                          | bytes                        |
 //! | `Vec<T>`, arrays, slices           | lists                        |
 //! | `Option<T>`, `Result<T, E>`        | the prelude's `Option`, `Result` |
+//! | `Vec<u8>`, `&[u8]`, `[u8; N]`      | bytes                        |
 //! | registered types                   | native objects               |
-//! | other structs deriving `Facet`     | records with named fields    |
+//! | other structs and enums            | records, named by a type registered for their shape |
+//! | opaque types up to 8 bytes, like bitflags | their bits, as an integer |
 
-use facet::{Def, Facet, Partial, Peek, ScalarType, Shape, StructKind, StructType, Type, UserType};
+use facet::{
+    Def, Facet, Partial, Peek, ScalarType, Shape, ShapeLayout, StructKind, StructType, Type,
+    UserType,
+};
 use xur_span::Symbol;
 
 use crate::value::{Adt, NativeObject, Record, lock};
@@ -70,6 +74,9 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
         let bytes: &Vec<u8> = peek.get().map_err(reflect_error)?;
         return Ok(Value::bytes(bytes.clone()));
     }
+    if let Some(bytes) = peek.as_bytes() {
+        return Ok(Value::bytes(bytes.to_vec()));
+    }
     let lang = cx.lang();
     match shape.def {
         Def::Option(_) => {
@@ -88,6 +95,9 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
         }
         Def::List(_) | Def::Array(_) | Def::Slice(_) => {
             let items = peek.into_list_like().map_err(reflect_error)?;
+            if let Some(bytes) = items.as_bytes() {
+                return Ok(Value::bytes(bytes.to_vec()));
+            }
             let items = items
                 .iter()
                 .map(|item| peek_to_value(cx, item))
@@ -96,6 +106,22 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
         }
         _ => {}
     }
+    let ty = registry.record_type_of_shape(shape);
+    let record = |variant: Option<&str>, fields: &[facet::Field], values: Vec<Value>| {
+        let fields = fields
+            .iter()
+            .map(|field| Symbol::intern(field.name))
+            .zip(values)
+            .collect();
+        Value::Record(
+            Record {
+                ty,
+                variant: variant.map(Symbol::intern),
+                fields,
+            }
+            .into(),
+        )
+    };
     match shape.ty {
         Type::User(UserType::Struct(StructType { kind, fields, .. })) => {
             let peek = peek.into_struct().map_err(reflect_error)?;
@@ -105,17 +131,42 @@ pub(crate) fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunR
             Ok(match kind {
                 StructKind::Tuple => Value::tuple(values),
                 StructKind::Unit | StructKind::Struct | StructKind::TupleStruct => {
-                    let fields = fields
-                        .iter()
-                        .map(|field| Symbol::intern(field.name))
-                        .zip(values)
-                        .collect();
-                    Value::Record(Record { fields }.into())
+                    record(None, fields, values)
                 }
             })
         }
+        Type::User(UserType::Enum(_)) => {
+            let peek = peek.into_enum().map_err(reflect_error)?;
+            let variant = peek.active_variant().map_err(reflect_error)?;
+            let fields = variant.data.fields;
+            let values = (0..fields.len())
+                .map(|i| match peek.field(i).map_err(reflect_error)? {
+                    Some(field) => peek_to_value(cx, field),
+                    None => Err(unsupported(shape)),
+                })
+                .collect::<RunResult<Vec<_>>>()?;
+            Ok(record(Some(variant.name), fields, values))
+        }
+        Type::User(UserType::Opaque) => opaque_bits(peek).ok_or_else(|| unsupported(shape)),
         _ => Err(unsupported(shape)),
     }
+}
+
+/// The bits of a small opaque value, such as a set of bitflags, which is
+/// all of it that can be shown.
+fn opaque_bits(peek: Peek<'_, 'static>) -> Option<Value> {
+    let ShapeLayout::Sized(layout) = peek.shape().layout else {
+        return None;
+    };
+    if !matches!(layout.size(), 1 | 2 | 4 | 8) {
+        return None;
+    }
+    let mut bits = [0u8; 8];
+    // SAFETY: the value is `layout.size()` initialised bytes; a type this
+    // small with no visible fields is a plain integer, like bitflags.
+    let raw = unsafe { std::slice::from_raw_parts(peek.data().as_byte_ptr(), layout.size()) };
+    bits[..raw.len()].copy_from_slice(raw);
+    i64::try_from(u64::from_ne_bytes(bits)).ok().map(Value::Int)
 }
 
 fn scalar_to_value(peek: Peek<'_, 'static>, scalar: ScalarType) -> RunResult<Value> {
@@ -217,6 +268,26 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
                 return Err(mismatch(shape, value));
             }
             build_fields(cx, partial, items.iter())
+        }
+        (Type::User(UserType::Enum(_)), Value::Record(record)) => {
+            let Some(variant) = record.variant else {
+                return Err(mismatch(shape, value));
+            };
+            let mut partial = partial
+                .select_variant_named(variant.as_str())
+                .map_err(reflect_error)?;
+            let fields = partial
+                .selected_variant()
+                .map(|variant| variant.data.fields)
+                .unwrap_or_default();
+            for (i, field) in fields.iter().enumerate() {
+                let value = record.field(Symbol::intern(field.name)).ok_or_else(|| {
+                    RuntimeError::new(format!("missing field `{}` for `{shape}`", field.name))
+                })?;
+                let inner = partial.begin_nth_field(i).map_err(reflect_error)?;
+                partial = build(cx, inner, value)?.end().map_err(reflect_error)?;
+            }
+            Ok(partial)
         }
         (Type::User(UserType::Struct(st)), Value::Record(record))
             if st.kind != StructKind::Tuple =>
@@ -331,6 +402,21 @@ mod tests {
         text: String,
     }
 
+    #[derive(Facet, Debug, Clone, PartialEq)]
+    #[repr(C)]
+    enum Shape {
+        Empty,
+        Circle(f64),
+        Rect { w: u32, h: u32 },
+    }
+
+    #[derive(Facet, Debug, Clone, PartialEq)]
+    struct Drawing {
+        shape: Shape,
+        data: Vec<u8>,
+        magic: [u8; 2],
+    }
+
     /// Registers `Point`; `Label` stays unregistered.
     struct Cx(LangItems, Registry);
 
@@ -354,6 +440,7 @@ mod tests {
         .unwrap();
         let registry = Registry::new();
         registry.module("geo").ty::<Point>("Point");
+        registry.module("geo").shape_type("Drawing", Drawing::SHAPE);
         Cx(program.lang_items(), registry)
     }
 
@@ -441,5 +528,39 @@ mod tests {
         assert_eq!(error.message, "expected `u32`, found string");
         let error = from_value::<Vec<u32>>(&cx(), &Value::Int(1)).unwrap_err();
         assert_eq!(error.message, "expected `Vec<u32>`, found integer");
+    }
+
+    #[test]
+    fn enums_become_records_with_their_variant() {
+        let value = round_trip(Shape::Rect { w: 2, h: 3 });
+        let Value::Record(record) = &value else {
+            panic!("expected a record, found {value:?}");
+        };
+        assert_eq!(record.variant, Some(Symbol::intern("Rect")));
+        assert_eq!(record.field(Symbol::intern("h")), Some(&Value::Int(3)));
+        round_trip(Shape::Empty);
+        round_trip(Shape::Circle(1.5));
+    }
+
+    #[test]
+    fn shape_types_name_their_records() {
+        let cx = cx();
+        let drawing = Drawing {
+            shape: Shape::Circle(2.0),
+            data: vec![1, 2],
+            magic: *b"MZ",
+        };
+        let value = to_value(&cx, &drawing).unwrap();
+        let Value::Record(record) = &value else {
+            panic!("expected a record, found {value:?}");
+        };
+        assert_eq!(record.ty, cx.1.record_type_of_shape(Drawing::SHAPE));
+        assert!(record.ty.is_some());
+        assert_eq!(
+            record.field(Symbol::intern("magic")),
+            Some(&Value::bytes(b"MZ".to_vec()))
+        );
+        // Not a native object: `Drawing` was registered by shape only.
+        assert_eq!(cx.1.type_of_shape(Drawing::SHAPE), None);
     }
 }

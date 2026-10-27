@@ -45,6 +45,7 @@ impl Interp<'_> {
                 ty == Some(*def)
             }
             (RtType::Native { id, .. }, Value::Native(object)) => object.ty == *id,
+            (RtType::Native { id, .. }, Value::Record(record)) => record.ty == Some(*id),
             _ => false,
         }
     }

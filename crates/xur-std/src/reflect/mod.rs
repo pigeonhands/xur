@@ -61,6 +61,12 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 cx.set_field(value, name, new.clone())
             })
+            .raw_function("variant", |cx, args| {
+                let [value] = args else {
+                    return arity("variant", "value");
+                };
+                Ok(option(cx, variant(cx, value).map(|name| Value::str(&name))))
+            })
             .raw_function("methods", |cx, args| {
                 let [value] = args else {
                     return arity("methods", "value");
@@ -92,6 +98,19 @@ fn type_name(cx: &dyn Context, value: &Value) -> String {
             None => cx.describe_type(value).trim_matches('`').to_owned(),
         },
         other => cx.describe_type(other).trim_matches('`').to_owned(),
+    }
+}
+
+/// The variant of an enum value: `Circle` for `Shape::Circle(1.0)`.
+fn variant(cx: &dyn Context, value: &Value) -> Option<String> {
+    match value {
+        Value::Record(record) => record.variant.map(|variant| variant.to_string()),
+        Value::Adt(adt) => {
+            let info = cx.adt_info(adt.ctor).filter(|info| info.is_variant)?;
+            let (_, variant) = info.name.rsplit_once("::")?;
+            Some(variant.to_owned())
+        }
+        _ => None,
     }
 }
 

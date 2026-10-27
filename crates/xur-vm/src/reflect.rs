@@ -40,6 +40,7 @@ impl Interp<'_> {
         Some(AdtInfo {
             name: resolutions.def_path(def),
             ctor: def,
+            is_variant: resolutions.defs.get(def).kind == DefKind::Variant,
             attrs,
             fields,
         })

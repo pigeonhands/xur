@@ -46,12 +46,32 @@ impl Interp<'_> {
                 }
             }
             Value::Record(record) => {
+                let registry = &self.shared.registry;
+                let name = match (record.ty, record.variant) {
+                    (Some(ty), Some(variant)) => format!("{}::{variant}", registry.type_name(ty)),
+                    (Some(ty), None) => registry.type_name(ty),
+                    (None, Some(variant)) => variant.to_string(),
+                    (None, None) => String::new(),
+                };
+                let is_tuple = record
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .all(|(i, (field, _))| field.as_str() == i.to_string());
                 let fields: Vec<_> = record
                     .fields
                     .iter()
-                    .map(|(name, value)| format!("{name}: {}", self.repr(value)))
+                    .map(|(field, value)| match is_tuple {
+                        true => self.repr(value),
+                        false => format!("{field}: {}", self.repr(value)),
+                    })
                     .collect();
-                format!("{{ {} }}", fields.join(", "))
+                match (name.is_empty(), fields.is_empty(), is_tuple) {
+                    (false, true, _) => name,
+                    (false, false, true) => format!("{name}({})", fields.join(", ")),
+                    (false, false, false) => format!("{name} {{ {} }}", fields.join(", ")),
+                    (true, _, _) => format!("{{ {} }}", fields.join(", ")),
+                }
             }
             Value::Native(object) => self.shared.registry.display(object),
             Value::Fn(def) | Value::Ctor(def) => format!("<fn {}>", self.def_path(*def)),
@@ -85,6 +105,10 @@ impl Interp<'_> {
                 format!("`{ty}`")
             }
             Value::Native(object) => format!("`{}`", self.shared.registry.type_name(object.ty)),
+            Value::Record(record) if record.ty.is_some() => {
+                let ty = record.ty.map(|ty| self.shared.registry.type_name(ty));
+                format!("`{}`", ty.unwrap_or_default())
+            }
             other => other.kind().to_owned(),
         }
     }

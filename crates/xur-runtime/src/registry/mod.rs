@@ -109,7 +109,9 @@ pub(super) struct NativeType {
     name: String,
     shape: &'static Shape,
     functions: Vec<NativeFnDecl>,
-    hooks: TypeHooks,
+    /// `None` for types registered by shape only, whose values are
+    /// records rather than native objects.
+    hooks: Option<TypeHooks>,
 }
 
 /// Fills in a lazy module, the first time a program uses it.
@@ -248,8 +250,28 @@ impl Registry {
 
     /// The native type registered for `shape`, if any.
     pub fn type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
-        let index = self.read().types.iter().position(|ty| ty.shape == shape)?;
+        let index = self
+            .read()
+            .types
+            .iter()
+            .position(|ty| ty.shape == shape && ty.hooks.is_some())?;
         Some(NativeTypeId(index as u32))
+    }
+
+    /// The type registered by shape only for `shape`, whose values are
+    /// typed records.
+    pub fn record_type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
+        let index = self
+            .read()
+            .types
+            .iter()
+            .position(|ty| ty.shape == shape && ty.hooks.is_none())?;
+        Some(NativeTypeId(index as u32))
+    }
+
+    /// Whether any type, of either kind, is registered for `shape`.
+    pub fn has_shape(&self, shape: &'static Shape) -> bool {
+        self.read().types.iter().any(|ty| ty.shape == shape)
     }
 
     /// Reads field `name` of a native object.
@@ -296,8 +318,12 @@ impl Registry {
         object.with_any(|value| set(partial, value))
     }
 
+    /// The hooks of a type registered with its Rust type, which every type
+    /// with native objects is.
     fn hooks(&self, ty: NativeTypeId) -> TypeHooks {
-        self.read().types[ty.0 as usize].hooks
+        self.read().types[ty.0 as usize]
+            .hooks
+            .expect("native objects only exist for types registered with their Rust type")
     }
 
     /// The registered modules as name resolution sees them.

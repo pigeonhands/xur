@@ -32,6 +32,8 @@ pub struct AdtInfo {
     pub name: String,
     /// The constructor of its values.
     pub ctor: DefId,
+    /// Whether it is a variant of an enum, rather than a struct.
+    pub is_variant: bool,
     /// The attributes written on it, such as `#[repr(C)]`.
     pub attrs: &'static [Attribute],
     /// Its fields, in declaration order.

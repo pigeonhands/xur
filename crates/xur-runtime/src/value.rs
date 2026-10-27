@@ -132,13 +132,28 @@ impl fmt::Debug for NativeObject {
     }
 }
 
-/// A value of an unregistered Rust struct, converted to named fields.
+/// Named fields: a value of a Rust struct or enum converted to Xur, or a
+/// record read with a layout.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
+    /// The type registered for the Rust type's shape, if any, which names
+    /// it and is what written types check against.
+    pub ty: Option<NativeTypeId>,
+    /// For a value of a Rust enum, its variant, e.g. `Amd64`.
+    pub variant: Option<Symbol>,
     pub fields: Vec<(Symbol, Value)>,
 }
 
 impl Record {
+    /// A record of no particular type.
+    pub fn new(fields: Vec<(Symbol, Value)>) -> Self {
+        Self {
+            ty: None,
+            variant: None,
+            fields,
+        }
+    }
+
     pub fn field(&self, name: Symbol) -> Option<&Value> {
         self.fields
             .iter()

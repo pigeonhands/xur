@@ -134,7 +134,11 @@ impl Interp<'_> {
                     .find(|(name, _)| *name == field)
                     .ok_or_else(missing)?;
                 *slot = value;
-                return Ok(Value::Record(Record { fields }.into()));
+                let record = Record {
+                    fields,
+                    ..Record::clone(record)
+                };
+                return Ok(Value::Record(record.into()));
             }
             _ => return Err(missing()),
         };

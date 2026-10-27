@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use facet::Facet;
+use facet::{Facet, Shape};
 use xur_resolve::NativeTypeId;
 
 use super::hooks::TypeHooks;
@@ -46,6 +46,26 @@ impl ModuleBuilder<'_> {
         self
     }
 
+    /// Registers the type with facet shape `shape` as `name`, without its
+    /// Rust type: values of it passed to Xur become records of this type,
+    /// which written types can check and which display with its name. For
+    /// registering every type reachable from some shape, such as a
+    /// library's.
+    pub fn shape_type(&mut self, name: &str, shape: &'static Shape) -> NativeTypeId {
+        let module = self.module;
+        self.registry.with_inner(|inner| {
+            let id = NativeTypeId(inner.types.len() as u32);
+            inner.types.push(NativeType {
+                name: name.to_owned(),
+                shape,
+                functions: Vec::new(),
+                hooks: None,
+            });
+            inner.modules[module].types.push(id);
+            id
+        })
+    }
+
     /// Registers the Rust type `T` as `name`. Values of `T` passed to Xur
     /// become native objects holding the Rust value.
     pub fn ty<T: Facet<'static> + Clone + Send + 'static>(
@@ -59,7 +79,7 @@ impl ModuleBuilder<'_> {
                 name: name.to_owned(),
                 shape: T::SHAPE,
                 functions: Vec::new(),
-                hooks: TypeHooks::new::<T>(),
+                hooks: Some(TypeHooks::new::<T>()),
             });
             inner.modules[module].types.push(id);
             id

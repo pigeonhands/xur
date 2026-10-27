@@ -199,12 +199,7 @@ impl Layout {
                     .fields
                     .iter()
                     .map(|field| Symbol::intern(&field.name));
-                Value::Record(
-                    Record {
-                        fields: names.zip(values).collect(),
-                    }
-                    .into(),
-                )
+                Value::Record(Record::new(names.zip(values).collect()).into())
             }
         })
     }
@@ -340,7 +335,7 @@ impl Layout {
                     .into_iter()
                     .map(|(name, value)| (Symbol::intern(name), value))
                     .collect();
-                Value::Record(Record { fields }.into())
+                Value::Record(Record::new(fields).into())
             })
             .collect();
         Value::list(fields)

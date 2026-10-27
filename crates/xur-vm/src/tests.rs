@@ -727,3 +727,19 @@ fn the_layout_example_runs() {
     )]);
     assert_eq!(output, Ok("Padded (size 8, align 4) { flag: u8 @ 0, value: u32 @ 4 }\nTagged (size 16, align 16) { tag: bytes[4] @ 0, value: u32 @ 8 }\n58555200000000000000cafe00000000\nBitmap (size 30, align 1) { file: FileHeader @ 0, info: InfoHeader @ 14 }\n38 bytes: 424d26000000000000001e000000100000000200000001000000010018000000ffff00000000\n2x1 pixels at offset 30\n  magic u16 at 0\n  size u32 at 2\n  reserved u32 at 6\n  pixels_at u32 at 10\nRecord (size 12, align 4) { id: u16 @ 0, score: f32 @ 4, alive: bool @ 8 }\n000000000000000000000000070000000000c03f01000000\n{ id: 7, score: 1.5, alive: true }\n".into()));
 }
+
+#[test]
+fn reflection_names_variants() {
+    let src = r#"
+        enum Shape { Circle(f64), Square }
+        struct Point { x: i64 }
+        fn main() {
+            let v = std::reflect::variant;
+            std::io::println("{} {} {}", v(Shape::Circle(1.0)), v(Shape::Square), v(Point { x: 1 }));
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok("Some(\"Circle\") Some(\"Square\") None\n".into())
+    );
+}
