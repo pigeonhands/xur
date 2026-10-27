@@ -216,6 +216,11 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
                 visitor.visit_expr(&field.expr);
             }
         }
+        ExprKind::Record(fields) => {
+            for field in fields {
+                visitor.visit_expr(&field.expr);
+            }
+        }
         ExprKind::MethodCall(call) => {
             visitor.visit_expr(&call.receiver);
             if let Some(args) = &call.seg.args {

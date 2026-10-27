@@ -115,6 +115,13 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             format!("{dst:?} = closure#{function}({})", regs(captures))
         }
         InstKind::IsCtor { dst, value, ctor } => format!("{dst:?} = {value:?} is {}", path(*ctor)),
+        InstKind::RecordLit { dst, fields } => {
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|(name, reg)| format!("{name}: {reg:?}"))
+                .collect();
+            format!("{dst:?} = @{{ {} }}", fields.join(", "))
+        }
         InstKind::Record {
             dst,
             ty,

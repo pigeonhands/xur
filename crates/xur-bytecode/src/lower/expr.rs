@@ -92,6 +92,15 @@ impl Lowerer<'_> {
             }
             ExprKind::Call(callee, args) => self.call(callee, args, span),
             ExprKind::Struct(literal) => self.struct_literal(literal, span),
+            ExprKind::Record(fields) => {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|f| (f.ident.name, self.expr(&f.expr)))
+                    .collect();
+                let dst = self.new_reg();
+                self.emit(InstKind::RecordLit { dst, fields }, span);
+                dst
+            }
             ExprKind::MethodCall(call) => {
                 let receiver = self.expr(&call.receiver);
                 let args = self.exprs(&call.args);

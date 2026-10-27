@@ -251,6 +251,11 @@ pub enum InstKind {
         value: Reg,
         ctor: DefId,
     },
+    /// `@{ a: 1, b: "x" }`: an anonymous record with named fields.
+    RecordLit {
+        dst: Reg,
+        fields: Vec<(Symbol, Reg)>,
+    },
     /// A record of the native type `ty`, registered from a Rust type's
     /// shape: of its enum variant `variant`, or the struct itself. The VM
     /// checks the fields against the shape.

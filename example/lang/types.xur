@@ -57,6 +57,10 @@ fn main() -> Result<()> {
     print_type_name(std::json::parse);
     io::println("");
 
+    io::println("record:");
+    print_type_name(@{a: 10, name: "this is a record"});
+    io::println("");
+
     // Should fail: construct_type returns MyZst, not MyType
     // let a : MyZst = construct_type::<MyType>();
     // print_type_name(a);

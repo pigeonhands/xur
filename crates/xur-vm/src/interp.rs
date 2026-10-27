@@ -566,6 +566,13 @@ impl<'s> Interp<'s> {
                 let is = matches!(frame.get(*value), Value::Adt(adt) if adt.ctor == *ctor);
                 frame.set(*dst, Value::Bool(is));
             }
+            InstKind::RecordLit { dst, fields } => {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|(name, reg)| (*name, frame.get(*reg).clone()))
+                    .collect();
+                frame.set(*dst, Value::Record(Arc::new(Record::new(fields))));
+            }
             InstKind::Record {
                 dst,
                 ty,

@@ -63,6 +63,8 @@ pub enum ExprKind {
     MethodCall(Box<MethodCall>),
     /// `Point { x: 1, y }`
     Struct(Box<StructExpr>),
+    /// `@{ a: 10, name: "text" }`
+    Record(Vec<ExprField>),
     /// `expr.field`
     Field(Box<Expr>, Ident),
     /// `expr?`

@@ -387,6 +387,10 @@ impl Parser<'_> {
                 ExprKind::List(self.parse_delimited(TokenKind::RBracket, Self::parse_expr)?)
             }
             TokenKind::LBrace => ExprKind::Block(Box::new(self.parse_block()?)),
+            TokenKind::At if self.look_ahead(1) == TokenKind::LBrace => {
+                self.bump(); // `@`
+                self.parse_record_literal()?
+            }
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_expr_closure()?,
             TokenKind::Keyword(Keyword::If) => {
                 self.bump();
@@ -443,7 +447,19 @@ impl Parser<'_> {
     /// `{ name: expr, name }` after the struct's path.
     fn parse_struct_literal(&mut self, path: Path) -> PResult<ExprKind> {
         self.expect(TokenKind::LBrace)?;
-        let fields = self.parse_delimited(TokenKind::RBrace, |this| {
+        let fields = self.parse_struct_fields()?;
+        Ok(ExprKind::Struct(Box::new(StructExpr { path, fields })))
+    }
+
+    /// `@{ name: expr, name }` — an anonymous record literal.
+    fn parse_record_literal(&mut self) -> PResult<ExprKind> {
+        self.expect(TokenKind::LBrace)?;
+        let fields = self.parse_struct_fields()?;
+        Ok(ExprKind::Record(fields))
+    }
+
+    fn parse_struct_fields(&mut self) -> PResult<Vec<ExprField>> {
+        self.parse_delimited(TokenKind::RBrace, |this| {
             let lo = this.token.span;
             let ident = this.parse_ident()?;
             let (expr, shorthand) = if this.eat(TokenKind::Colon) {
@@ -459,8 +475,7 @@ impl Parser<'_> {
                 shorthand,
                 span: lo.to(this.prev_token.span),
             })
-        })?;
-        Ok(ExprKind::Struct(Box::new(StructExpr { path, fields })))
+        })
     }
 
     /// The optional value of `return` or `break`.

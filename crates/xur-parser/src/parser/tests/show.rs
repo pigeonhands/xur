@@ -182,6 +182,13 @@ impl Show for Expr {
             ExprKind::Break(value) => jump("break", value),
             ExprKind::Continue => "continue".to_owned(),
             ExprKind::Ret(value) => jump("return", value),
+            ExprKind::Record(fields) => {
+                let fields: Vec<_> = fields.iter().map(|f| {
+                    if f.shorthand { f.ident.to_string() }
+                    else { format!("{}: {}", f.ident, f.expr.show()) }
+                }).collect();
+                format!("@{{ {} }}", fields.join(", "))
+            }
             ExprKind::Err => "<err>".to_owned(),
         }
     }
