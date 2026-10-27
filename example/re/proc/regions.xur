@@ -1,0 +1,13 @@
+// Walking a process's mapped memory regions and their protection.
+//
+//     xur run example/re/proc/regions.xur
+
+use std::io;
+use std::re::proc;
+
+fn main() {
+    let handle = proc::open_current().unwrap();
+    let regions = handle.regions().unwrap();
+    let first = regions[0];
+    io::println("{} regions; first is {} [{}]", regions.len(), first.kind, proc::protection_names(first.protection).join(" "));
+}

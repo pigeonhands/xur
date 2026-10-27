@@ -1,0 +1,23 @@
+// Reading a loaded image by virtual address with `AnyImage`.
+//
+//     xur run example/re/image/loaded.xur
+
+use std::io;
+use std::re;
+use std::re::pe;
+use std::re::pe::ImageFileMachine;
+use std::re::ExportLocation;
+
+fn main() {
+    let dll = pe::ImageDef::new_dll(ImageFileMachine::Amd64);
+    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"]).unwrap();
+    let at = dll.add_section(".text", flags, b"\xb8\x2a\x00\x00\x00\xc3"); // mov eax,42; ret
+    dll.add_exports("demo.dll", [("answer", at)]);
+
+    let image = re::AnyImage::load(dll.write().unwrap()).unwrap();
+    let answer = image.exports().unwrap()[0];
+    match answer.location {
+        ExportLocation::Address(vaddr) => io::println("answer at {}: {}", vaddr.to_hex(), image.bytes(vaddr, 6).unwrap().to_hex()),
+        ExportLocation::Forwarder(target) => io::println("forwards to {}", target),
+    }
+}

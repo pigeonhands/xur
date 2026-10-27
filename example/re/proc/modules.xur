@@ -1,0 +1,12 @@
+// Listing a process's loaded modules with `std::re::proc`.
+//
+//     xur run example/re/proc/modules.xur   (inspects this process)
+
+use std::io;
+use std::re::proc;
+
+fn main() {
+    let handle = proc::open_current().unwrap();
+    let modules = handle.modules().unwrap();
+    io::println("{} modules; main = {}", modules.len(), modules[0].name);
+}

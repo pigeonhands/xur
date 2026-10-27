@@ -782,24 +782,71 @@ fn structs_know_their_bytes() {
     );
 }
 
-// The build example reads the running executable as an ELF file too.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[test]
-fn the_re_build_example_runs() {
-    let output = run_files(&[(
-        "example/re_build.xur",
-        include_str!("../../../example/re_build.xur"),
-    )]);
-    assert_eq!(output, Ok("machine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\npe image based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+// Small, single-purpose `std::re` examples. The image ones build a PE in
+// memory, so they are portable and deterministic; the proc ones read the
+// current process, so they only run on the hosts the suite runs on.
+fn re_image_example(file: &str, source: &str, expected: &str) {
+    assert_eq!(run_files(&[(file, source)]), Ok(expected.into()));
 }
 
 #[test]
-fn the_re_image_example_runs() {
-    let output = run_files(&[(
-        "example/re_image.xur",
-        include_str!("../../../example/re_image.xur"),
-    )]);
-    assert_eq!(output, Ok("format: pe, 64-bit, pointers 8 bytes\nmachine: Some(ImageFileMachine::Amd64), base 180000000\nanswer at 180002000: first byte b8\n  mapped? true\nstub at 180004000: first byte 90\n  mapped? true\n3 sections, entry at 0\nis elf? false\n".into()));
+fn re_image_examples_run() {
+    re_image_example(
+        "example/re/image/build.xur",
+        include_str!("../../../example/re/image/build.xur"),
+        "built 1024 bytes, magic 5a4d\n",
+    );
+    re_image_example(
+        "example/re/image/fields.xur",
+        include_str!("../../../example/re/image/fields.xur"),
+        "machine ImageFileMachine::Amd64\n",
+    );
+    re_image_example(
+        "example/re/image/loaded.xur",
+        include_str!("../../../example/re/image/loaded.xur"),
+        "answer at 180002000: b82a000000c3\n",
+    );
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn re_proc_examples_run() {
+    for (file, source) in [
+        (
+            "example/re/proc/modules.xur",
+            include_str!("../../../example/re/proc/modules.xur"),
+        ),
+        (
+            "example/re/proc/regions.xur",
+            include_str!("../../../example/re/proc/regions.xur"),
+        ),
+        (
+            "example/re/proc/read.xur",
+            include_str!("../../../example/re/proc/read.xur"),
+        ),
+    ] {
+        assert!(run_files(&[(file, source)]).is_ok(), "{file} failed");
+    }
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn proc_inspects_the_current_process() {
+    let src = r#"
+        use std::re::proc;
+        fn main() {
+            let io = std::io;
+            let handle = proc::open_current().unwrap();
+            let modules = handle.modules().unwrap();
+            io::println("{} {} {}", proc::current_pid() > 0, handle.pointer_width().unwrap(), modules.len() > 0);
+            io::println("{} {}", handle.read(modules[0].base, 4).unwrap().len(), handle.is_alive());
+            io::println("{}", proc::protection_names(7));
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok("true 8 true\n4 true\n[\"READ\", \"WRITE\", \"EXECUTE\"]\n".into())
+    );
 }
 
 #[test]

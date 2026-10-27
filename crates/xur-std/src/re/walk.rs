@@ -1,38 +1,28 @@
-//! Registering every type of pewter by walking its facet shapes.
+//! Registering a library's types by walking its facet shapes.
 //!
-//! Each struct and enum reachable from `pewter::reflect::roots()` becomes a
-//! Xur type in the module matching where pewter defines it: `pewter::pe::*`
-//! in `std::re::pe`, `pewter::elf::*` in `std::re::elf`, everything else in
-//! `std::re`. Their values come to Xur as typed records.
+//! Given a library's entry-point shapes, this reaches every struct and enum
+//! they refer to (through fields, variants, type arguments and containers)
+//! and registers each as a Xur type, in the submodule a caller-supplied
+//! mapping chooses. Nothing here knows about any particular library.
 
 use facet::{Def, PointerType, Shape, Type, UserType};
 use xur_runtime::Registry;
 use xur_runtime::registry::ModuleBuilder;
 
-/// The shapes to start from: pewter's roots, and types that only its
-/// functions return.
-pub(super) fn roots() -> Vec<&'static Shape> {
-    let mut roots = pewter::reflect::roots().to_vec();
-    roots.extend([
-        <pewter::image::Export as facet::Facet>::SHAPE,
-        <pewter::elf::Symbol<'static> as facet::Facet>::SHAPE,
-        <pewter::pe::sections::edata::ExportTableDataDirectory as facet::Facet>::SHAPE,
-        <pewter::pe::sections::idata::ImportTableDataDirectory as facet::Facet>::SHAPE,
-    ]);
-    roots
-}
-
-/// Registers every pewter type reachable from `roots` that is not already
-/// registered, except those in `skip`, which are wrapped by hand.
+/// Registers every type reachable from `roots` into `base`, each in the
+/// submodule `submodule_of` gives it (`""` for `base` itself, `None` to
+/// skip — a type wrapped by hand, or not this library's), unless it is
+/// already registered or has no fields to show.
 pub(super) fn register(
     registry: &Registry,
-    re: &mut ModuleBuilder<'_>,
+    base: &mut ModuleBuilder<'_>,
     roots: &[&'static Shape],
+    submodule_of: impl Fn(&Shape) -> Option<&'static str>,
     skip: &[&'static Shape],
 ) {
     let mut names: Vec<(&str, String)> = Vec::new();
     for shape in reachable(roots) {
-        let Some(module) = pewter_module(shape) else {
+        let Some(module) = submodule_of(shape) else {
             continue;
         };
         if skip.contains(&shape) || registry.has_shape(shape) || !is_registrable(registry, shape) {
@@ -49,29 +39,14 @@ pub(super) fn register(
         names.push((module, name.clone()));
         let mut submodule;
         let builder = match module {
-            "" => &mut *re,
+            "" => &mut *base,
             module => {
-                submodule = re.submodule(module);
+                submodule = base.submodule(module);
                 &mut submodule
             }
         };
         builder.shape_type(&name, shape);
     }
-}
-
-/// Which submodule of `std::re` a pewter type goes in (`""` for `std::re`
-/// itself), or `None` if it isn't pewter's.
-fn pewter_module(shape: &Shape) -> Option<&'static str> {
-    let path = shape.module_path?;
-    let mut segments = path.split("::");
-    if segments.next() != Some("pewter") {
-        return None;
-    }
-    Some(match segments.next() {
-        Some("pe") => "pe",
-        Some("elf") => "elf",
-        _ => "",
-    })
 }
 
 /// Structs and enums, and opaque types converted by hand (the others'

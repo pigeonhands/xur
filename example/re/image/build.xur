@@ -1,0 +1,15 @@
+// Building a PE image in memory and writing it out, with `std::re`.
+//
+//     xur run example/re/image/build.xur
+
+use std::io;
+use std::re::pe;
+use std::re::pe::ImageFileMachine;
+
+fn main() {
+    let dll = pe::ImageDef::new_dll(ImageFileMachine::Amd64);
+    let flags = pe::section_flags(["CNT_CODE", "MEM_EXECUTE", "MEM_READ"]).unwrap();
+    dll.add_section(".text", flags, b"\xc3"); // a single `ret`
+    let bytes = dll.write().unwrap();
+    io::println("built {} bytes, magic {}", bytes.len(), bytes.read_u16_le(0).to_hex());
+}

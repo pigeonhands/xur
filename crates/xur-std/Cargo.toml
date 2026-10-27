@@ -17,6 +17,7 @@ xur-runtime.workspace = true
 xur-span.workspace = true
 facet.workspace = true
 pewter.workspace = true
+procodile.workspace = true
 bitflags.workspace = true
 
 [dev-dependencies]

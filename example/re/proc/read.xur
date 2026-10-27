@@ -1,0 +1,12 @@
+// Reading a process's memory by address.
+//
+//     xur run example/re/proc/read.xur
+
+use std::io;
+use std::re::proc;
+
+fn main() {
+    let handle = proc::open_current().unwrap();
+    let base = handle.modules().unwrap()[0].base;
+    io::println("bytes at {}: {}", base.to_hex(), handle.read(base, 4).unwrap().to_hex());
+}

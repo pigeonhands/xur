@@ -15,12 +15,12 @@ use pewter::pe::sections::edata::ExportDef;
 use pewter::pe::sections::{SectionFlags, SectionRow};
 use xur_runtime::convert::{ConvertCx, to_value};
 use xur_runtime::registry::ModuleBuilder;
-use xur_runtime::{Context, Record, Registry, RunResult, Value};
+use xur_runtime::{Record, Registry, RunResult, Value};
 use xur_span::Symbol;
 
-use super::flags::register_flags;
-use super::parsed::parse_object;
 use crate::error_text;
+use crate::re::flags::register_flags;
+use crate::re::native::{open_bytes, open_path};
 
 /// A section's name, without the padding of its 8-byte field.
 fn section_name(row: &SectionRow<'_>) -> String {
@@ -144,42 +144,6 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
     register_flags!(pe, "section_flags", SectionFlags, u32);
     register_flags!(pe, "file_characteristics", ImageFileCharacteristics, u16);
     register_flags!(pe, "dll_characteristics", ImageDllCharacteristics, u16);
-}
-
-/// A `parse(bytes)` raw function for a type that borrows its bytes.
-pub(super) fn open_bytes<T, E>(
-    cx: &mut dyn Context,
-    args: &[Value],
-    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
-) -> RunResult<Value>
-where
-    T: Facet<'static> + Send + 'static,
-    E: std::fmt::Display,
-{
-    let [Value::Bytes(bytes)] = args else {
-        return Err(xur_runtime::RuntimeError::new("expected bytes"));
-    };
-    let data = xur_runtime::lock(bytes).clone();
-    parse_object(cx, data, parse)
-}
-
-/// An `open(path)` raw function for a type that borrows its bytes.
-pub(super) fn open_path<T, E>(
-    cx: &mut dyn Context,
-    args: &[Value],
-    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
-) -> RunResult<Value>
-where
-    T: Facet<'static> + Send + 'static,
-    E: std::fmt::Display,
-{
-    let [Value::Str(path)] = args else {
-        return Err(xur_runtime::RuntimeError::new("expected a path string"));
-    };
-    match std::fs::read(&**path) {
-        Ok(data) => parse_object(cx, data, parse),
-        Err(error) => Ok(crate::result(cx, Err(error_text(error)))),
-    }
 }
 
 /// The Windows-specific fields of the optional header, which facet sees as

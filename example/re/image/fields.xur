@@ -1,0 +1,13 @@
+// A parsed PE's fields are read straight through facet, no getters.
+//
+//     xur run example/re/image/fields.xur
+
+use std::io;
+use std::re::pe;
+use std::re::pe::ImageFileMachine;
+
+fn main() {
+    let bytes = pe::ImageDef::new_dll(ImageFileMachine::Amd64).write().unwrap();
+    let file = pe::PEFile::parse(bytes).unwrap();
+    io::println("machine {}", file.coff_header.machine);
+}

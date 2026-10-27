@@ -13,6 +13,44 @@ use xur_runtime::{Context, RunResult, RuntimeError, Value};
 
 use crate::{error_text, result};
 
+/// A `parse(bytes)` raw function body for a type that borrows its bytes:
+/// takes one `bytes` argument and returns the parsed value as a `Result`.
+pub(super) fn open_bytes<T, E>(
+    cx: &mut dyn Context,
+    args: &[Value],
+    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
+) -> RunResult<Value>
+where
+    T: Facet<'static> + Send + 'static,
+    E: std::fmt::Display,
+{
+    let [Value::Bytes(bytes)] = args else {
+        return Err(RuntimeError::new("expected bytes"));
+    };
+    let data = xur_runtime::lock(bytes).clone();
+    parse_object(cx, data, parse)
+}
+
+/// An `open(path)` raw function body: reads the file, then parses it as
+/// [`open_bytes`] does. A read error is the `Err` of the result.
+pub(super) fn open_path<T, E>(
+    cx: &mut dyn Context,
+    args: &[Value],
+    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
+) -> RunResult<Value>
+where
+    T: Facet<'static> + Send + 'static,
+    E: std::fmt::Display,
+{
+    let [Value::Str(path)] = args else {
+        return Err(RuntimeError::new("expected a path string"));
+    };
+    match std::fs::read(&**path) {
+        Ok(data) => parse_object(cx, data, parse),
+        Err(error) => Ok(result(cx, Err(error_text(error)))),
+    }
+}
+
 /// Parses `data` with `parse` and returns, as a Xur `Result`, a native
 /// object of the registered type `T` holding the bytes so the value's
 /// borrows stay valid, or the parse error's message.

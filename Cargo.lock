@@ -569,6 +569,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "procodile"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15c16097b46c8d0233bb7453fa4a4518578e6bbf5355e445f09470630a0ad59b"
+dependencies = [
+ "facet",
+ "libc",
+ "thiserror",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -989,6 +1001,7 @@ dependencies = [
  "bitflags 2.13.2",
  "facet",
  "pewter",
+ "procodile",
  "xur-ast",
  "xur-resolve",
  "xur-runtime",

@@ -7,9 +7,9 @@
 use pewter::elf::{ElfFile, SectionFlags, SegmentFlags};
 use xur_runtime::registry::ModuleBuilder;
 
-use super::flags::register_flags;
-use super::pe::{open_bytes, open_path};
 use crate::error_text;
+use crate::re::flags::register_flags;
+use crate::re::native::{open_bytes, open_path};
 
 pub(super) fn register(elf: &mut ModuleBuilder<'_>) {
     elf.ty::<ElfFile<'static>>("ElfFile")
