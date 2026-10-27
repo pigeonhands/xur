@@ -1,6 +1,6 @@
 use xur_span::{Ident, Span};
 
-use crate::{BinOp, Block, FnDecl, Lit, Pat, Path, PathSegment, Precedence, UnOp};
+use crate::{BinOp, Block, FnDecl, Lit, Pat, Path, PathSegment, Precedence, Ty, UnOp};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Expr {
@@ -93,6 +93,8 @@ pub enum ExprKind {
     Continue,
     /// `return`, `return value`
     Ret(Option<Box<Expr>>),
+    /// `expr as Type`
+    Cast(Box<Expr>, Ty),
     /// An expression that failed to parse; the error has already been reported.
     Err,
 }

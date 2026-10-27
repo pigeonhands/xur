@@ -199,7 +199,7 @@ fn missing_operand() {
 fn unclosed_call() {
     assert_eq!(
         expr_errors("f(1 2)"),
-        ["expected one of `(`, `)`, `,`, `.`, `?`, `[`, or an operator, found `2`"]
+        ["expected one of `(`, `)`, `,`, `.`, `?`, `[`, `as`, or an operator, found `2`"]
     );
 }
 
@@ -207,7 +207,7 @@ fn unclosed_call() {
 fn match_arm_needs_comma() {
     assert_eq!(
         expr_errors("match x { A => 1 B => 2 }"),
-        ["expected one of `(`, `,`, `.`, `?`, `[`, `}`, or an operator, found `B`"]
+        ["expected one of `(`, `,`, `.`, `?`, `[`, `as`, `}`, or an operator, found `B`"]
     );
 }
 

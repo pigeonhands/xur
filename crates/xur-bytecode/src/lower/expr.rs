@@ -166,6 +166,13 @@ impl Lowerer<'_> {
                 self.switch_to(dead);
                 self.unit(span)
             }
+            ExprKind::Cast(inner, ty) => {
+                let src = self.expr(inner);
+                let dst = self.new_reg();
+                self.emit(InstKind::Copy { dst, src }, span);
+                self.check_type(dst, ty, span);
+                dst
+            }
             ExprKind::Err => self.error("invalid expression", span),
         }
     }

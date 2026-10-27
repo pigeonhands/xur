@@ -166,6 +166,7 @@ impl Show for Expr {
             ExprKind::Closure(closure) => {
                 format!("({} {})", closure.decl.show(), closure.body.show())
             }
+            ExprKind::Cast(expr, ty) => format!("({} as {})", expr.show(), ty.show()),
             ExprKind::Break(value) => jump("break", value),
             ExprKind::Continue => "continue".to_owned(),
             ExprKind::Ret(value) => jump("return", value),

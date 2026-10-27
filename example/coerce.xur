@@ -1,0 +1,45 @@
+// Struct coercion with `as`: convert between struct types by field name.
+// Missing fields with Option types are filled with None.
+// #[coerce(strict)] requires all fields to be present.
+//
+//     xur run example/coerce.xur
+
+use std::io;
+
+struct Data {
+    a: str
+    b: str
+    c: Option<str>
+}
+
+#[coerce(strict)]
+struct StrictData {
+    a: str
+    b: str
+    c: Option<str>
+}
+
+struct SmallData {
+    a: str
+    b: str
+}
+
+fn main() {
+    let small_data = SmallData {
+        a: "this is a",
+        b: "this is b",
+    };
+
+    // coerce ok — missing `c: Option<str>` is filled with None
+    let data = small_data as Data;
+    io::println("data: {}", data);
+
+    // coerce between structs with matching fields
+    let full_data = Data {
+        a: "hello",
+        b: "world",
+        c: Some("!"),
+    };
+    let strict_data = full_data as StrictData;
+    io::println("strict (from full): {}", strict_data);
+}

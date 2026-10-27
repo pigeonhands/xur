@@ -64,28 +64,31 @@ impl Interp<'_> {
             return Ok(Some(Value::adt(some_ctor, vec![value.clone()])));
         }
 
-        // Record → Adt coercion.
-        let Value::Record(record) = value else {
-            return Ok(None);
+        // Record/Adt → Adt coercion: match fields by name.
+        let source_fields = self.named_fields(value);
+        let source_fields = match &source_fields {
+            Some(fields) => fields.as_slice(),
+            None => return Ok(None),
         };
-        if record.ty.is_some() {
-            return Ok(None);
-        }
-        let Some(field_names) = self.shared.field_names(*def) else {
+        let Some(target_names) = self.shared.field_names(*def) else {
             return Ok(None);
         };
         let strict = self.has_coerce_strict(*def);
-        let mut fields = Vec::with_capacity(field_names.len());
-        for (i, expected_name) in field_names.iter().enumerate() {
-            match record.field(*expected_name) {
-                Some(record_value) => {
+        let mut fields = Vec::with_capacity(target_names.len());
+        for (i, expected_name) in target_names.iter().enumerate() {
+            let source_value = source_fields
+                .iter()
+                .find(|(n, _)| *n == *expected_name)
+                .map(|(_, v)| v);
+            match source_value {
+                Some(v) => {
                     let field_value = if let Some(field_ty) = self.shared.field_type(*def, i) {
-                        match self.check_type(record_value, &field_ty)? {
+                        match self.check_type(v, &field_ty)? {
                             Some(coerced) => coerced,
-                            None => record_value.clone(),
+                            None => v.clone(),
                         }
                     } else {
-                        record_value.clone()
+                        v.clone()
                     };
                     fields.push(field_value);
                 }
@@ -110,6 +113,24 @@ impl Interp<'_> {
             }
         }
         Ok(Some(Value::adt(*def, fields)))
+    }
+
+    /// Extracts named fields from a value for coercion: from a Record
+    /// directly, or from an Adt by looking up its field names.
+    fn named_fields(&self, value: &Value) -> Option<Vec<(xur_span::Symbol, Value)>> {
+        match value {
+            Value::Record(record) if record.ty.is_none() => Some(record.fields.clone()),
+            Value::Adt(adt) => {
+                let names = self.shared.field_names(adt.ctor)?;
+                Some(
+                    names
+                        .into_iter()
+                        .zip(adt.fields.iter().cloned())
+                        .collect(),
+                )
+            }
+            _ => None,
+        }
     }
 
     /// Whether `def` has the `#[coerce(strict)]` attribute.

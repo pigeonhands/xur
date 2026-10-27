@@ -299,6 +299,9 @@ impl Parser<'_> {
                 let index = self.parse_expr()?;
                 self.expect(TokenKind::RBracket)?;
                 ExprKind::Index(Box::new(expr), Box::new(index))
+            } else if self.eat(TokenKind::Keyword(Keyword::As)) {
+                let ty = self.parse_ty()?;
+                ExprKind::Cast(Box::new(expr), ty)
             } else {
                 return Ok(expr);
             };

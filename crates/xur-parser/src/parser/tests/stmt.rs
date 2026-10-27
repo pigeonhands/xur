@@ -67,7 +67,7 @@ fn missing_semicolon_is_recovered() {
     let (block, errors) = block_with_errors("{ let x = 1 let y = 2; y }");
     assert_eq!(
         errors,
-        ["expected one of `(`, `.`, `;`, `?`, `[`, or an operator, found keyword `let`"]
+        ["expected one of `(`, `.`, `;`, `?`, `[`, `as`, or an operator, found keyword `let`"]
     );
     assert_eq!(block, "{ <err> y }");
 }

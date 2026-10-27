@@ -8,6 +8,7 @@ use xur_span::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum Keyword {
+    As,
     Use,
     Pub,
     Fn,

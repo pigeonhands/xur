@@ -249,6 +249,10 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
             visitor.visit_fn_decl(&closure.decl);
             visitor.visit_expr(&closure.body);
         }
+        ExprKind::Cast(expr, ty) => {
+            visitor.visit_expr(expr);
+            visitor.visit_ty(ty);
+        }
         ExprKind::Break(value) | ExprKind::Ret(value) => {
             if let Some(value) = value {
                 visitor.visit_expr(value);
