@@ -12,7 +12,7 @@ pub(crate) fn register(registry: &Registry) {
         .module("std::any")
         .raw_function("type_name", type_name)
         .raw_function("try_cast", try_cast)
-        .raw_function("record", record)
+        .raw_function("record", to_record)
         .raw_function("type_name_val", type_name_val);
 }
 
@@ -61,7 +61,7 @@ fn try_cast(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 }
 
 /// `record(value)`: convert a struct into an untyped record.
-fn record(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+fn to_record(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     match args {
         [value] => match value {
             Value::Record(_) => Ok(value.clone()),

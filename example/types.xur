@@ -6,34 +6,83 @@ fn print_type_name<T>(a: T) {
     io::println("type val:     {}", std::any::type_name_val(a));
 }
 
-struct MyType{
-    num: usize
+fn construct_type<T>() -> T {
+    io::println("type generic: {}", std::any::type_name::<T>());
+    T::new()
 }
 
-fn should_fail_if_not_same<T>(a: T, b: T) {
+fn construct_type_val<T>(v: T) -> T {
+    io::println("type generic: {}", std::any::type_name::<T>());
+    io::println("value:        {}", v);
+    T::new()
+}
+
+
+fn print_two_types_one_generic<T>(a: T, b: T) {
+    io::println("type generic: {}", std::any::type_name::<T>());
     io::println("a: {}", std::any::type_name_val(a));
     io::println("b: {}", std::any::type_name_val(b));
 }
 
+fn needs_type<T!>(a: T) {
+    io::println("type: {}", std::any::type_name::<T>());
+}
+
+struct MyType{
+    num: usize
+}
+
+impl MyType {
+    fn new() -> Self {
+        Self {
+            num: 1
+        }
+    }
+}
+
 struct MyZst;
 
+impl MyZst {
+    fn new() -> Self {
+        MyZst
+    }
+}
+
 fn main() {
+    io::println("inferred:");
+    let _ : MyType = construct_type();
+    io::println("");
+
+    io::println("fn:");
+    print_type_name(std::json::parse);
+    io::println("");
+
+    // Should fail: construct_type returns MyZst, not MyType
+    // let a : MyZst = construct_type::<MyType>();
+    // print_type_name(a);
+    // io::println("");
+
     let my_type = MyType {
         num: 0xdeadbeef
     };
 
+    io::println("struct:");
     print_type_name(my_type);
     io::println("");
 
+    io::println("zst:");
     print_type_name(MyZst);
     io::println("");
 
+    io::println("dynamic generic:");
     print_type_name::<_>(MyZst);
     io::println("");
 
+    io::println("record value:");
     print_type_name::<_>(std::any::record(MyZst));
     io::println("");
 
+    io::println("record coerced:");
     print_type_name::<MyZst>(std::any::record(my_type));
     io::println("");
 
@@ -45,7 +94,31 @@ fn main() {
     //print_type_name::<MyType>(std::any::record(MyZst));
     //io::println("");
 
+
+    io::println("required explicit type:");
+    needs_type::<MyType>(MyType { num: 1 });
+    io::println("");
+
+    // Should fail: T! requires explicit type arg
+    //needs_type(MyType { num: 2 });
+
+    io::println("erased generics:");
+    print_two_types_one_generic::<_>(my_type, MyZst);
+    io::println("");
+
     // Should fail because generic arg is set but types are diffrent
-    //should_fail_if_not_same(MyType{ num: 10 }, MyZst);
+    //print_two_types_one_generic(my_type, MyZst);
     //io::println("");
+
+    io::println("@ record mode:");
+    let v = construct_type::<@>();
+    io::println("v = {}", v);
+    print_type_name(v);
+    io::println("");
+
+    io::println("@ record mode with value:");
+    let v = construct_type_val::<@>(my_type);
+    io::println("v = {}", v);
+    print_type_name(v);
+    io::println("");
 }
