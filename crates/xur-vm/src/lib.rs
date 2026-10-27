@@ -103,7 +103,7 @@ impl Vm {
             }
         };
         let mut interp = Interp::new(&self.shared);
-        let value = match interp.call_fn(def, Vec::new(), Vec::new()) {
+        let value = match interp.call_fn(def, &[], Vec::new()) {
             Ok(v) => v,
             Err(e) => return Some(Err(e)),
         };

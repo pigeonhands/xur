@@ -65,7 +65,7 @@ pub trait Context: ConvertCx {
     /// Writes `text` to the program's standard output.
     fn print(&mut self, text: &str) -> RunResult<()>;
     /// Calls a function, closure or constructor value.
-    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value>;
+    fn call(&mut self, callee: &Value, args: &[Value]) -> RunResult<Value>;
     /// Calls `f`, a function or closure taking no arguments, on a new
     /// thread; joining the thread gives its result.
     fn spawn(&mut self, f: Value) -> RunResult<JoinHandle<RunResult<Value>>>;
@@ -83,7 +83,7 @@ pub trait Context: ConvertCx {
     /// A copy of the struct `value` with the field `name` set to `new`.
     fn set_field(&mut self, value: &Value, name: &str, new: Value) -> RunResult<Value>;
     /// `receiver.name(args)`.
-    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value>;
+    fn call_method(&mut self, receiver: Value, name: &str, args: &[Value]) -> RunResult<Value>;
 
     /// Attempts to coerce `value` into the struct or enum `target`, as
     /// `value as Type` does. Returns the coerced value, or an error if the

@@ -96,14 +96,14 @@ impl<'s> Interp<'s> {
     pub(crate) fn call_fn(
         &mut self,
         def: DefId,
-        args: Vec<Value>,
+        args: &[Value],
         type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         let function = self.shared.code(def)?;
         self.run(&function, Vec::new(), args, type_args)
     }
 
-    pub(crate) fn call_closure(&mut self, closure: &Closure, args: Vec<Value>) -> RunResult<Value> {
+    pub(crate) fn call_closure(&mut self, closure: &Closure, args: &[Value]) -> RunResult<Value> {
         let function = Arc::clone(&closure.code)
             .downcast::<Function>()
             .map_err(|_| RuntimeError::new("this closure was created by another engine"))?;
@@ -129,7 +129,7 @@ impl<'s> Interp<'s> {
         if let Some(value) = lock(&self.shared.consts).get(&def) {
             return Ok(value.clone());
         }
-        let value = self.call_fn(def, Vec::new(), Vec::new())?;
+        let value = self.call_fn(def, &[], Vec::new())?;
         lock(&self.shared.consts).insert(def, value.clone());
         Ok(value)
     }
@@ -138,7 +138,7 @@ impl<'s> Interp<'s> {
         &mut self,
         function: &Function,
         captures: Vec<Value>,
-        mut args: Vec<Value>,
+        args: &[Value],
         mut type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         if args.len() != function.params as usize {
@@ -151,7 +151,7 @@ impl<'s> Interp<'s> {
         }
         if !function.type_params.is_empty() {
             if type_args.len() < function.type_params.len() {
-                self.infer_type_args(function, &args, &mut type_args);
+                self.infer_type_args(function, args, &mut type_args);
             }
             for (i, required) in function.type_param_required.iter().enumerate() {
                 if *required {
@@ -166,7 +166,31 @@ impl<'s> Interp<'s> {
                     }
                 }
             }
-            self.check_generic_args(function, &mut args, &type_args)?;
+            let mut owned = args.to_vec();
+            self.check_generic_args(function, &mut owned, &type_args)?;
+            if self.depth >= MAX_DEPTH {
+                return Err(RuntimeError::new(format!(
+                    "calls nested more than {MAX_DEPTH} deep; is there infinite recursion?"
+                )));
+            }
+            self.depth += 1;
+            let caller_module = self.module.replace(function.module);
+
+            let mut regs = vec![Value::Unit; function.registers as usize];
+            for (reg, value) in regs.iter_mut().zip(captures.into_iter().chain(owned)) {
+                *reg = value;
+            }
+            let mut frame = Frame {
+                function,
+                regs,
+                type_args,
+            };
+            let result = self.run_frame(&mut frame);
+
+            self.last_regs = Some(frame.regs);
+            self.module = caller_module;
+            self.depth -= 1;
+            return result;
         }
         if self.depth >= MAX_DEPTH {
             return Err(RuntimeError::new(format!(
@@ -177,7 +201,7 @@ impl<'s> Interp<'s> {
         let caller_module = self.module.replace(function.module);
 
         let mut regs = vec![Value::Unit; function.registers as usize];
-        for (reg, value) in regs.iter_mut().zip(captures.into_iter().chain(args)) {
+        for (reg, value) in regs.iter_mut().zip(captures.into_iter().chain(args.iter().cloned())) {
             *reg = value;
         }
         let mut frame = Frame {
@@ -410,7 +434,7 @@ impl<'s> Interp<'s> {
                         TypeArg::Record => TypeRef::record(),
                     })
                     .collect();
-                let value = self.call_value(&callee, args, type_args, span)?;
+                let value = self.call_value(&callee, &args, type_args, span)?;
                 frame.set(*dst, value);
             }
             InstKind::TyParamCall {
@@ -444,7 +468,7 @@ impl<'s> Interp<'s> {
                                     )));
                                 }
                             };
-                            self.call_value(&callee, args, Vec::new(), span)?
+                            self.call_value(&callee, &args, Vec::new(), span)?
                         }
                         None => {
                             return Err(RuntimeError::new(format!(
@@ -463,7 +487,7 @@ impl<'s> Interp<'s> {
             } => {
                 let receiver = frame.get(*receiver).clone();
                 let args = frame.values(args);
-                let value = self.call_method(receiver, *method, args, span)?;
+                let value = self.call_method(receiver, *method, &args, span)?;
                 frame.set(*dst, value);
             }
             InstKind::Field { dst, base, field } => {

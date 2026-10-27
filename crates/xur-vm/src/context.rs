@@ -64,7 +64,7 @@ impl Context for Interp<'_> {
         &self.native_type_args
     }
 
-    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value> {
+    fn call(&mut self, callee: &Value, args: &[Value]) -> RunResult<Value> {
         self.call_value(callee, args, Vec::new(), Span::default())
     }
 
@@ -78,7 +78,7 @@ impl Context for Interp<'_> {
             .spawn(move || {
                 let mut interp = Interp::new(&shared);
                 interp.module = module;
-                interp.call_value(&f, Vec::new(), Vec::new(), Span::default())
+                interp.call_value(&f, &[], Vec::new(), Span::default())
             })
             .map_err(|error| RuntimeError::new(format!("couldn't spawn a thread: {error}")))
     }
@@ -109,7 +109,7 @@ impl Context for Interp<'_> {
         Interp::set_field(self, value, Symbol::intern(name), new)
     }
 
-    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
+    fn call_method(&mut self, receiver: Value, name: &str, args: &[Value]) -> RunResult<Value> {
         Interp::call_method(self, receiver, Symbol::intern(name), args, Span::default())
     }
 

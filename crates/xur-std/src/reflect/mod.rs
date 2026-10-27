@@ -88,7 +88,7 @@ pub(crate) fn register(registry: &Registry) {
                     return arity("call", "value, name, [args]");
                 };
                 let call_args = xur_runtime::lock(call_args).clone();
-                cx.call_method(receiver.clone(), name, call_args)
+                cx.call_method(receiver.clone(), name, &call_args)
             });
         layout::register(module);
     });

@@ -81,9 +81,9 @@ impl Context for TestCx<'_> {
         Ok(())
     }
 
-    fn call(&mut self, callee: &Value, args: Vec<Value>) -> RunResult<Value> {
+    fn call(&mut self, callee: &Value, args: &[Value]) -> RunResult<Value> {
         match callee {
-            Value::NativeFn(id) => self.call(*id, &args),
+            Value::NativeFn(id) => self.call(*id, args),
             _ => Err(RuntimeError::new(
                 "only native functions can be called in tests",
             )),
@@ -138,7 +138,7 @@ impl Context for TestCx<'_> {
         Err(RuntimeError::new("try_cast is not available in tests"))
     }
 
-    fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
+    fn call_method(&mut self, receiver: Value, name: &str, args: &[Value]) -> RunResult<Value> {
         let id = match &receiver {
             Value::Native(object) => self.registry.type_function(object.ty, name),
             other => other
@@ -146,8 +146,10 @@ impl Context for TestCx<'_> {
                 .and_then(|ty| self.registry.builtin_method(ty, name)),
         }
         .ok_or_else(|| RuntimeError::new(format!("no method `{name}` on {}", receiver.kind())))?;
-        let args: Vec<_> = std::iter::once(receiver).chain(args).collect();
-        self.call(id, &args)
+        let mut full = Vec::with_capacity(1 + args.len());
+        full.push(receiver);
+        full.extend_from_slice(args);
+        self.call(id, &full)
     }
 }
 

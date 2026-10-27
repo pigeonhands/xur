@@ -10,18 +10,18 @@ impl Interp<'_> {
     pub(crate) fn call_value(
         &mut self,
         callee: &Value,
-        args: Vec<Value>,
+        args: &[Value],
         type_args: Vec<TypeRef>,
         span: Span,
     ) -> RunResult<Value> {
         match callee {
             Value::Fn(def) => self.call_fn(*def, args, type_args),
             Value::Closure(closure) => self.call_closure(closure, args),
-            Value::Ctor(ctor) => Ok(Value::adt(*ctor, args)),
+            Value::Ctor(ctor) => Ok(Value::adt(*ctor, args.to_vec())),
             Value::NativeFn(id) => {
                 let function = self.shared.registry.function(*id);
                 let caller_type_args = std::mem::replace(&mut self.native_type_args, type_args);
-                let result = function.call(self, &args).map_err(|error| error.at(span));
+                let result = function.call(self, args).map_err(|error| error.at(span));
                 self.native_type_args = caller_type_args;
                 result
             }
@@ -39,13 +39,13 @@ impl Interp<'_> {
         &mut self,
         receiver: Value,
         method: Symbol,
-        args: Vec<Value>,
+        args: &[Value],
         span: Span,
     ) -> RunResult<Value> {
         if let Value::Module(module) = receiver {
             match method.as_str() {
-                "get_method" => return self.module_get_method(module, &args),
-                "get_attr" => return self.module_get_attr(module, &args),
+                "get_method" => return self.module_get_method(module, args),
+                "get_attr" => return self.module_get_attr(module, args),
                 _ => {}
             }
             let member = self.module_member(module, method)?;
@@ -76,8 +76,10 @@ impl Interp<'_> {
                 self.describe_type(&receiver)
             )));
         };
-        let args = std::iter::once(receiver).chain(args).collect();
-        self.call_value(&function, args, Vec::new(), span)
+        let mut full = Vec::with_capacity(1 + args.len());
+        full.push(receiver);
+        full.extend_from_slice(args);
+        self.call_value(&function, &full, Vec::new(), span)
     }
 
     /// The `impl` function `method` of the struct or enum `ctor` belongs to.

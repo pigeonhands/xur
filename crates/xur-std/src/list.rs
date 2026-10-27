@@ -120,7 +120,7 @@ pub(crate) fn register(registry: &Registry) {
             let items = lock(list).clone();
             let mut result = Vec::with_capacity(items.len());
             for item in items {
-                result.push(cx.call(f, vec![item])?);
+                result.push(cx.call(f, &[item])?);
             }
             Ok(Value::list(result))
         })
@@ -131,7 +131,7 @@ pub(crate) fn register(registry: &Registry) {
             let items = lock(list).clone();
             let mut result = Vec::new();
             for item in items {
-                match cx.call(f, vec![item.clone()])? {
+                match cx.call(f, &[item.clone()])? {
                     Value::Bool(true) => result.push(item),
                     Value::Bool(false) => {}
                     _ => return Err(RuntimeError::new("filter predicate must return a bool")),
