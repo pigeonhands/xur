@@ -10,7 +10,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use xur_ast::{BinOpKind, UnOp};
-use xur_resolve::{DefId, ModuleIdx, NativeFnId};
+use xur_resolve::{DefId, ModuleIdx, NativeFnId, NativeTypeId};
 use xur_span::{Span, Symbol};
 
 /// A virtual register of a function.
@@ -89,6 +89,38 @@ pub enum DefRef {
     Const(DefId),
     Module(DefId),
     Native(NativeFnId),
+}
+
+/// A type written in the source, as checked at runtime. Xur is checked
+/// dynamically: where a type is written it is enforced when the value
+/// arrives, and where it isn't (or is generic) anything goes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RtType {
+    /// Not checked: no type, `_`, or a type parameter.
+    Any,
+    Unit,
+    Bool,
+    Str,
+    Float,
+    /// An integer type, with the range its values must be in.
+    Int {
+        name: &'static str,
+        min: i64,
+        max: i64,
+    },
+    Tuple(Vec<RtType>),
+    /// A list. Only the list itself is checked, not each element, so a
+    /// check doesn't take time proportional to the list's length.
+    List,
+    /// A struct or enum defined in Xur, by its definition.
+    Adt {
+        def: DefId,
+        name: String,
+    },
+    Native {
+        id: NativeTypeId,
+        name: String,
+    },
 }
 
 /// A type argument of a call, as in `type_name::<T>()`.
@@ -201,6 +233,11 @@ pub enum InstKind {
         value: Reg,
         index: u32,
     },
+    /// Fails at runtime unless `value` has type `ty`.
+    CheckType {
+        value: Reg,
+        ty: RtType,
+    },
     /// Starts iterating over `iterable`, for a `for` loop.
     IterStart {
         dst: Reg,
@@ -235,4 +272,23 @@ pub enum Terminator {
     /// Never reached: the end of code after a `return`, `break` or
     /// `continue`.
     Unreachable,
+}
+
+impl std::fmt::Display for RtType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Any => f.write_str("_"),
+            Self::Unit => f.write_str("()"),
+            Self::Bool => f.write_str("bool"),
+            Self::Str => f.write_str("str"),
+            Self::Float => f.write_str("float"),
+            Self::Int { name, .. } => f.write_str(name),
+            Self::Tuple(tys) => {
+                let tys: Vec<_> = tys.iter().map(ToString::to_string).collect();
+                write!(f, "({})", tys.join(", "))
+            }
+            Self::List => f.write_str("[_]"),
+            Self::Adt { name, .. } | Self::Native { name, .. } => f.write_str(name),
+        }
+    }
 }

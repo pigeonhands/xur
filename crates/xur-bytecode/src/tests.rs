@@ -29,18 +29,21 @@ fn arithmetic() {
         &listing("fn add(a: i64, b: i64) -> i64 { a + b * 2 }", "add"),
         "fn add (captures: 0, params: 2, registers: 5)
   bb0:
+    check r0: i64
+    check r1: i64
     r2 = 2
     r3 = r1 * r2
     r4 = r0 + r3
-    return r4
-",
+    check r4: i64
+    return r4",
     );
 }
 
 /// Compares a listing, printing it in full on mismatch.
+/// Trailing whitespace is ignored.
 fn insta_like(actual: &str, expected: &str) {
     assert!(
-        actual == expected,
+        actual.trim_end() == expected.trim_end(),
         "expected:\n{expected}\nactual:\n{actual}"
     );
 }
@@ -51,6 +54,7 @@ fn if_is_an_expression() {
         &listing("fn f(c: bool) -> i64 { if c { 1 } else { 2 } }", "f"),
         "fn f (captures: 0, params: 1, registers: 4)
   bb0:
+    check r0: bool
     branch r0 ? bb1 : bb2
   bb1:
     r2 = 1
@@ -61,8 +65,8 @@ fn if_is_an_expression() {
     r1 = r3
     goto bb3
   bb3:
-    return r1
-",
+    check r1: i64
+    return r1",
     );
 }
 
@@ -75,9 +79,11 @@ fn match_tests_each_arm() {
         ),
         "fn f (captures: 0, params: 1, registers: 7)
   bb0:
+    check r0: Option
     r2 = r0 is Option::Some
     branch r2 ? bb3 : bb2
   bb1:
+    check r1: i64
     return r1
   bb2:
     r5 = r0 is Option::None
@@ -92,8 +98,7 @@ fn match_tests_each_arm() {
   bb5:
     r6 = 0
     r1 = r6
-    goto bb1
-",
+    goto bb1",
     );
 }
 
@@ -106,6 +111,7 @@ fn try_returns_errors_early() {
         ),
         "fn f (captures: 0, params: 1, registers: 8)
   bb0:
+    check r0: Result
     r2 = r0 is Result::Ok
     branch r2 ? bb1 : bb2
   bb1:
@@ -121,8 +127,8 @@ fn try_returns_errors_early() {
     r5 = 1
     r6 = r4 + r5
     r7 = Result::Ok(r6)
-    return r7
-",
+    check r7: Result
+    return r7",
     );
 }
 
@@ -135,6 +141,7 @@ fn for_loops_iterate() {
         ),
         "fn f (captures: 0, params: 1, registers: 10)
   bb0:
+    check r0: [_]
     r1 = 0
     r2 = r1
     r3 = iter r0
@@ -150,8 +157,8 @@ fn for_loops_iterate() {
     goto bb1
   bb3:
     r9 = ()
-    return r2
-",
+    check r2: i64
+    return r2",
     );
 }
 
@@ -161,6 +168,7 @@ fn closures_capture_values() {
         &listing("fn f(k: i64) { let add = |x| x + k; add(1); }", "f"),
         "fn f (captures: 0, params: 1, registers: 6)
   bb0:
+    check r0: i64
     r1 = closure#0(r0)
     r2 = r1
     r3 = 1
@@ -182,13 +190,15 @@ fn and_short_circuits() {
         &listing("fn f(a: bool, b: bool) -> bool { a && b }", "f"),
         "fn f (captures: 0, params: 2, registers: 3)
   bb0:
+    check r0: bool
+    check r1: bool
     r2 = r0
     branch r0 ? bb1 : bb2
   bb1:
     r2 = r1
     goto bb2
   bb2:
-    return r2
-",
+    check r2: bool
+    return r2",
     );
 }

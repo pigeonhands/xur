@@ -111,6 +111,7 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
         InstKind::IsTuple { dst, value, len } => format!("{dst:?} = {value:?} is tuple of {len}"),
         InstKind::Project { dst, value, index } => format!("{dst:?} = {value:?}.{index}"),
         InstKind::IterStart { dst, iterable } => format!("{dst:?} = iter {iterable:?}"),
+        InstKind::CheckType { value, ty } => format!("check {value:?}: {ty}"),
         InstKind::Error { message } => format!("error {message:?}"),
     }
 }

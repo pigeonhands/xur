@@ -10,11 +10,11 @@ mod pat;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use xur_ast::{Block as AstBlock, Expr, NodeId, Param};
-use xur_resolve::{DefId, LangItems, ModuleIdx, Program, Resolutions};
+use xur_ast::{Block as AstBlock, Expr, FnRetTy, NodeId, Param, Ty, TyKind};
+use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, PrimTy, Program, Res, Resolutions};
 use xur_span::{Span, Symbol};
 
-use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, Terminator};
+use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, RtType, Terminator};
 use crate::items::{ItemIndex, ItemRef};
 
 /// Lowers the function or constant `def`, or returns `None` if `def` is
@@ -30,9 +30,12 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
                 lowerer.type_params.push(resolutions.node_defs[&param.id]);
                 lowerer.type_param_names.push(param.ident.name);
             }
+            if let FnRetTy::Ty(ty) = &item.decl.output {
+                lowerer.ret_ty = lowerer.rt_type(ty);
+            }
             lowerer.params(&item.decl.inputs);
             let value = lowerer.block(&item.body);
-            lowerer.terminate(Terminator::Return(value), item.body.span);
+            lowerer.ret(value, item.body.span);
             let params = item.decl.inputs.len() as u32;
             Some(lowerer.finish(name, 0, params, item.body.span))
         }
@@ -76,6 +79,8 @@ struct Lowerer<'a> {
     type_params: Vec<DefId>,
     type_param_names: Vec<Symbol>,
     closures: Vec<Arc<Function>>,
+    /// The declared return type, checked on return.
+    ret_ty: Option<RtType>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -94,6 +99,7 @@ impl<'a> Lowerer<'a> {
             type_params: Vec::new(),
             type_param_names: Vec::new(),
             closures: Vec::new(),
+            ret_ty: None,
         };
         lowerer.current = lowerer.new_block();
         lowerer
@@ -126,11 +132,61 @@ impl<'a> Lowerer<'a> {
     }
 
     /// Binds the parameters, which arrive in the registers after any
-    /// captures.
+    /// captures, checking those whose type is written.
     fn params(&mut self, params: &[Param]) {
         let registers: Vec<_> = params.iter().map(|_| self.new_reg()).collect();
         for (param, reg) in params.iter().zip(registers) {
+            self.check_type(reg, &param.ty, param.span);
             self.bind_irrefutable(&param.pat, reg);
+        }
+    }
+
+    /// Returns `value`, checking it against the declared return type.
+    fn ret(&mut self, value: Reg, span: Span) {
+        if let Some(ty) = self.ret_ty.clone() {
+            self.emit(InstKind::CheckType { value, ty }, span);
+        }
+        self.terminate(Terminator::Return(value), span);
+    }
+
+    /// Checks at runtime that `value` has the type `ty`, if `ty` is written
+    /// and concrete.
+    fn check_type(&mut self, value: Reg, ty: &Ty, span: Span) {
+        if let Some(ty) = self.rt_type(ty) {
+            self.emit(InstKind::CheckType { value, ty }, span);
+        }
+    }
+
+    /// The runtime check for a written type, or `None` if nothing about
+    /// it can be checked.
+    fn rt_type(&self, ty: &Ty) -> Option<RtType> {
+        match self.rt_type_or_any(ty) {
+            RtType::Any => None,
+            ty => Some(ty),
+        }
+    }
+
+    fn rt_type_or_any(&self, ty: &Ty) -> RtType {
+        match &ty.kind {
+            TyKind::Path(path) => match self.resolutions.res.get(&path.id) {
+                Some(Res::PrimTy(prim)) => prim_rt_type(*prim),
+                Some(&Res::Def(DefKind::Struct | DefKind::Enum, def)) => RtType::Adt {
+                    def,
+                    name: self.resolutions.def_path(def),
+                },
+                Some(&Res::Def(DefKind::NativeType(id), def)) => RtType::Native {
+                    id,
+                    name: self.resolutions.def_path(def),
+                },
+                _ => RtType::Any,
+            },
+            TyKind::Tuple(tys) if tys.is_empty() => RtType::Unit,
+            TyKind::Tuple(tys) => {
+                RtType::Tuple(tys.iter().map(|ty| self.rt_type_or_any(ty)).collect())
+            }
+            TyKind::Paren(ty) => self.rt_type_or_any(ty),
+            TyKind::List(_) => RtType::List,
+            TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => RtType::Any,
         }
     }
 
@@ -205,5 +261,24 @@ impl<'a> Lowerer<'a> {
             Some(expr) => self.expr(expr),
             None => self.unit(span),
         }
+    }
+}
+
+fn prim_rt_type(prim: PrimTy) -> RtType {
+    let int = |name, min, max| RtType::Int { name, min, max };
+    match prim {
+        PrimTy::Bool => RtType::Bool,
+        PrimTy::Str => RtType::Str,
+        PrimTy::F32 | PrimTy::F64 => RtType::Float,
+        PrimTy::U8 => int("u8", 0, u8::MAX.into()),
+        PrimTy::U16 => int("u16", 0, u16::MAX.into()),
+        PrimTy::U32 => int("u32", 0, u32::MAX.into()),
+        PrimTy::U64 => int("u64", 0, i64::MAX),
+        PrimTy::Usize => int("usize", 0, i64::MAX),
+        PrimTy::I8 => int("i8", i8::MIN.into(), i8::MAX.into()),
+        PrimTy::I16 => int("i16", i16::MIN.into(), i16::MAX.into()),
+        PrimTy::I32 => int("i32", i32::MIN.into(), i32::MAX.into()),
+        PrimTy::I64 => int("i64", i64::MIN, i64::MAX),
+        PrimTy::Isize => int("isize", i64::MIN, i64::MAX),
     }
 }

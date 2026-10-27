@@ -10,6 +10,7 @@ mod dispatch;
 mod display;
 mod interp;
 mod ops;
+mod types;
 
 #[cfg(test)]
 mod tests;

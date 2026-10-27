@@ -381,3 +381,34 @@ fn the_echo_server_example_compiles() {
     .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
 }
+
+#[test]
+fn written_types_are_checked_at_runtime() {
+    let check = |body: &str| run(&format!("struct Meters(f64);\nenum E {{ A }}\n{body}"));
+    assert_eq!(
+        check("fn f(x: u8) {} fn main() { f(300); }"),
+        Err("expected `u8`, found 300".into())
+    );
+    assert_eq!(
+        check("fn f(x: str) {} fn main() { f(1); }"),
+        Err("expected `str`, found integer".into())
+    );
+    assert_eq!(
+        check("fn main() { let m: Meters = E::A; }"),
+        Err("expected `Meters`, found `E`".into())
+    );
+    assert_eq!(
+        check("fn f() -> i64 { return \"no\"; } fn main() { f(); }"),
+        Err("expected `i64`, found string".into())
+    );
+    assert_eq!(
+        check("fn f(t: (i64, _)) {} fn main() { f((1, \"anything\")); f((1, 2, 3)); }"),
+        Err("expected `(i64, _)`, found tuple".into())
+    );
+}
+
+#[test]
+fn unwritten_and_generic_types_are_not_checked() {
+    let src = "fn id<T>(x: T) -> T { x }\nfn any(x: _) {}\nfn main() { id(1); id(\"a\"); any([]); let l = |x| x; l(1); }";
+    assert_eq!(run(src), Ok(String::new()));
+}

@@ -159,7 +159,9 @@ impl Lowerer<'_> {
             }
             ExprKind::Ret(value) => {
                 let value = self.expr_or_unit(value.as_deref(), span);
-                self.diverge(Terminator::Return(value), span);
+                self.ret(value, span);
+                let dead = self.new_block();
+                self.switch_to(dead);
                 self.unit(span)
             }
             ExprKind::Err => self.error("invalid expression", span),
@@ -423,6 +425,9 @@ impl Lowerer<'_> {
 
     fn local(&mut self, local: &Local) {
         let init = self.expr_or_unit(local.init.as_deref(), local.span);
+        if let (Some(ty), Some(_)) = (&local.ty, &local.init) {
+            self.check_type(init, ty, local.span);
+        }
         // The initializer may be another variable's register, as in
         // `let x = y;`; the new variable needs its own.
         let value = self.new_reg();
