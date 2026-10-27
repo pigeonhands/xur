@@ -114,6 +114,9 @@ pub fn walk_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a Item) {
 pub fn walk_generics<'a, V: Visitor<'a>>(visitor: &mut V, generics: &'a Generics) {
     for param in &generics.params {
         visitor.visit_generic_param(param);
+        if let Some(default) = &param.default {
+            visitor.visit_ty(default);
+        }
     }
 }
 

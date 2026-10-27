@@ -110,6 +110,8 @@ pub struct GenericParam {
     pub ident: Ident,
     /// `T!`: the caller must provide a concrete type, not `_`.
     pub required: bool,
+    /// `E = str`: the type to use when the caller omits this parameter.
+    pub default: Option<Ty>,
 }
 
 /// The fields of a struct or enum variant.

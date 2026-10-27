@@ -304,10 +304,16 @@ impl Parser<'_> {
         let params = self.parse_delimited(TokenKind::Gt, |this| {
             let ident = this.parse_ident()?;
             let required = this.eat(TokenKind::Bang);
+            let default = if this.eat(TokenKind::Eq) {
+                Some(this.parse_ty()?)
+            } else {
+                None
+            };
             Ok(GenericParam {
                 id: this.next_id(),
                 ident,
                 required,
+                default,
             })
         })?;
         Ok(Generics {
