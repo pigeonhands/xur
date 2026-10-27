@@ -10,8 +10,8 @@ mod pat;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use xur_ast::{Block as AstBlock, Expr, FnRetTy, NodeId, Param, Ty};
-use xur_resolve::{DefId, LangItems, ModuleIdx, Program, Resolutions};
+use xur_ast::{Block as AstBlock, Expr, FnRetTy, NodeId, Param, Ty, TyKind};
+use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, Program, Res, Resolutions};
 use xur_span::{Span, Symbol};
 
 use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, RtType, Terminator};
@@ -79,6 +79,8 @@ struct Lowerer<'a> {
     type_params: Vec<DefId>,
     type_param_names: Vec<Symbol>,
     closures: Vec<Arc<Function>>,
+    /// For each parameter, which type param index it uses.
+    param_type_params: Vec<Option<u32>>,
     /// The declared return type, checked on return.
     ret_ty: Option<RtType>,
 }
@@ -99,6 +101,7 @@ impl<'a> Lowerer<'a> {
             type_params: Vec::new(),
             type_param_names: Vec::new(),
             closures: Vec::new(),
+            param_type_params: Vec::new(),
             ret_ty: None,
         };
         lowerer.current = lowerer.new_block();
@@ -125,6 +128,7 @@ impl<'a> Lowerer<'a> {
             params,
             registers: self.registers,
             type_params: self.type_param_names,
+            param_type_params: self.param_type_params,
             blocks,
             closures: self.closures,
             span,
@@ -136,8 +140,20 @@ impl<'a> Lowerer<'a> {
     fn params(&mut self, params: &[Param]) {
         let registers: Vec<_> = params.iter().map(|_| self.new_reg()).collect();
         for (param, reg) in params.iter().zip(registers) {
+            self.param_type_params.push(self.type_param_index(&param.ty));
             self.check_type(reg, &param.ty, param.span);
             self.bind_irrefutable(&param.pat, reg);
+        }
+    }
+
+    /// If `ty` is a bare type parameter, returns its index.
+    fn type_param_index(&self, ty: &Ty) -> Option<u32> {
+        if let TyKind::Path(path) = &ty.kind
+            && let Some(&Res::Def(DefKind::TyParam, param)) = self.resolutions.res.get(&path.id)
+        {
+            self.type_params.iter().position(|&p| p == param).map(|i| i as u32)
+        } else {
+            None
         }
     }
 

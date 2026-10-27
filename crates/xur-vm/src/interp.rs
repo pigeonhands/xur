@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use xur_bytecode::{Constant, DefRef, Function, InstKind, RecordFields, Reg, Terminator, TypeArg};
 
 use crate::records::RecordArgs;
-use xur_resolve::{DefId, ModuleIdx};
+use xur_resolve::{DefId, DefKind, ModuleIdx};
 use xur_runtime::{Closure, Range, RunResult, RuntimeError, TypeRef, Value, ValueIter, lock};
 use xur_span::Span;
 
@@ -139,7 +139,7 @@ impl<'s> Interp<'s> {
         function: &Function,
         captures: Vec<Value>,
         args: Vec<Value>,
-        type_args: Vec<TypeRef>,
+        mut type_args: Vec<TypeRef>,
     ) -> RunResult<Value> {
         if args.len() != function.params as usize {
             return Err(RuntimeError::new(format!(
@@ -148,6 +148,9 @@ impl<'s> Interp<'s> {
                 function.params,
                 args.len()
             )));
+        }
+        if !function.type_params.is_empty() && type_args.len() < function.type_params.len() {
+            self.infer_type_args(function, &args, &mut type_args);
         }
         if self.depth >= MAX_DEPTH {
             return Err(RuntimeError::new(format!(
@@ -172,6 +175,54 @@ impl<'s> Interp<'s> {
         self.module = caller_module;
         self.depth -= 1;
         result
+    }
+
+    fn infer_type_args(
+        &self,
+        function: &Function,
+        args: &[Value],
+        type_args: &mut Vec<TypeRef>,
+    ) {
+        type_args.resize(function.type_params.len(), TypeRef::named("_"));
+        for (i, arg) in args.iter().enumerate() {
+            if let Some(tp_index) = function.param_type_params.get(i).copied().flatten() {
+                let idx = tp_index as usize;
+                if idx < type_args.len() && type_args[idx].def.is_none() {
+                    if let Some(tr) = self.type_ref_of(arg) {
+                        type_args[idx] = tr;
+                    }
+                }
+            }
+        }
+    }
+
+    fn type_ref_of(&self, value: &Value) -> Option<TypeRef> {
+        match value {
+            Value::Adt(adt) => {
+                let program = self.shared.program();
+                let defs = &program.resolutions().defs;
+                let def_data = defs.get(adt.ctor);
+                let (name, def) = match def_data.kind {
+                    DefKind::Variant => {
+                        let parent = def_data.parent?;
+                        (defs.get(parent).name, parent)
+                    }
+                    _ => (def_data.name, adt.ctor),
+                };
+                Some(TypeRef {
+                    name: name.to_string(),
+                    def: Some(def),
+                })
+            }
+            Value::Native(object) => {
+                let name = self.shared.registry.type_name(object.ty);
+                Some(TypeRef {
+                    name: name.to_owned(),
+                    def: None,
+                })
+            }
+            _ => None,
+        }
     }
 
     fn run_frame(&mut self, frame: &mut Frame<'_>) -> RunResult<Value> {

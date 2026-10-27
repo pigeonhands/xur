@@ -49,6 +49,9 @@ pub struct Function {
     pub registers: u32,
     /// The function's type parameters, which calls bind by position.
     pub type_params: Vec<Symbol>,
+    /// For each parameter, the type-parameter index it uses, if any.
+    /// Enables runtime inference of generic args from argument values.
+    pub param_type_params: Vec<Option<u32>>,
     pub blocks: Vec<Block>,
     /// The bodies of closures created by this function, by index.
     pub closures: Vec<Arc<Function>>,
