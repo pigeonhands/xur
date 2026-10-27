@@ -14,7 +14,7 @@ mod math;
 mod net;
 mod num;
 mod process;
-mod re;
+pub mod re;
 mod reflect;
 mod str;
 mod sync;
@@ -35,6 +35,9 @@ pub fn register(registry: &Registry) {
         .module("std")
         .raw_function("import", import)
         .raw_function("panic", panic);
+    registry
+        .module("std::fmt")
+        .raw_function("format", format);
     io::register(registry);
     fs::register(registry);
     process::register(registry);
@@ -82,6 +85,14 @@ fn result(cx: &dyn Context, value: Result<Value, String>) -> Value {
 /// How Rust errors appear in Xur: as the `Err` of a `Result`, by message.
 fn error_text(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+/// `std::fmt::format(template, args...)`: returns a formatted string.
+fn format(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let Some((Value::Str(template), args)) = args.split_first() else {
+        return Err(RuntimeError::new("`format` takes a format string"));
+    };
+    Ok(Value::str(&fmt::format(cx, template, args)?))
 }
 
 /// `std::panic(format, args...)`: stops the program with a runtime error,
