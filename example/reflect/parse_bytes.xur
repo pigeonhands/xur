@@ -55,11 +55,10 @@ fn main() -> Result<()> {
     assert::is_eq(data, data2);
     io::println("Byte-level round-trip: ok");
 
-    // Parse the same bytes twice and compare the records directly.
-    let a = layout.from_bytes(data);
-    let b = layout.from_bytes(data2);
-    assert::is_true(a == b);
-    io::println("Record equality: ok");
+    // Coerce the record back to the struct and compare directly.
+    let round_tripped = parsed as PacketHeader;
+    assert::is_eq(header, round_tripped);
+    io::println("Struct equality: ok");
 
     // Runtime-built layout with record literals.
     let pair_layout = reflect::Layout::new("Pair")
