@@ -42,6 +42,7 @@ hao-godot = { version = "0.0.3", features = ["reflect"] }
 iced-x86 = "1.21"
 serde = "1"
 serde_json = "1"
+comfy-table = { version = "7.1", features = ["custom_styling"] }
 pico-args = "0.5"
 inquire = { version = "0.9", features = ["editor"] }
 # cranelift-jit = "0.137"

@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [features]
 default = ["cli"]
-cli = ["dep:pico-args", "dep:inquire"]
+cli = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
 
 [dependencies]
 xur-ast.workspace = true
@@ -29,6 +29,7 @@ hao-runtime.workspace = true
 iced-x86.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+comfy-table = { workspace = true, optional = true }
 pico-args = { workspace = true, optional = true }
 inquire = { workspace = true, optional = true }
 

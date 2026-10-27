@@ -37,6 +37,15 @@ enum ExampleResult {
     Failed(str, str)
 }
 
+fn fmt_name(name: str) -> str {
+    let parts = name.split("/");
+    if parts.len() == 2 {
+        io::dim(parts[0] + "/") + io::bold(parts[1])
+    } else {
+        io::bold(name)
+    }
+}
+
 fn test_all() {
     let examples = all_examples();
     let (tx, rx) = sync::channel();
@@ -72,24 +81,32 @@ fn test_all() {
     for _ in examples {
         match rx.recv().unwrap() {
             ExampleResult::Skipped(name, reason) => {
-                io::println("  {}  {}  {}", io::yellow("skip"), io::dim(name), reason);
+                io::println("  {} {}: {}", io::yellow("skip"), fmt_name(name), io::dim(reason));
                 skipped = skipped + 1;
             }
             ExampleResult::Passed(name) => {
-                io::println("  {}  {}", io::green("ok"), name);
+                io::println("  {}   {}", io::green("ok"), fmt_name(name));
                 passed = passed + 1;
             }
             ExampleResult::Failed(name, err) => {
-                io::println("  {}  {}  {}", io::red("FAIL"), name, err);
+                io::println("  {} {}: {}", io::red("FAIL"), fmt_name(name), err);
                 failed = failed + 1;
             }
         }
     }
 
     io::println("");
-    io::println("{} passed, {} failed, {} skipped, {} total",
-        io::green(passed.to_string()), io::red(failed.to_string()),
-        io::yellow(skipped.to_string()), total);
+    let summary = cli::table(
+        ["", "Count"],
+        [
+            [io::green("Passed"), passed.to_string()],
+            [io::red("Failed"), failed.to_string()],
+            [io::yellow("Skipped"), skipped.to_string()],
+            [io::bold("Total"), total.to_string()],
+        ],
+    );
+    io::println("{}", summary);
+
     if failed > 0 {
         std::panic("{} example(s) failed", failed);
     }

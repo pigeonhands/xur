@@ -240,6 +240,41 @@ fn parse_spec(cx: &dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value>
 }
 
 // ---------------------------------------------------------------------------
+// Table
+// ---------------------------------------------------------------------------
+
+fn table(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
+    use comfy_table::{Table, presets::UTF8_FULL_CONDENSED, modifiers::UTF8_ROUND_CORNERS};
+
+    let (headers, rows) = match args {
+        [Value::List(rows)] => (None, rows),
+        [Value::List(headers), Value::List(rows)] => (Some(headers), rows),
+        _ => return Err(RuntimeError::new(
+            "`table` takes a list of rows, or a header list and a row list",
+        )),
+    };
+
+    let mut t = Table::new();
+    t.load_preset(UTF8_FULL_CONDENSED);
+    t.apply_modifier(UTF8_ROUND_CORNERS);
+
+    if let Some(headers) = headers {
+        let h: Vec<String> = lock(headers).iter().map(|v| cx.display(v)).collect();
+        t.set_header(h);
+    }
+
+    for row in lock(rows).iter() {
+        let Value::List(cells) = row else {
+            return Err(RuntimeError::new("each row must be a list"));
+        };
+        let cells: Vec<String> = lock(cells).iter().map(|v| cx.display(v)).collect();
+        t.add_row(cells);
+    }
+
+    Ok(Value::str(&t.to_string()))
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -356,6 +391,8 @@ pub(crate) fn register(registry: &Registry) {
             });
         // Declarative parsing
         module.raw_function("parse", |cx, args| parse_spec(cx, args));
+        // Table
+        module.raw_function("table", |cx, args| table(cx, args));
         // Prompts
         module
             .raw_function("prompt", |_cx, args| prompt_text(args))
