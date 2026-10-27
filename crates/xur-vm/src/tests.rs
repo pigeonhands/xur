@@ -639,6 +639,10 @@ fn the_reflect_example_runs() {
             "jump 3: unknown command\n",
             "recharge: now at (1, 2), battery 100\n",
             "forward 5: now at (1, 7), battery 99\n",
+            "\n--- function reflection ---\n",
+            "Robot::forward params: [\"self\", \"steps\"]\n",
+            "Robot::forward types:  [(), i64]\n",
+            "Robot::forward return: Robot\n",
         )
         .into())
     );

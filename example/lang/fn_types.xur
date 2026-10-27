@@ -1,0 +1,49 @@
+// Function types as first-class type syntax: `fn(A, B) -> C` works
+// in variable bindings, function parameters, enum variants and struct
+// fields.
+//
+//     xur run example/lang/fn_types.xur
+
+use std::io;
+
+// A function type in a struct field.
+struct Transform {
+    name: str
+    apply: fn(i64) -> i64
+}
+
+// An enum variant holding a function.
+enum Action {
+    Run(fn() -> str)
+    Skip
+}
+
+// A function that takes a typed callback.
+fn apply_twice(f: fn(i64) -> i64, x: i64) -> i64 {
+    f(f(x))
+}
+
+fn double(n: i64) -> i64 { n * 2 }
+fn square(n: i64) -> i64 { n * n }
+
+fn main() {
+    // Function types in variable bindings.
+    let f: fn(i64) -> i64 = double;
+    io::println("double(5) = {}", f(5));
+
+    // Passing typed callbacks.
+    io::println("apply_twice(double, 3) = {}", apply_twice(double, 3));
+    io::println("apply_twice(square, 2) = {}", apply_twice(square, 2));
+
+    // Function types in struct fields.
+    let t = Transform { name: "double", apply: double };
+    let apply = t.apply;
+    io::println("{}: {}", t.name, apply(7));
+
+    // Function types in enum variants.
+    let action = Action::Run(|| "hello from action");
+    match action {
+        Action::Run(f) => io::println("action: {}", f()),
+        Action::Skip => io::println("skipped"),
+    }
+}

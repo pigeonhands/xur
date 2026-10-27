@@ -1,0 +1,44 @@
+// Function reflection with `std::reflect::func`: inspect the name,
+// parameter names, parameter types, and return type of any function
+// at runtime.
+//
+//     xur run example/reflect/func.xur
+
+use std::io;
+use std::reflect::func;
+
+fn add(x: u32, y: u32) -> u32 { x + y }
+
+fn greet(name: str) -> str { "hello, " + name }
+
+fn nothing() {}
+
+fn main() {
+    io::println("--- add ---");
+    io::println("  name:        {}", func::name(add));
+    io::println("  params:      {}", func::params(add));
+    io::println("  param_names: {}", func::param_names(add));
+    io::println("  param_types: {}", func::param_types(add));
+    io::println("  return_type: {}", func::return_type(add));
+
+    io::println("\n--- greet ---");
+    io::println("  name:        {}", func::name(greet));
+    io::println("  param_types: {}", func::param_types(greet));
+    io::println("  return_type: {}", func::return_type(greet));
+
+    io::println("\n--- nothing ---");
+    io::println("  name:        {}", func::name(nothing));
+    io::println("  params:      {}", func::params(nothing));
+    io::println("  return_type: {}", func::return_type(nothing));
+
+    // Closures carry reflection data too.
+    let double = |n: i64| -> i64 { n * 2 };
+    io::println("\n--- closure ---");
+    io::println("  name:        {}", func::name(double));
+    io::println("  param_types: {}", func::param_types(double));
+    io::println("  return_type: {}", func::return_type(double));
+
+    // Type values from param_types can be compared.
+    let types = func::param_types(add);
+    io::println("\nadd's first param is u32: {}", types[0] == u32);
+}

@@ -1,0 +1,43 @@
+// Types as first-class values: `u32`, `str`, `fn(u32) -> bool` and
+// user-defined types can be used as values, compared, passed to
+// functions, and stored in data structures.
+//
+//     xur run example/reflect/types_as_values.xur
+
+use std::io;
+
+struct Point { x: i64, y: i64 }
+
+// The `type` builtin type lets functions accept type values.
+fn describe(t: type) {
+    io::println("type: {}", t);
+}
+
+fn main() {
+    // Primitive types as values.
+    let t = u32;
+    io::println("t = {}", t);
+
+    // Function types as values.
+    let ft = fn(u32, u32) -> u32;
+    io::println("ft = {}", ft);
+
+    // Type equality.
+    io::println("u32 == u32: {}", u32 == u32);
+    io::println("u32 == str: {}", u32 == str);
+    io::println("fn(u32) -> str == fn(u32) -> str: {}", fn(u32) -> str == fn(u32) -> str);
+    io::println("fn(u32) -> str == fn(i32) -> str: {}", fn(u32) -> str == fn(i32) -> str);
+
+    // Types in data structures.
+    let types = [u32, str, bool, fn(i64) -> i64];
+    for t in types {
+        describe(t);
+    }
+
+    // User-defined types as values.
+    describe(Point);
+
+    // The `type` annotation ensures only types are passed.
+    let my_type: type = i64;
+    io::println("my_type = {}", my_type);
+}
