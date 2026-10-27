@@ -1,0 +1,9 @@
+pub const my_attr: str = "hello from plugin";
+
+pub fn exec(val: i32) {
+    std::io::println("exec called with: {}", val);
+}
+
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}

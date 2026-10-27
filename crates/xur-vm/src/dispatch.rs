@@ -43,6 +43,11 @@ impl Interp<'_> {
         span: Span,
     ) -> RunResult<Value> {
         if let Value::Module(module) = receiver {
+            match method.as_str() {
+                "get_method" => return self.module_get_method(module, &args),
+                "get_attr" => return self.module_get_attr(module, &args),
+                _ => {}
+            }
             let member = self.module_member(module, method)?;
             return self.call_value(&member, args, Vec::new(), span);
         }
@@ -174,6 +179,104 @@ impl Interp<'_> {
         let mut fields = adt.fields.clone();
         fields[index] = value;
         Ok(Value::adt(adt.ctor, fields))
+    }
+
+    /// `module.get_method("name")` or `module.get_method("name", n)`.
+    /// Returns `Ok(fn)` or `Err(message)`.
+    fn module_get_method(&mut self, module: DefId, args: &[Value]) -> RunResult<Value> {
+        let (name_str, expected_params) = match args {
+            [Value::Str(name)] => (name.as_ref(), None),
+            [Value::Str(name), Value::Int(n)] => (name.as_ref(), Some(*n as usize)),
+            _ => return Err(RuntimeError::new(
+                "`get_method` takes a name and an optional param count: `mod.get_method(\"name\")` or `mod.get_method(\"name\", 2)`",
+            )),
+        };
+        let name = Symbol::intern(name_str);
+        let res = {
+            let program = self.shared.program();
+            let resolutions = program.resolutions();
+            resolutions.lookup(module, Namespace::Value, name)
+        };
+        let (value, actual_params) = match res {
+            Some(Res::Def(DefKind::Fn, def)) => {
+                let function = self.shared.code(def)?;
+                let params = function.params as usize;
+                (Value::Fn(def), Some(params))
+            }
+            Some(Res::Def(DefKind::NativeFn(id), _)) => {
+                let function = self.shared.registry.function(id);
+                let params = function.signature.as_ref().map(|s| s.params.len());
+                (Value::NativeFn(id), params)
+            }
+            Some(_) => {
+                return Ok(self.result_err(format!("`{name_str}` is not a function")));
+            }
+            None => {
+                let program = self.shared.program();
+                let mod_name = program.resolutions().def_path(module);
+                return Ok(self.result_err(format!(
+                    "module `{mod_name}` has no member `{name_str}`"
+                )));
+            }
+        };
+        if let Some(expected) = expected_params {
+            if let Some(actual) = actual_params {
+                if actual != expected {
+                    return Ok(self.result_err(format!(
+                        "`{name_str}` takes {actual} parameter(s), expected {expected}"
+                    )));
+                }
+            }
+        }
+        Ok(self.result_ok(value))
+    }
+
+    /// `module.get_attr("name")`. Returns `Ok(value)` or `Err(message)`.
+    fn module_get_attr(&mut self, module: DefId, args: &[Value]) -> RunResult<Value> {
+        let name_str = match args {
+            [Value::Str(name)] => name.as_ref(),
+            _ => return Err(RuntimeError::new(
+                "`get_attr` takes a name: `mod.get_attr(\"name\")`",
+            )),
+        };
+        let name = Symbol::intern(name_str);
+        let res = {
+            let program = self.shared.program();
+            let resolutions = program.resolutions();
+            resolutions
+                .lookup(module, Namespace::Value, name)
+                .or_else(|| resolutions.lookup(module, Namespace::Type, name))
+        };
+        match res {
+            Some(Res::Def(DefKind::Const, def)) => {
+                let value = self.constant(def)?;
+                Ok(self.result_ok(value))
+            }
+            Some(Res::Def(DefKind::Fn | DefKind::NativeFn(_), _)) => {
+                Ok(self.result_err(format!("`{name_str}` is a function, not an attribute")))
+            }
+            Some(Res::Def(DefKind::Mod, def)) => {
+                Ok(self.result_ok(Value::Module(def)))
+            }
+            Some(Res::Def(DefKind::Struct | DefKind::Variant, def)) => {
+                Ok(self.result_ok(Value::Ctor(def)))
+            }
+            Some(_) | None => {
+                let program = self.shared.program();
+                let mod_name = program.resolutions().def_path(module);
+                Ok(self.result_err(format!(
+                    "module `{mod_name}` has no attribute `{name_str}`"
+                )))
+            }
+        }
+    }
+
+    fn result_ok(&self, value: Value) -> Value {
+        Value::adt(self.shared.lang.ok, vec![value])
+    }
+
+    fn result_err(&self, message: String) -> Value {
+        Value::adt(self.shared.lang.err, vec![Value::str(&message)])
     }
 
     /// The value named `name` in `module`, which modules-as-values expose

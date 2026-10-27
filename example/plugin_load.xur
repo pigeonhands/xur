@@ -1,0 +1,39 @@
+use std::io;
+
+fn main() -> Result<(), str> {
+    let plugin = std::import("./plugin.xur");
+
+    // get_method: returns Ok(fn) or Err(message)
+    io::println("--- get_method ---");
+    let exec = plugin.get_method("exec")?;
+    io::println("got exec: {}", exec);
+    exec(42);
+
+    // get_method with param count check
+    let add = plugin.get_method("add", 2)?;
+    io::println("add(3, 4) = {}", add(3, 4));
+
+    // wrong param count
+    let bad = plugin.get_method("add", 1);
+    io::println("add with 1 param: {}", bad);
+
+    // missing method
+    let missing = plugin.get_method("nope");
+    io::println("missing method: {}", missing);
+
+    // get_attr: returns Ok(value) or Err(message)
+    io::println("");
+    io::println("--- get_attr ---");
+    let attr = plugin.get_attr("my_attr")?;
+    io::println("my_attr = {}", attr);
+
+    // function is not an attr
+    let bad_attr = plugin.get_attr("exec");
+    io::println("exec as attr: {}", bad_attr);
+
+    // missing attr
+    let missing_attr = plugin.get_attr("nope");
+    io::println("missing attr: {}", missing_attr);
+
+    Ok(())
+}
