@@ -25,6 +25,12 @@ fn item(src: &str) -> String {
 fn use_and_const() {
     assert_eq!(item("use std;"), "use std;");
     assert_eq!(item("use std::io;"), "use std::io;");
+    assert_eq!(item("use std::{io, fs};"), "use std::io + std::fs;");
+    assert_eq!(
+        item("use a::{b, c::{d, e,}, f::g};"),
+        "use a::b + a::c::d + a::c::e + a::f::g;"
+    );
+    assert_eq!(item("use a::{};"), "use ;");
     assert_eq!(
         item(r#"const math = std::import("./math.xur");"#),
         r#"const math = std::import("./math.xur");"#

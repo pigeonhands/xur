@@ -2,8 +2,8 @@
 
 use xur_ast::{
     Attribute, ConstItem, EnumDef, FieldDef, Fn, FnDecl, FnRetTy, GenericParam, Generics, Impl,
-    Item, ItemKind, MetaItem, MetaItemInner, MetaItemKind, Module, Param, Ty, TyKind, UseTree,
-    Variant, VariantData, Visibility,
+    Item, ItemKind, MetaItem, MetaItemInner, MetaItemKind, Module, Param, Path, PathSegment, Ty,
+    TyKind, UseTree, Variant, VariantData, Visibility,
 };
 use xur_errors::Diag;
 use xur_span::Span;
@@ -60,7 +60,7 @@ impl Parser<'_> {
         let kind = match self.token.kind {
             TokenKind::Keyword(Keyword::Use) => {
                 self.bump();
-                ItemKind::Use(self.parse_use_tree()?)
+                ItemKind::Use(self.parse_use()?)
             }
             TokenKind::Keyword(Keyword::Const) => {
                 self.bump();
@@ -169,12 +169,40 @@ impl Parser<'_> {
         }
     }
 
-    /// `path;`, after the `use`.
-    fn parse_use_tree(&mut self) -> PResult<UseTree> {
-        let path = self.parse_path(PathStyle::Mod)?;
-        let span = path.span;
+    /// `a::b;` or `a::{b, c::{d, e}};`, after the `use`, as the paths it
+    /// imports.
+    fn parse_use(&mut self) -> PResult<Vec<UseTree>> {
+        let mut trees = Vec::new();
+        self.parse_use_tree(&[], &mut trees)?;
         self.expect_semi()?;
-        Ok(UseTree { path, span })
+        Ok(trees)
+    }
+
+    /// A path after `prefix::`, ending in a name or a braced list of more.
+    fn parse_use_tree(&mut self, prefix: &[PathSegment], trees: &mut Vec<UseTree>) -> PResult<()> {
+        let lo = self.token.span;
+        let mut segments = prefix.to_vec();
+        loop {
+            let ident = self.parse_ident()?;
+            segments.push(PathSegment { ident, args: None });
+            if !self.eat(TokenKind::ColonColon) {
+                break;
+            }
+            if self.eat(TokenKind::LBrace) {
+                self.parse_delimited(TokenKind::RBrace, |this| {
+                    this.parse_use_tree(&segments, trees)
+                })?;
+                return Ok(());
+            }
+        }
+        let span = lo.to(self.prev_token.span);
+        let path = Path {
+            id: self.next_id(),
+            segments,
+            span,
+        };
+        trees.push(UseTree { path, span });
+        Ok(())
     }
 
     /// `name: ty = expr;`, after the `const`.

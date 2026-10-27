@@ -20,8 +20,10 @@ impl<'a> Resolver<'a> {
             let (module, loaded) = (self.module_def(idx), krate.module(idx));
             for item in &loaded.ast.items {
                 let vis = vis(item.vis);
-                if let ItemKind::Use(tree) = &item.kind {
-                    self.pending_imports.push(Import { module, tree, vis });
+                if let ItemKind::Use(trees) = &item.kind {
+                    for tree in trees {
+                        self.pending_imports.push(Import { module, tree, vis });
+                    }
                     continue;
                 }
                 for (namespaces, ident, res) in self.define_item(module, module, item) {

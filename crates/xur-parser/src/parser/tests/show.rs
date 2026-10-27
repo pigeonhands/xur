@@ -251,7 +251,10 @@ impl Show for Item {
             out += "pub ";
         }
         out += &match &self.kind {
-            ItemKind::Use(tree) => format!("use {};", tree.path.show()),
+            ItemKind::Use(trees) => {
+                let paths: Vec<_> = trees.iter().map(|tree| tree.path.show()).collect();
+                format!("use {};", paths.join(" + "))
+            }
             ItemKind::Const(item) => match &item.ty {
                 Some(ty) => format!(
                     "const {}: {} = {};",

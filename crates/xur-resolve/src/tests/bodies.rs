@@ -206,3 +206,19 @@ fn native_types_and_their_functions() {
         "native function geo::Point::norm"
     );
 }
+
+#[test]
+fn grouped_imports_import_each_path() {
+    let resolved = resolve_src(
+        "use std::{io, any::type_name};\nfn f() { io::println(\"\"); type_name::<i32>(); }",
+    );
+    resolved.assert_no_errors();
+    assert_eq!(
+        resolved.res_of("io::println"),
+        "native function std::io::println"
+    );
+    assert_eq!(
+        resolved.res_of("type_name::<i32>"),
+        "native function std::any::type_name"
+    );
+}

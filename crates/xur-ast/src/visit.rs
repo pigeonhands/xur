@@ -75,7 +75,11 @@ pub fn walk_module<'a, V: Visitor<'a>>(visitor: &mut V, module: &'a Module) {
 /// Attributes are not walked: their paths name attributes, not items.
 pub fn walk_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a Item) {
     match &item.kind {
-        ItemKind::Use(tree) => visitor.visit_path(&tree.path),
+        ItemKind::Use(trees) => {
+            for tree in trees {
+                visitor.visit_path(&tree.path);
+            }
+        }
         ItemKind::Const(item) => {
             if let Some(ty) = &item.ty {
                 visitor.visit_ty(ty);

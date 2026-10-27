@@ -28,8 +28,9 @@ pub enum Visibility {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemKind {
-    /// `use std;`
-    Use(UseTree),
+    /// `use std;`, or `use std::{io, fs::File};`, which imports each path
+    /// in the braces: one tree per imported path, prefix included.
+    Use(Vec<UseTree>),
     /// `const name: ty = expr;`
     Const(Box<ConstItem>),
     /// `fn name<T>(params) -> ret { body }`
@@ -52,6 +53,7 @@ pub struct Impl {
     pub items: Vec<Item>,
 }
 
+/// One path a `use` imports, such as `std::fs::File`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UseTree {
     pub path: Path,

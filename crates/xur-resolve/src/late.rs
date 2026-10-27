@@ -356,9 +356,9 @@ impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
     fn visit_item(&mut self, item: &'ast Item) {
         let top_level = std::mem::replace(&mut self.top_level, false);
         match &item.kind {
-            ItemKind::Use(tree) => {
+            ItemKind::Use(_) => {
                 if !top_level {
-                    let span = tree.span;
+                    let span = item.span;
                     self.r.report(
                         Diag::error(
                             "`use` is only allowed at the top level of a module",
