@@ -84,6 +84,11 @@ pub trait Context: ConvertCx {
     fn set_field(&mut self, value: &Value, name: &str, new: Value) -> RunResult<Value>;
     /// `receiver.name(args)`.
     fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value>;
+
+    /// Attempts to coerce `value` into the struct or enum `target`, as
+    /// `value as Type` does. Returns the coerced value, or an error if the
+    /// coercion fails.
+    fn try_cast(&self, value: &Value, target: DefId) -> RunResult<Value>;
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;

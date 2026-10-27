@@ -5,6 +5,7 @@
 //     xur run example/coerce.xur
 
 use std::io;
+use std::any;
 
 struct Data {
     a: str
@@ -42,4 +43,11 @@ fn main() {
     };
     let strict_data = full_data as StrictData;
     io::println("strict (from full): {}", strict_data);
+
+    // strict coercion failure caught with try_cast
+    let result = any::try_cast::<StrictData>(small_data);
+    match result {
+        Ok(v) => io::println("unexpected success: {}", v),
+        Err(e) => io::println("strict coercion failed (expected): {}", e),
+    }
 }

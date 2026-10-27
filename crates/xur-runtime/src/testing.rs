@@ -134,6 +134,10 @@ impl Context for TestCx<'_> {
         )))
     }
 
+    fn try_cast(&self, _value: &Value, _target: DefId) -> RunResult<Value> {
+        Err(RuntimeError::new("try_cast is not available in tests"))
+    }
+
     fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
         let id = match &receiver {
             Value::Native(object) => self.registry.type_function(object.ty, name),

@@ -109,4 +109,14 @@ impl Context for Interp<'_> {
     fn call_method(&mut self, receiver: Value, name: &str, args: Vec<Value>) -> RunResult<Value> {
         Interp::call_method(self, receiver, Symbol::intern(name), args, Span::default())
     }
+
+    fn try_cast(&self, value: &Value, target: DefId) -> RunResult<Value> {
+        let program = self.shared.program();
+        let name = program.resolutions().def_path(target);
+        let ty = xur_bytecode::RtType::Adt { def: target, name };
+        match self.check_type(value, &ty)? {
+            Some(coerced) => Ok(coerced),
+            None => Ok(value.clone()),
+        }
+    }
 }
