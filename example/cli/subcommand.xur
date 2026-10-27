@@ -1,0 +1,47 @@
+// Subcommand parsing with std::cli.
+//
+// Run it:
+//
+//     xur run example/cli/subcommand.xur -- greet --name Alice
+//     xur run example/cli/subcommand.xur -- count 5
+
+use std::io;
+use std::cli;
+
+fn main() -> Result<()> {
+    let args = cli::args();
+    let cmd = args.subcommand()?;
+
+    match cmd {
+        None => {
+            io::println("usage: subcommand <greet|count> [options]");
+        },
+        Some("greet") => {
+            let name = args.option("--name");
+            args.finish()?;
+            let name = match name {
+                None => "world",
+                Some(n) => n,
+            };
+            io::println("hello, {}!", name);
+        },
+        Some("count") => {
+            let n = args.free();
+            args.finish()?;
+            let n = match n {
+                None => return Err("count requires a number"),
+                Some(s) => s.parse_int()?,
+            };
+            let i = 1;
+            while i <= n {
+                io::println("{}", i);
+                i = i + 1;
+            }
+        },
+        Some(other) => {
+            return Err("unknown command: " + other);
+        },
+    }
+
+    Ok(())
+}

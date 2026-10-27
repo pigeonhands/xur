@@ -1,0 +1,39 @@
+// Imperative argument parsing with std::cli.
+//
+// Run it:
+//
+//     xur run example/cli/args.xur -- --name Alice --count 3 --verbose
+
+use std::io;
+use std::cli;
+
+fn main() -> Result<()> {
+    let args = cli::args();
+
+    let verbose = args.contains("--verbose");
+    let name = args.option("-n", "--name");
+    let count = args.option("-c", "--count");
+    args.finish()?;
+
+    if verbose {
+        io::println("verbose mode enabled");
+    }
+
+    let name = match name {
+        None => "world",
+        Some(name) => name,
+    };
+
+    let count = match count {
+        None => 1,
+        Some(n) => n.parse_int()?,
+    };
+
+    let i = 0;
+    while i < count {
+        io::println("hello, {}!", name);
+        i = i + 1;
+    }
+
+    Ok(())
+}

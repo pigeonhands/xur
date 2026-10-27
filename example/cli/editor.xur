@@ -1,0 +1,17 @@
+// Editor prompt with std::cli.
+//
+// Opens $EDITOR for multi-line input.
+//
+// Run it:
+//
+//     xur run example/cli/editor.xur
+
+use std::io;
+use std::cli;
+
+fn main() -> Result<()> {
+    let text = cli::editor("Write your message:");
+    io::println("you wrote:");
+    io::println("{}", text);
+    Ok(())
+}

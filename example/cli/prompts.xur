@@ -1,0 +1,27 @@
+// Interactive prompts with std::cli.
+//
+// Run it:
+//
+//     xur run example/cli/prompts.xur
+
+use std::io;
+use std::cli;
+
+fn main() -> Result<()> {
+    let name = cli::prompt("What is your name?");
+    io::println("hello, {}!", name);
+
+    let likes_xur = cli::confirm("Do you like xur?");
+    io::println("likes xur: {}", likes_xur);
+
+    let lang = cli::select("Favourite language?", ["xur", "rust", "python", "other"]);
+    io::println("favourite: {}", lang);
+
+    let tools = cli::multi_select("Which tools do you use?", ["git", "docker", "vim", "vscode"]);
+    io::println("tools: {}", tools);
+
+    let secret = cli::password("Enter a secret:");
+    io::println("secret length: {}", secret.len());
+
+    Ok(())
+}

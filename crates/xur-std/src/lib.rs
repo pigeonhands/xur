@@ -6,6 +6,8 @@
 
 mod any;
 mod bytes;
+#[cfg(feature = "cli")]
+mod cli;
 mod fmt;
 mod fs;
 mod io;
@@ -60,6 +62,8 @@ pub fn register(registry: &Registry) {
     str::register(registry);
     num::register(registry);
     xur::register(registry);
+    #[cfg(feature = "cli")]
+    cli::register(registry);
 }
 
 /// `std::import(path)`: loads a module, which may be computed at runtime.
