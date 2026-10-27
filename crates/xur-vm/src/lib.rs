@@ -19,6 +19,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use xur_bytecode::{Function, ItemIndex};
@@ -51,6 +52,9 @@ struct Shared {
     stdout: Mutex<Box<dyn Write + Send>>,
     /// Diagnostics for modules imported while running.
     diags: Mutex<Vec<Diag>>,
+    /// Whether to record where an error passed through `?`, shown if it
+    /// reaches `main`. On by default; the runtime may turn it off.
+    tracing: AtomicBool,
 }
 
 impl Vm {
@@ -68,10 +72,16 @@ impl Vm {
             consts: Mutex::new(HashMap::new()),
             stdout: Mutex::new(stdout),
             diags: Mutex::new(Vec::new()),
+            tracing: AtomicBool::new(true),
         };
         Self {
             shared: Arc::new(shared),
         }
+    }
+
+    /// Turns `?` error tracing on or off. It is on by default.
+    pub fn set_tracing(&self, on: bool) {
+        self.shared.tracing.store(on, Ordering::Relaxed);
     }
 
     /// Runs the root module's `main` function.
@@ -85,17 +95,20 @@ impl Vm {
                 _ => return Err(RuntimeError::new("the program has no `main` function")),
             }
         };
-        let value = Interp::new(&self.shared).call_fn(main, Vec::new(), Vec::new())?;
+        let mut interp = Interp::new(&self.shared);
+        let value = interp.call_fn(main, Vec::new(), Vec::new())?;
         // A `main` that returns a `Result` fails the program on `Err`, like
         // Rust's. Any other value, including `Ok`, is a success.
         if let Value::Adt(adt) = &value {
             let lang = self.shared.lang;
             if adt.ctor == lang.err {
                 let inner = adt.fields.first().cloned().unwrap_or(Value::Unit);
-                let shown = Interp::new(&self.shared).display_value(&inner);
-                return Err(RuntimeError::new(format!(
-                    "main returned an error: {shown}"
-                )));
+                let shown = interp.display_value(&inner);
+                let mut error = RuntimeError::new(format!("main returned an error: {shown}"));
+                for note in interp.try_trace() {
+                    error = error.with_note(note);
+                }
+                return Err(error);
             }
         }
         Ok(value)
@@ -133,6 +146,10 @@ impl Shared {
                 .map(|i| i.name)
                 .collect(),
         )
+    }
+
+    fn tracing(&self) -> bool {
+        self.tracing.load(Ordering::Relaxed)
     }
 
     /// The runtime check for the declared type of field `index` of the

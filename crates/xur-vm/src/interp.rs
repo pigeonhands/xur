@@ -23,6 +23,10 @@ pub(crate) struct Interp<'s> {
     /// The type arguments of the native function being called.
     pub(crate) native_type_args: Vec<TypeRef>,
     depth: usize,
+    /// The `?` locations an in-flight error has propagated through, with the
+    /// call depth each fired at, innermost first. Only recorded while the
+    /// program's tracing is on; read if an error reaches `main`.
+    try_trail: Vec<(usize, Span)>,
 }
 
 /// The registers of a running function.
@@ -53,7 +57,35 @@ impl<'s> Interp<'s> {
             module: None,
             native_type_args: Vec::new(),
             depth: 0,
+            try_trail: Vec::new(),
         }
+    }
+
+    /// Records a `?` early-return at `span` in the current frame. A new
+    /// propagation (one not continuing to unwind to a shallower frame)
+    /// clears the trail first.
+    fn record_try(&mut self, span: Span) {
+        if !self.shared.tracing() {
+            return;
+        }
+        if self
+            .try_trail
+            .last()
+            .is_some_and(|&(depth, _)| self.depth >= depth)
+        {
+            self.try_trail.clear();
+        }
+        self.try_trail.push((self.depth, span));
+    }
+
+    /// The trail of `?` locations as human-readable notes, outermost last.
+    pub(crate) fn try_trace(&self) -> Vec<String> {
+        let program = self.shared.program();
+        let source_map = &program.krate.source_map;
+        self.try_trail
+            .iter()
+            .map(|&(_, span)| format!("propagated with `?` at {}", source_map.describe_pos(span)))
+            .collect()
     }
 
     /// Calls the function `def` written in Xur.
@@ -152,6 +184,10 @@ impl<'s> Interp<'s> {
                     }
                 },
                 Terminator::Return(value) => return Ok(frame.get(*value).clone()),
+                Terminator::TryReturn(value) => {
+                    self.record_try(span);
+                    return Ok(frame.get(*value).clone());
+                }
                 Terminator::Next {
                     iter,
                     item,

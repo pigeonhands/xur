@@ -15,12 +15,13 @@ use crate::load::{fail_on_errors, load_program};
 const STACK_SIZE: usize = 256 << 20;
 
 /// Loads the program rooted at `path` and runs its `main` function.
-pub fn run(path: &Path) -> Result<()> {
+pub fn run(path: &Path, tracing: bool) -> Result<()> {
     let (program, registry, diags) = load_program(path)?;
     let root = path.display().to_string();
     fail_on_errors(&program.krate.source_map, &root, diags, "compile")?;
 
     let vm = Vm::new(program, registry, Box::new(io::stdout()));
+    vm.set_tracing(tracing);
     let result = thread::scope(|scope| {
         thread::Builder::new()
             .name("main".to_owned())
@@ -38,10 +39,14 @@ pub fn run(path: &Path) -> Result<()> {
     let source_map = &program.krate.source_map;
     diagnostics::emit(source_map, vm.take_diagnostics())?;
     if let Err(error) = result {
-        let message = error.message.clone();
         match error.span {
             Some(span) => diagnostics::emit(source_map, [error.into_diag(span)])?,
-            None => bail!("{message}"),
+            None => {
+                eprintln!("Error: {}", error.message);
+                for note in &error.notes {
+                    eprintln!("  {note}");
+                }
+            }
         }
         bail!("`{root}` stopped with a runtime error");
     }

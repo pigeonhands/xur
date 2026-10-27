@@ -497,7 +497,7 @@ impl Lowerer<'_> {
             );
             self.switch_to(otherwise);
         }
-        self.terminate(Terminator::Return(value), span);
+        self.terminate(Terminator::TryReturn(value), span);
         self.switch_to(unwrap);
         self.emit(
             InstKind::Project {

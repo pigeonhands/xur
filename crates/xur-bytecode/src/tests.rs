@@ -121,7 +121,7 @@ fn try_returns_errors_early() {
     r3 = r0 is Option::Some
     branch r3 ? bb1 : bb3
   bb3:
-    return r0
+    return? r0
   bb4:
     r4 = r1
     r5 = 1

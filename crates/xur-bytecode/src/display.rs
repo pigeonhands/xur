@@ -171,6 +171,7 @@ fn term_text(term: &Terminator) -> String {
             format!("branch {cond:?} ? {then:?} : {otherwise:?}")
         }
         Terminator::Return(value) => format!("return {value:?}"),
+        Terminator::TryReturn(value) => format!("return? {value:?}"),
         Terminator::Next {
             iter,
             item,

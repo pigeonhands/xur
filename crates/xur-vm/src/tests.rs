@@ -1029,3 +1029,39 @@ fn native_objects_without_display_show_their_type_name() {
         }";
     assert_eq!(run(src), Ok("<PEFile>\n".into()));
 }
+
+/// Runs `src`, returning the raw runtime error (with its notes), with
+/// `?` tracing set to `tracing`.
+fn run_for_error(src: &str, tracing: bool) -> crate::RuntimeError {
+    let registry = Arc::new(xur_std::registry());
+    let (program, diags) = Program::load(
+        Path::new("main.xur"),
+        Box::new(MemoryFileLoader::new([("main.xur", src)])),
+        Box::new(Arc::clone(&registry)),
+    )
+    .unwrap();
+    assert!(diags.is_empty(), "{diags:?}");
+    let vm = Vm::new(program, registry, Box::new(Output::default()));
+    vm.set_tracing(tracing);
+    vm.run_main().unwrap_err()
+}
+
+#[test]
+fn question_mark_traces_to_main_by_default() {
+    let src = "
+        fn inner() -> Result<i64, str> { Err(\"boom\") }
+        fn middle() -> Result<i64, str> { Ok(inner()? + 1) }
+        fn main() -> Result<(), str> { middle()?; Ok(()) }
+    ";
+    let error = run_for_error(src, true);
+    assert_eq!(error.message, "main returned an error: boom");
+    // Innermost `?` first: inner()? inside middle, then middle()? in main.
+    assert_eq!(error.notes.len(), 2);
+    assert!(
+        error.notes.iter().all(|note| note.contains("`?`")),
+        "{:?}",
+        error.notes
+    );
+    // The runtime can turn tracing off.
+    assert!(run_for_error(src, false).notes.is_empty());
+}

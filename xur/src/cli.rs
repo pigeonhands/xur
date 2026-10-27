@@ -16,6 +16,10 @@ pub enum Command {
     Run {
         /// The root `.xur` file of the program.
         file: PathBuf,
+        /// Don't show the `?` locations an error passed through when it
+        /// reaches `main`.
+        #[arg(long)]
+        no_trace: bool,
     },
     /// Inspect the output of individual compiler stages.
     #[command(subcommand)]

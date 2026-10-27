@@ -303,6 +303,10 @@ pub enum Terminator {
         otherwise: BlockId,
     },
     Return(Reg),
+    /// Returns `value` as a `?` early-return. Like [`Return`](Self::Return),
+    /// but the VM, when tracing is on, records the `?` location so an error
+    /// that reaches `main` shows the chain of `?`s it passed through.
+    TryReturn(Reg),
     /// Advances the iterator `iter`: with its next item in `item`, continue
     /// at `body`; when it is exhausted, at `done`.
     Next {
