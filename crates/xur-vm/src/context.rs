@@ -4,9 +4,10 @@ use std::path::Path;
 use std::sync::{Arc, PoisonError};
 use std::thread::{self, JoinHandle};
 
+use xur_bytecode::Function;
 use xur_resolve::{DefId, LangItems};
 use xur_runtime::convert::ConvertCx;
-use xur_runtime::{AdtInfo, Context, Registry, RunResult, RuntimeError, TypeRef, Value, lock};
+use xur_runtime::{AdtInfo, Context, FnInfo, Registry, RunResult, RuntimeError, TypeRef, Value, lock};
 use xur_span::{Span, Symbol};
 
 use crate::interp::Interp;
@@ -120,6 +121,67 @@ impl Context for Interp<'_> {
         match self.check_type(value, &ty)? {
             Some(coerced) => Ok(coerced),
             None => Ok(value.clone()),
+        }
+    }
+
+    fn fn_info(&self, value: &Value) -> Option<FnInfo> {
+        match value {
+            Value::Fn(def) => {
+                let function = self.shared.code(*def).ok()?;
+                Some(FnInfo {
+                    name: function.name.clone(),
+                    param_count: function.params as usize,
+                    param_names: function
+                        .param_names
+                        .iter()
+                        .map(|n| n.map(|s| s.to_string()))
+                        .collect(),
+                    param_types: function.param_types.clone(),
+                    return_type: function.ret_type.clone(),
+                })
+            }
+            Value::Closure(closure) => {
+                let function = Arc::clone(&closure.code)
+                    .downcast::<Function>()
+                    .ok()?;
+                Some(FnInfo {
+                    name: function.name.clone(),
+                    param_count: function.params as usize,
+                    param_names: function
+                        .param_names
+                        .iter()
+                        .map(|n| n.map(|s| s.to_string()))
+                        .collect(),
+                    param_types: function.param_types.clone(),
+                    return_type: function.ret_type.clone(),
+                })
+            }
+            Value::NativeFn(id) => {
+                let nf = self.shared.registry.function(*id);
+                let param_count = nf.signature.as_ref().map_or(0, |s| s.params.len());
+                Some(FnInfo {
+                    name: nf.name.clone(),
+                    param_count,
+                    param_names: Vec::new(),
+                    param_types: Vec::new(),
+                    return_type: None,
+                })
+            }
+            Value::Ctor(def) => {
+                let info = Interp::adt_info(self, *def)?;
+                Some(FnInfo {
+                    name: info.name,
+                    param_count: info.fields.len(),
+                    param_names: info
+                        .fields
+                        .iter()
+                        .map(|f| f.name.map(|s| s.to_string()))
+                        .collect(),
+                    param_types: Vec::new(),
+                    return_type: None,
+                })
+            }
+            _ => None,
         }
     }
 }

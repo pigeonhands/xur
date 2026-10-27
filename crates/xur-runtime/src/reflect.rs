@@ -1,7 +1,7 @@
 //! What native code can learn about Xur types at runtime, for `std::reflect`.
 
 use xur_ast::Attribute;
-use xur_resolve::DefId;
+use xur_resolve::{DefId, RtType};
 use xur_span::Symbol;
 
 /// A type as native code sees it: a type argument, as in `layout::<T>()`,
@@ -73,4 +73,14 @@ impl AdtInfo {
             })
             .collect()
     }
+}
+
+/// Reflection data for a function, closure, or constructor.
+#[derive(Debug, Clone)]
+pub struct FnInfo {
+    pub name: String,
+    pub param_count: usize,
+    pub param_names: Vec<Option<String>>,
+    pub param_types: Vec<Option<RtType>>,
+    pub return_type: Option<RtType>,
 }

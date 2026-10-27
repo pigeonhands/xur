@@ -89,6 +89,9 @@ pub trait Context: ConvertCx {
     /// `value as Type` does. Returns the coerced value, or an error if the
     /// coercion fails.
     fn try_cast(&self, value: &Value, target: DefId) -> RunResult<Value>;
+
+    /// Reflection data for a function, closure, or constructor value.
+    fn fn_info(&self, value: &Value) -> Option<crate::FnInfo>;
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;

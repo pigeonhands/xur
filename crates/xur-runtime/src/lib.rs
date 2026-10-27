@@ -7,7 +7,7 @@ pub mod registry;
 mod value;
 
 pub use error::{RunResult, RuntimeError};
-pub use reflect::{AdtInfo, FieldInfo, TypeRef};
+pub use reflect::{AdtInfo, FieldInfo, FnInfo, TypeRef};
 pub use registry::{Context, Registry};
 pub use value::{Adt, BuiltinType, Closure, NativeObject, Range, Record, Value, ValueIter, lock};
 pub use xur_resolve::LangItems;

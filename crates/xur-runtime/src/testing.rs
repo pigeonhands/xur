@@ -138,6 +138,10 @@ impl Context for TestCx<'_> {
         Err(RuntimeError::new("try_cast is not available in tests"))
     }
 
+    fn fn_info(&self, _value: &Value) -> Option<crate::FnInfo> {
+        None
+    }
+
     fn call_method(&mut self, receiver: Value, name: &str, args: &[Value]) -> RunResult<Value> {
         let id = match &receiver {
             Value::Native(object) => self.registry.type_function(object.ty, name),

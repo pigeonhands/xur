@@ -15,6 +15,7 @@
 //! `methods` lists a type's own methods, not `to_bytes` and `byte_size`,
 //! which every struct has (see [`layout`]).
 
+pub(crate) mod func;
 pub(crate) mod layout;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
@@ -89,6 +90,7 @@ pub(crate) fn register(registry: &Registry) {
                 let call_args = xur_runtime::lock(call_args).clone();
                 cx.call_method(receiver.clone(), name, &call_args)
             });
+        func::register(module);
         layout::register(module);
     });
 }

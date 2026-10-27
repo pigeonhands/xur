@@ -838,6 +838,9 @@ impl Lowerer<'_> {
         let mut inner = Lowerer::new(self.program, self.items, self.module);
         inner.type_params = self.type_params.clone();
         inner.type_param_names = self.type_param_names.clone();
+        if let xur_ast::FnRetTy::Ty(ty) = &closure.decl.output {
+            inner.ret_ty = inner.rt_type(ty);
+        }
         for &binding in &captured {
             let reg = inner.new_reg();
             inner.locals.insert(binding, reg);
