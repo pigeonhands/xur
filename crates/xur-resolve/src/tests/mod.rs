@@ -84,6 +84,7 @@ pub(crate) fn natives() -> Vec<NativeModule> {
         vec![
             module("io", vec![f("print"), f("println")], Vec::new()),
             module("any", vec![f("type_name")], Vec::new()),
+            module("mem", vec![f("size_of"), f("from_bytes")], Vec::new()),
         ],
     );
     let geo = NativeModule {

@@ -226,6 +226,9 @@ pub enum BuiltinType {
     List,
     Bytes,
     Range,
+    /// Every struct and enum variant defined in Xur, for methods they all
+    /// have, like `to_bytes`. Their own `impl` functions come first.
+    Struct,
 }
 
 impl Value {
@@ -240,6 +243,7 @@ impl Value {
             Self::List(_) => BuiltinType::List,
             Self::Bytes(_) => BuiltinType::Bytes,
             Self::Range(_) => BuiltinType::Range,
+            Self::Adt(_) => BuiltinType::Struct,
             _ => return None,
         })
     }

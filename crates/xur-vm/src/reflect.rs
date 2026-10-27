@@ -47,10 +47,12 @@ impl Interp<'_> {
     }
 
     /// The methods `value.name()` can call: `impl` functions taking `self`,
-    /// and the registered methods of native and built-in values.
+    /// and the registered methods of native and built-in values. The
+    /// methods every struct has are left out.
     pub(crate) fn methods_of(&self, value: &Value) -> Vec<String> {
         let registry = &self.shared.registry;
         match value {
+            // Not the methods every struct has, like `to_bytes`.
             Value::Adt(adt) => self.adt_methods(adt.ctor),
             Value::Native(object) => registry.type_methods(object.ty),
             other => other

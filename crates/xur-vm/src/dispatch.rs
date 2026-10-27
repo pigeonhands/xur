@@ -1,7 +1,7 @@
 //! Calls, method calls and field access, dispatched on values at runtime.
 
 use xur_resolve::{DefId, DefKind, Namespace, Res};
-use xur_runtime::{Record, RunResult, RuntimeError, TypeRef, Value};
+use xur_runtime::{BuiltinType, Record, RunResult, RuntimeError, TypeRef, Value};
 use xur_span::{Span, Symbol};
 
 use crate::interp::Interp;
@@ -47,7 +47,12 @@ impl Interp<'_> {
             return self.call_value(&member, args, Vec::new(), span);
         }
         let function = match &receiver {
-            Value::Adt(adt) => self.adt_method(adt.ctor, method),
+            Value::Adt(adt) => self.adt_method(adt.ctor, method).or_else(|| {
+                let registry = &self.shared.registry;
+                registry
+                    .builtin_method(BuiltinType::Struct, method.as_str())
+                    .map(Value::NativeFn)
+            }),
             Value::Native(object) => self
                 .shared
                 .registry

@@ -210,6 +210,10 @@ cannot average zero items
 area = 7
 square area = 4
 Struct name: ZeroPacked
+CPacked: 16 bytes, 01000000000000000200000000000000
+ZeroPacked: 8 bytes
+Aligned: 104 bytes, c = 3
+back again: Aligned { a: 1, b: 2, c: 3 }
 ",
     );
 }
@@ -741,5 +745,39 @@ fn reflection_names_variants() {
     assert_eq!(
         run(src),
         Ok("Some(\"Circle\") Some(\"Square\") None\n".into())
+    );
+}
+
+#[test]
+fn structs_know_their_bytes() {
+    let src = r#"
+        use std::mem;
+        #[endian(Big)]
+        struct Header { magic: u16, #[field(offset = 4)] len: u32 }
+        struct Own { a: u8 }
+        impl Own { pub fn byte_size(self) -> str { "mine" } }
+        enum Packet { Ping { id: u16 } }
+        fn main() {
+            let h = Header { magic: 0x4d5a, len: 3 };
+            let io = std::io;
+            io::println("{} {} {} {}", h.to_bytes().to_hex(), h.byte_size(), mem::size_of::<Header>(), mem::align_of::<Header>());
+            io::println("{} {}", mem::from_bytes::<Header>(h.to_bytes()), mem::size_of_val(h));
+            io::println("{} {}", Own { a: 1 }.byte_size(), Own { a: 1 }.to_bytes());
+            io::println("{}", Packet::Ping { id: 1 }.to_bytes());
+        }
+    "#;
+    assert_eq!(
+        run(src),
+        Ok(concat!(
+            "4d5a000000000003 8 8 4\n",
+            "Header { magic: 19802, len: 3 } 8\n",
+            "mine b\"\\x01\"\n",
+            "b\"\\x01\\x00\"\n",
+        )
+        .into())
+    );
+    assert_eq!(
+        run("struct S { name: str } fn main() { S { name: \"x\" }.to_bytes(); }"),
+        Err("field `name`: `str` has no layout".into())
     );
 }

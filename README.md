@@ -192,6 +192,14 @@ struct Aligned {
     #[field(offset=100)] c: u32 // 100 bytes from the start of the struct
 }
 
+// every struct knows its bytes
+let value = Aligned { a: 1, b: 2, c: 3 };
+value.byte_size();                          // 104
+let data = value.to_bytes();                // c's bytes are at 100
+std::mem::from_bytes::<Aligned>(data);      // and back
+std::mem::size_of::<Aligned>();             // 104
+
+// layouts can also be inspected, or made at runtime
 let layout = std::reflect::layout::<Aligned>(); // size 104, align 4
 let data = layout.to_bytes(Aligned { a: 1, b: 2, c: 3 });
 let back = layout.from_bytes(data);
@@ -215,6 +223,7 @@ below). Large modules are lazy: they are only built if a program uses them.
 | `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
 | `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
 | `std::any`    | `type_name::<T>()`                                                       |
+| `std::mem`    | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>(data)`, `to_bytes(v)` |
 | `std::reflect`| `fields`, `get`, `set`, `methods`, `call` of any value; `layout::<T>()`, `Layout` |
 
 Built-in values have methods too: lists (`len`, `push`, `pop`, `get`,

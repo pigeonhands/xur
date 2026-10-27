@@ -89,4 +89,13 @@ fn main() {
     io::println("area = {}", Shape::Rect(2.0, 3.5).area());
     io::println("square area = {}", Shape::square(2.0).area());
     print_name::<ZeroPacked>();
+
+    // every struct can be turned into its bytes, laid out by its attributes
+    let c = CPacked { a: 1, b: 2 };
+    io::println("CPacked: {} bytes, {}", c.byte_size(), c.to_bytes().to_hex());
+    io::println("ZeroPacked: {} bytes", std::mem::size_of::<ZeroPacked>());
+    let aligned = Aligned { a: 1, b: 2, c: 3 };
+    let data = aligned.to_bytes();
+    io::println("Aligned: {} bytes, c = {}", data.len(), data.read_u32_le(100));
+    io::println("back again: {}", std::mem::from_bytes::<Aligned>(data));
 }
