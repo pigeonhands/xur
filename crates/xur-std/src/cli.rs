@@ -1,11 +1,12 @@
 //! `std::cli`: argument parsing (pico-args) and interactive prompts (inquire).
 
 use std::ffi::OsString;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use facet::Facet;
 use xur_runtime::convert::into_value;
-use xur_runtime::{NativeObject, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{NativeObject, Record, Registry, RunResult, RuntimeError, Value, lock};
+use xur_span::Symbol;
 
 use crate::{error_text, option, result};
 
@@ -133,11 +134,118 @@ fn prompt_editor(args: &[Value]) -> RunResult<Value> {
 }
 
 // ---------------------------------------------------------------------------
+// Declarative arg parsing
+// ---------------------------------------------------------------------------
+
+fn parse_spec(cx: &dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
+    let [Value::List(specs)] = args else {
+        return Err(RuntimeError::new("`parse` takes a list of arg specs"));
+    };
+    let specs: Vec<Vec<String>> = lock(specs)
+        .iter()
+        .map(|spec| match spec {
+            Value::List(items) => {
+                let items = lock(items);
+                items
+                    .iter()
+                    .map(|v| match v {
+                        Value::Str(s) => Ok(s.to_string()),
+                        _ => Err(RuntimeError::new("spec items must be strings")),
+                    })
+                    .collect::<RunResult<Vec<String>>>()
+            }
+            _ => Err(RuntimeError::new(
+                "each spec must be a list like [\"--name\", \"-n\", \"option\"]",
+            )),
+        })
+        .collect::<RunResult<_>>()?;
+
+    let argv: Vec<OsString> = crate::xur::ARGV
+        .get()
+        .map(|values| {
+            values
+                .iter()
+                .skip(1)
+                .filter_map(|v| match v {
+                    Value::Str(s) => Some(OsString::from(&**s)),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut pargs = pico_args::Arguments::from_vec(argv);
+
+    let mut fields = Vec::new();
+    for spec in &specs {
+        let (long, short, kind) = match spec.as_slice() {
+            [long, kind] => (long.as_str(), None, kind.as_str()),
+            [long, short, kind] => (long.as_str(), Some(short.as_str()), kind.as_str()),
+            _ => {
+                return Err(RuntimeError::new(
+                    "each spec must be [long, kind] or [long, short, kind]",
+                ))
+            }
+        };
+        let field_name = long.trim_start_matches('-');
+        let field_name = field_name.replace('-', "_");
+        let keys: pico_args::Keys = match short {
+            Some(s) => [leak_str(s), leak_str(long)].into(),
+            None => leak_str(long).into(),
+        };
+        let value = match kind {
+            "flag" => Value::Bool(pargs.contains(keys)),
+            "option" => {
+                let v: Option<String> = pargs
+                    .opt_value_from_str(keys)
+                    .map_err(|e| RuntimeError::new(error_text(e)))?;
+                option(cx, v.map(|s| Value::str(&s)))
+            }
+            "value" => {
+                let v: String = pargs
+                    .value_from_str(keys)
+                    .map_err(|e| RuntimeError::new(error_text(e)))?;
+                Value::str(&v)
+            }
+            other => {
+                return Err(RuntimeError::new(format!(
+                    "unknown arg kind `{other}`, expected `flag`, `option`, or `value`"
+                )))
+            }
+        };
+        fields.push((Symbol::intern(&field_name), value));
+    }
+
+    let remaining = std::mem::replace(&mut pargs, pico_args::Arguments::from_vec(Vec::new()))
+        .finish();
+    if !remaining.is_empty() {
+        let names: Vec<_> = remaining
+            .iter()
+            .map(|os| os.to_string_lossy().into_owned())
+            .collect();
+        return Ok(result(
+            cx,
+            Err(format!("unexpected arguments: {}", names.join(", "))),
+        ));
+    }
+
+    fields.push((
+        Symbol::intern("rest"),
+        Value::list(Vec::new()),
+    ));
+
+    Ok(result(
+        cx,
+        Ok(Value::Record(Arc::new(Record::new(fields)))),
+    ))
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::cli", |module| {
+        // Imperative arg parser
         module
             .raw_function("args", |cx, args| {
                 if !args.is_empty() {
@@ -158,7 +266,8 @@ pub(crate) fn register(registry: &Registry) {
                     .unwrap_or_default();
                 let inner = pico_args::Arguments::from_vec(argv);
                 into_value(cx, Args(Mutex::new(inner)))
-            })
+            });
+        module
             .ty_borrowing::<Args>("Args")
             .raw_function("contains", |_cx, args| {
                 let [Value::Native(object), key_args @ ..] = args else {
@@ -244,8 +353,11 @@ pub(crate) fn register(registry: &Registry) {
                         Err(format!("unexpected arguments: {}", names.join(", "))),
                     ))
                 }
-            })
-            // Prompts
+            });
+        // Declarative parsing
+        module.raw_function("parse", |cx, args| parse_spec(cx, args));
+        // Prompts
+        module
             .raw_function("prompt", |_cx, args| prompt_text(args))
             .raw_function("confirm", |_cx, args| prompt_confirm(args))
             .raw_function("select", |_cx, args| prompt_select(args))

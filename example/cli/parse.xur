@@ -1,0 +1,38 @@
+// Declarative argument parsing with std::cli::parse.
+//
+// Run it:
+//
+//     xur run example/cli/parse.xur -- --name Alice --count 3 --verbose
+
+use std::io;
+use std::cli;
+
+fn main() -> Result<()> {
+    let opts = cli::parse([
+        ["--verbose", "-v", "flag"],
+        ["--name", "-n", "option"],
+        ["--count", "-c", "option"],
+    ])?;
+
+    if opts.verbose {
+        io::println("verbose mode enabled");
+    }
+
+    let name = match opts.name {
+        None => "world",
+        Some(name) => name,
+    };
+
+    let count = match opts.count {
+        None => 1,
+        Some(n) => n.parse_int()?,
+    };
+
+    let i = 0;
+    while i < count {
+        io::println("hello, {}!", name);
+        i = i + 1;
+    }
+
+    Ok(())
+}
