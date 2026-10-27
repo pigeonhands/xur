@@ -12,7 +12,8 @@ pub(crate) fn register(registry: &Registry) {
         .module("std::any")
         .raw_function("type_name", type_name)
         .raw_function("try_cast", try_cast)
-        .raw_function("record", record);
+        .raw_function("record", record)
+        .raw_function("type_name_val", type_name_val);
 }
 
 /// `type_name::<T>()`: the name of `T`.
@@ -21,6 +22,21 @@ fn type_name(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         ([ty], []) => Ok(Value::str(&ty.name)),
         _ => Err(RuntimeError::new(
             "`type_name` takes one type argument and no arguments: `type_name::<T>()`",
+        )),
+    }
+}
+
+/// `type_name_val(value)`: the type name of a value at runtime.
+fn type_name_val(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    match args {
+        [value] => {
+            let name = cx.describe_type(value);
+            let name = name.strip_prefix('`').unwrap_or(&name);
+            let name = name.strip_suffix('`').unwrap_or(name);
+            Ok(Value::str(name))
+        }
+        _ => Err(RuntimeError::new(
+            "`type_name_val` takes one argument: `type_name_val(v)`",
         )),
     }
 }
