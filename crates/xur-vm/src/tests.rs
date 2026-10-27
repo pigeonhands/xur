@@ -298,3 +298,50 @@ fn errors_in_threads_reach_the_joiner() {
     let src = "fn main() { std::thread::spawn(|| 1 / 0).join(); }";
     assert_eq!(run(src), Err("attempt to divide by zero".into()));
 }
+
+#[test]
+fn tcp_and_udp_sockets() {
+    let src = "
+        fn main() {
+            let listener = std::net::TcpListener::bind(\"127.0.0.1:0\").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = std::thread::spawn(|| {
+                let (client, _) = listener.accept().unwrap();
+                let line = client.read_line().unwrap();
+                client.write(\"echo: \" + line).unwrap();
+            });
+            let stream = std::net::TcpStream::connect(address).unwrap();
+            stream.write(\"hi\\n\").unwrap();
+            std::io::print(\"{}\", stream.read_line().unwrap());
+            server.join();
+
+            let a = std::net::UdpSocket::bind(\"127.0.0.1:0\").unwrap();
+            let b = std::net::UdpSocket::bind(\"127.0.0.1:0\").unwrap();
+            a.send_to(\"ping\", b.local_addr().unwrap()).unwrap();
+            let (text, from) = b.recv_from(64).unwrap();
+            std::io::println(\"{} {}\", text, from == a.local_addr().unwrap());
+            std::io::println(\"{}\", std::net::TcpStream::connect(\"256.0.0.1:1\").is_err());
+        }";
+    assert_eq!(run(src), Ok("echo: hi\nping true\ntrue\n".into()));
+}
+
+#[cfg(unix)]
+#[test]
+fn unix_sockets() {
+    let path = std::env::temp_dir().join(format!("xur-test-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let src = format!(
+        "fn main() {{
+            let listener = std::net::UnixListener::bind(\"{}\").unwrap();
+            let server = std::thread::spawn(|| {{ listener.accept().unwrap().write(\"over unix\\n\").unwrap(); }});
+            let stream = std::net::UnixStream::connect(\"{}\").unwrap();
+            std::io::print(\"{{}}\", stream.read_line().unwrap());
+            server.join();
+        }}",
+        path.display(),
+        path.display()
+    );
+    let output = run(&src);
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output, Ok("over unix\n".into()));
+}

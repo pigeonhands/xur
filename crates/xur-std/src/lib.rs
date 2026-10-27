@@ -10,6 +10,7 @@ mod fs;
 mod io;
 mod list;
 mod math;
+mod net;
 mod num;
 mod str;
 mod sync;
@@ -34,6 +35,7 @@ pub fn register(registry: &Registry) {
     fs::register(registry);
     thread::register(registry);
     sync::register(registry);
+    net::register(registry);
     any::register(registry);
     math::register(registry);
     list::register(registry);
