@@ -69,7 +69,8 @@ pub struct Closure {
     /// The closure's code, in whatever form the engine running it uses.
     pub code: Arc<dyn Any + Send + Sync>,
     /// The values of the variables it captured when it was created.
-    pub captures: Vec<Value>,
+    /// Wrapped in a Mutex so repeated calls can write back mutations.
+    pub captures: Mutex<Vec<Value>>,
     /// The type arguments in effect where it was created.
     pub type_args: Vec<crate::TypeRef>,
 }

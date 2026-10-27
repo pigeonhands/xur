@@ -1,6 +1,6 @@
 //! Executing bytecode.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use xur_bytecode::{Constant, DefRef, Function, InstKind, RecordFields, Reg, Terminator, TypeArg};
 
@@ -27,6 +27,9 @@ pub(crate) struct Interp<'s> {
     /// call depth each fired at, innermost first. Only recorded while the
     /// program's tracing is on; read if an error reaches `main`.
     try_trail: Vec<(usize, Span)>,
+    /// Registers from the last completed `run`, so `call_closure` can write
+    /// back mutated captures.
+    last_regs: Option<Vec<Value>>,
 }
 
 /// The registers of a running function.
@@ -58,6 +61,7 @@ impl<'s> Interp<'s> {
             native_type_args: Vec::new(),
             depth: 0,
             try_trail: Vec::new(),
+            last_regs: None,
         }
     }
 
@@ -103,12 +107,21 @@ impl<'s> Interp<'s> {
         let function = Arc::clone(&closure.code)
             .downcast::<Function>()
             .map_err(|_| RuntimeError::new("this closure was created by another engine"))?;
-        self.run(
+        let captures = lock(&closure.captures).clone();
+        let num_captures = captures.len();
+        let result = self.run(
             &function,
-            closure.captures.clone(),
+            captures,
             args,
             closure.type_args.clone(),
-        )
+        );
+        if let Some(frame_regs) = self.last_regs.take() {
+            let mut caps = lock(&closure.captures);
+            for (i, val) in frame_regs.into_iter().enumerate().take(num_captures) {
+                caps[i] = val;
+            }
+        }
+        result
     }
 
     /// The value of the constant `def`, computed on first use.
@@ -155,6 +168,7 @@ impl<'s> Interp<'s> {
         };
         let result = self.run_frame(&mut frame);
 
+        self.last_regs = Some(frame.regs);
         self.module = caller_module;
         self.depth -= 1;
         result
@@ -358,7 +372,7 @@ impl<'s> Interp<'s> {
                 let code = Arc::clone(&frame.function.closures[*function as usize]);
                 let closure = Closure {
                     code,
-                    captures: frame.values(captures),
+                    captures: Mutex::new(frame.values(captures)),
                     type_args: frame.type_args.clone(),
                 };
                 frame.set(*dst, Value::Closure(Arc::new(closure)));
