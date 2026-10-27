@@ -276,11 +276,12 @@ error: could not compile `bad.xur` due to 1 error(s)
 
 ## Workspace layout
 
-The compiler is structured after rustc, whose crates these mirror:
+Executables live in top-level folders (`xur/`); the libraries they're built
+from live in `crates/`, structured after rustc, whose crates these mirror:
 
 | Crate                 | Purpose                                                       | rustc analogue  |
 | --------------------- | ------------------------------------------------------------- | --------------- |
-| `crates/xur`          | The `xur` command-line tool                                   | `rustc_driver`  |
+| `xur`                 | The `xur` command-line tool                                   | `rustc_driver`  |
 | `crates/xur-span`     | Source map, spans and interned symbols                        | `rustc_span`    |
 | `crates/xur-errors`   | Diagnostics and their rendering                               | `rustc_errors`  |
 | `crates/xur-ast`      | Syntax tree types and visitor                                 | `rustc_ast`     |

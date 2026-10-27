@@ -1,7 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
-default-members = ["crates/xur"]
+# Executables live in top-level folders; their libraries in crates/.
+members = ["xur", "crates/*"]
+default-members = ["xur"]
 
 [workspace.package]
 version = "0.1.1"
