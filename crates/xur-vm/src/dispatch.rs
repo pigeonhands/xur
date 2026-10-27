@@ -124,7 +124,7 @@ impl Interp<'_> {
 
     /// A copy of the struct, record or tuple `base` with `field` set to
     /// `value`.
-    pub(crate) fn set_field(&self, base: &Value, field: Symbol, mut value: Value) -> RunResult<Value> {
+    pub(crate) fn set_field(&self, base: &Value, field: Symbol, value: Value) -> RunResult<Value> {
         let missing = || {
             RuntimeError::new(format!(
                 "no field `{field}` on {}",
@@ -163,13 +163,14 @@ impl Interp<'_> {
                 .filter(|&i| i < adt.fields.len()),
         }
         .ok_or_else(missing)?;
-        // Check the new value against the field's declared type, as a struct
-        // literal checks the fields it is built with.
-        if let Some(ty) = self.shared.field_type(adt.ctor, index) {
-            if let Some(coerced) = self.check_type(&value, &ty)? {
-                value = coerced;
+        let value = if let Some(ty) = self.shared.field_type(adt.ctor, index) {
+            match self.strict_check_type(&value, &ty)? {
+                Some(coerced) => coerced,
+                None => value,
             }
-        }
+        } else {
+            value
+        };
         let mut fields = adt.fields.clone();
         fields[index] = value;
         Ok(Value::adt(adt.ctor, fields))

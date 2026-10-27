@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use xur_bytecode::{Constant, DefRef, Function, InstKind, RecordFields, Reg, Terminator, TypeArg};
 
 use crate::records::RecordArgs;
-use xur_resolve::{DefId, DefKind, ModuleIdx};
-use xur_runtime::{Closure, Range, RunResult, RuntimeError, TypeRef, Value, ValueIter, lock};
+use xur_resolve::{DefId, DefKind, ModuleIdx, Res};
+use xur_runtime::{Closure, Range, Record, RunResult, RuntimeError, TypeRef, Value, ValueIter, lock};
 use xur_span::Span;
 
 use crate::Shared;
@@ -150,9 +150,20 @@ impl<'s> Interp<'s> {
             )));
         }
         if !function.type_params.is_empty() {
-            let needs_inference = type_args.len() < function.type_params.len()
-                || type_args.iter().any(|t| t.def.is_none());
-            if needs_inference {
+            for (i, required) in function.type_param_required.iter().enumerate() {
+                if *required {
+                    let is_concrete = type_args
+                        .get(i)
+                        .is_some_and(|t| t.def.is_some());
+                    if !is_concrete {
+                        return Err(RuntimeError::new(format!(
+                            "`{}` requires an explicit type for `{}`",
+                            function.name, function.type_params[i],
+                        )));
+                    }
+                }
+            }
+            if type_args.len() < function.type_params.len() {
                 self.infer_type_args(function, &args, &mut type_args);
             }
             self.check_generic_args(function, &mut args, &type_args)?;
@@ -192,7 +203,10 @@ impl<'s> Interp<'s> {
         for (i, arg) in args.iter().enumerate() {
             if let Some(tp_index) = function.param_type_params.get(i).copied().flatten() {
                 let idx = tp_index as usize;
-                if idx < type_args.len() && type_args[idx].def.is_none() {
+                if idx < type_args.len()
+                    && type_args[idx].def.is_none()
+                    && !type_args[idx].is_record()
+                {
                     if let Some(tr) = self.type_ref_of(arg) {
                         type_args[idx] = tr;
                     }
@@ -213,6 +227,10 @@ impl<'s> Interp<'s> {
             };
             let idx = tp_index as usize;
             let Some(expected) = type_args.get(idx) else { continue };
+            if expected.is_record() {
+                *arg = self.value_to_record(arg)?;
+                continue;
+            }
             let Some(expected_def) = expected.def else { continue };
             let program = self.shared.program();
             let name = program.resolutions().def_path(expected_def);
@@ -224,6 +242,24 @@ impl<'s> Interp<'s> {
             }
         }
         Ok(())
+    }
+
+    fn value_to_record(&self, value: &Value) -> RunResult<Value> {
+        match value {
+            Value::Record(_) => Ok(value.clone()),
+            Value::Adt(adt) => {
+                let names = self.shared.field_names(adt.ctor).unwrap_or_default();
+                let fields: Vec<_> = names
+                    .into_iter()
+                    .zip(adt.fields.iter().cloned())
+                    .collect();
+                Ok(Value::Record(Arc::new(Record::new(fields))))
+            }
+            _ => Err(RuntimeError::new(format!(
+                "cannot coerce {} to a record",
+                self.describe_type(value),
+            ))),
+        }
     }
 
     fn type_ref_of(&self, value: &Value) -> Option<TypeRef> {
@@ -254,6 +290,7 @@ impl<'s> Interp<'s> {
             _ => None,
         }
     }
+
 
     fn run_frame(&mut self, frame: &mut Frame<'_>) -> RunResult<Value> {
         let function = frame.function;
@@ -370,9 +407,52 @@ impl<'s> Interp<'s> {
                             .get(*index as usize)
                             .cloned()
                             .unwrap_or_else(|| TypeRef::named("_")),
+                        TypeArg::Record => TypeRef::record(),
                     })
                     .collect();
                 let value = self.call_value(&callee, args, type_args, span)?;
+                frame.set(*dst, value);
+            }
+            InstKind::TyParamCall {
+                dst,
+                type_param,
+                method,
+                args,
+            } => {
+                let type_arg = frame.type_args.get(*type_param as usize);
+                let args = frame.values(args);
+                let value = if type_arg.is_some_and(|t| t.is_record()) {
+                    if method.as_str() == "new" {
+                        Value::Record(Arc::new(Record::new(Vec::new())))
+                    } else {
+                        return Err(RuntimeError::new(format!(
+                            "cannot call `{method}` on `@` (record mode only supports `new`)",
+                        )));
+                    }
+                } else {
+                    match type_arg.and_then(|t| t.def) {
+                        Some(ty_def) => {
+                            let program = self.shared.program();
+                            let resolutions = program.resolutions();
+                            let callee = match resolutions.assoc_fn(ty_def, *method) {
+                                Some(Res::Def(DefKind::Fn, def)) => Value::Fn(def),
+                                Some(Res::Def(DefKind::NativeFn(id), _)) => Value::NativeFn(id),
+                                _ => {
+                                    let ty_name = resolutions.def_path(ty_def);
+                                    return Err(RuntimeError::new(format!(
+                                        "no function `{method}` on `{ty_name}`",
+                                    )));
+                                }
+                            };
+                            self.call_value(&callee, args, Vec::new(), span)?
+                        }
+                        None => {
+                            return Err(RuntimeError::new(format!(
+                                "cannot call `{method}` on an unresolved type parameter",
+                            )));
+                        }
+                    }
+                };
                 frame.set(*dst, value);
             }
             InstKind::MethodCall {
@@ -515,8 +595,13 @@ impl<'s> Interp<'s> {
                     element.ok_or_else(|| RuntimeError::new(format!("no field {index}")))?;
                 frame.set(*dst, element);
             }
-            InstKind::CheckType { value, ty } => {
-                if let Some(coerced) = self.check_type(frame.get(*value), ty)? {
+            InstKind::CheckType { value, ty, coerce } => {
+                let result = if *coerce {
+                    self.check_type(frame.get(*value), ty)?
+                } else {
+                    self.strict_check_type(frame.get(*value), ty)?
+                };
+                if let Some(coerced) = result {
                     frame.set(*value, coerced);
                 }
             }

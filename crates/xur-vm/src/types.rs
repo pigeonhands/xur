@@ -30,6 +30,24 @@ impl Interp<'_> {
         Err(RuntimeError::new(format!("expected `{ty}`, found {found}")))
     }
 
+    /// Type check that allows Record → Adt coercion but not Adt → Adt.
+    /// Use `check_type` (via `as`) for full coercion including Adt → Adt.
+    pub(crate) fn strict_check_type(&self, value: &Value, ty: &RtType) -> RunResult<Option<Value>> {
+        if self.has_type(value, ty) {
+            return Ok(None);
+        }
+        if matches!(value, Value::Record(r) if r.ty.is_none()) {
+            if let Some(coerced) = self.try_coerce(value, ty)? {
+                return Ok(Some(coerced));
+            }
+        }
+        let found = match value {
+            Value::Int(i) if matches!(ty, RtType::Int { .. }) => i.to_string(),
+            other => self.describe_type(other),
+        };
+        Err(RuntimeError::new(format!("expected `{ty}`, found {found}")))
+    }
+
     /// Tries to coerce `value` into a value matching `ty`.
     ///
     /// Record → Adt: an untyped record whose fields match a struct's

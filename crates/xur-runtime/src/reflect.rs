@@ -23,6 +23,19 @@ impl TypeRef {
             def: None,
         }
     }
+
+    /// `@`: record mode — values are coerced to records, and `T::new()`
+    /// creates an empty record.
+    pub fn record() -> Self {
+        Self {
+            name: "@".to_owned(),
+            def: None,
+        }
+    }
+
+    pub fn is_record(&self) -> bool {
+        self.name == "@" && self.def.is_none()
+    }
 }
 
 /// A struct or enum variant defined in Xur.
