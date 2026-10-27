@@ -36,6 +36,7 @@ impl Lowerer<'_> {
             },
             ExprKind::Path(path) => self.path(path),
             ExprKind::Paren(inner) => self.expr(inner),
+            ExprKind::Tuple(items) if items.is_empty() => self.unit(span),
             ExprKind::Tuple(items) => {
                 let items = self.exprs(items);
                 let dst = self.new_reg();

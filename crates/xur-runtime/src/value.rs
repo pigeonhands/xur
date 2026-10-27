@@ -211,7 +211,11 @@ impl Value {
     }
 
     pub fn tuple(items: Vec<Value>) -> Self {
-        Self::Tuple(items.into())
+        if items.is_empty() {
+            Self::Unit
+        } else {
+            Self::Tuple(items.into())
+        }
     }
 
     pub fn adt(ctor: DefId, fields: Vec<Value>) -> Self {
@@ -323,6 +327,6 @@ mod tests {
         );
         assert_ne!(Value::Int(1), Value::Float(1.0));
         assert_eq!(Value::str("a"), Value::str("a"));
-        assert_ne!(Value::tuple(vec![]), Value::Unit);
+        assert_eq!(Value::tuple(vec![]), Value::Unit);
     }
 }

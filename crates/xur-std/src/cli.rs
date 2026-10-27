@@ -342,7 +342,7 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 let remaining = with_args(object, |a| drain_args(&mut a.0.lock().unwrap()))?;
                 if remaining.is_empty() {
-                    Ok(result(cx, Ok(Value::tuple(vec![]))))
+                    Ok(result(cx, Ok(Value::Unit)))
                 } else {
                     let names: Vec<_> = remaining
                         .iter()

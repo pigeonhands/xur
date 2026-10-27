@@ -581,7 +581,11 @@ impl<'s> Interp<'s> {
                 frame.set(*dst, Value::Bool(is));
             }
             InstKind::IsTuple { dst, value, len } => {
-                let is = matches!(frame.get(*value), Value::Tuple(items) if items.len() == *len as usize);
+                let is = match (frame.get(*value), *len) {
+                    (Value::Unit, 0) => true,
+                    (Value::Tuple(items), n) => items.len() == n as usize,
+                    _ => false,
+                };
                 frame.set(*dst, Value::Bool(is));
             }
             InstKind::IsList {
