@@ -14,6 +14,7 @@ repository = "https://github.com/pigeonhands/xur"
 xur-ast = { path = "crates/xur-ast" }
 xur-bytecode = { path = "crates/xur-bytecode" }
 xur-errors = { path = "crates/xur-errors" }
+xur-jit = { path = "crates/xur-jit" }
 xur-parser = { path = "crates/xur-parser" }
 xur-resolve = { path = "crates/xur-resolve" }
 xur-runtime = { path = "crates/xur-runtime" }
@@ -27,3 +28,5 @@ anyhow = "1.0"
 ariadne = "0.5"
 clap = { version = "4.5", features = ["derive"] }
 facet = { version = "=0.50.0-rc.7", features = ["reflect"] }
+cranelift-jit = "0.137"
+cranelift-module = "0.137"

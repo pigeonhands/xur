@@ -1,0 +1,20 @@
+[package]
+name = "xur-jit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xur_jit"
+path = "src/lib.rs"
+
+[dependencies]
+xur-bytecode.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+xur-resolve.workspace = true
+xur-span.workspace = true
