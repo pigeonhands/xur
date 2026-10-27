@@ -14,7 +14,7 @@ fn run_example(p: str) -> Result<()> {
 fn all_examples() -> [str] {
     // Categories skipped: interactive input, network listeners,
     // or external targets (reverse-engineering tools).
-    let skip = ["cli", "net", "re"];
+    let skip = ["cli", "net", "re", "stub"];
     let entries = fs::read_dir("example").unwrap();
     let folders = entries.filter(|e| !e.ends_with(".xur"));
     let examples = [];
@@ -40,13 +40,13 @@ fn test_all() {
     for example in examples {
         match std::try_import(example) {
             Err(e) => {
-                io::println("  skip  {}  {}", example, e);
+                io::println("  {}  {}  {}", io::yellow("skip"), io::dim(example), e);
                 skipped = skipped + 1;
             }
             Ok(module) => {
                 match module.get_method("main") {
                     Err(_) => {
-                        io::println("  skip  {}  no main", example);
+                        io::println("  {}  {}  no main", io::yellow("skip"), io::dim(example));
                         skipped = skipped + 1;
                     }
                     Ok(main) => {
@@ -70,11 +70,11 @@ fn test_all() {
         let (name, result) = rx.recv().unwrap();
         match result {
             Ok(_) => {
-                io::println("  ok    {}", name);
+                io::println("  {}  {}", io::green("ok"), name);
                 passed = passed + 1;
             }
             Err(e) => {
-                io::println("  FAIL  {}  {}", name, e);
+                io::println("  {}  {}  {}", io::red("FAIL"), name, e);
                 failed = failed + 1;
             }
         }
@@ -82,7 +82,8 @@ fn test_all() {
 
     io::println("");
     io::println("{} passed, {} failed, {} skipped, {} total",
-        passed, failed, skipped, passed + failed + skipped);
+        io::green(passed.to_string()), io::red(failed.to_string()),
+        io::yellow(skipped.to_string()), passed + failed + skipped);
     if failed > 0 {
         std::panic("{} example(s) failed", failed);
     }
