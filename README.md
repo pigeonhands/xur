@@ -1,12 +1,27 @@
 # Xur
 
 Xur is a small, expression-oriented programming language with Rust-like
-syntax, modules that are ordinary values, and explicit control over data
-layout.
+syntax. Modules are ordinary values, types are checked at runtime where you
+write them, and anything written in Rust can be made available to Xur
+through [facet](https://facet.rs) reflection.
 
-> **Status:** early development. Programs can be lexed, parsed and have
-> their names resolved across modules (`xur debug tokens`, `xur debug ast`,
-> `xur debug resolve`); type checking and the runtime are still to come.
+> **Status:** early development. Programs run: they are parsed, have their
+> names resolved across modules, are compiled to bytecode and interpreted.
+> A static type checker and a JIT are future work.
+
+```console
+$ cargo run -- run example/main.xur
+Hello, World
+...
+```
+
+There are complete programs in [`example/`](example):
+
+| Example                                    | Shows                                             |
+| ------------------------------------------ | ------------------------------------------------- |
+| [`main.xur`](example/main.xur)             | most of the language, using `math.xur`            |
+| [`channels.xur`](example/channels.xur)     | threads sending results back over a channel       |
+| [`echo_server.xur`](example/echo_server.xur) | a TCP echo server, to try with `nc`             |
 
 ## A taste of Xur
 
@@ -31,6 +46,20 @@ let modules = [math, std::import(plugin_path)];
 for m in modules {
     io::println("2 + 3 = {}", m.add(2, 3));
 }
+```
+
+### Types are checked where you write them
+
+Xur is dynamically checked. A type you write is enforced when a value
+arrives; leave it out, or write `_` or a type parameter, and anything goes.
+
+```rust
+fn scale(x: f64, by: u8) -> f64 { x * by.to_float() }
+
+scale(2.0, 3);    // 6
+scale(2.0, 300);  // runtime error: expected `u8`, found 300
+
+fn first(items: _) { items[0] } // no checks at all
 ```
 
 ### Functions and generics
@@ -75,15 +104,10 @@ impl Shape {
 
 ### Errors are values: `Result` and `?`
 
-`Result` is an ordinary enum, `enum Result<T, E> { Ok(T) Err(E) }`. The std
-prelude provides it.
+`Option` and `Result` are ordinary enums, with their methods (`unwrap`,
+`map`, `is_ok`, ...) written in Xur in the [prelude](crates/xur-resolve/src/prelude.xur).
 
 ```rust
-pub enum MathError {
-    DivideByZero
-    Overflow
-}
-
 pub fn div(a: u32, b: u32) -> Result<u32, MathError> {
     if b == 0 {
         Err(MathError::DivideByZero)
@@ -105,16 +129,31 @@ match average(10, 0) {
 }
 ```
 
-### Closures
+### Lists and closures
+
+Lists are shared and change in place, like Python's. Closures capture the
+values of the variables they use.
 
 ```rust
-let double = |x: u32| x * 2;
+let xs = [1, 2, 3];
+xs.push(4);
+xs[0] = 10;
 
 let offset = 10;
-let shift = |x| {
-    let y = double(x);
-    y + offset // captures `offset`
-};
+let shift = |x| x * 2 + offset;
+io::println("{} {}", xs, shift(4)); // [10, 2, 3, 4] 18
+```
+
+### Threads, channels and sockets
+
+```rust
+let (sender, receiver) = std::sync::channel();
+std::thread::spawn(|| sender.send(6 * 7).unwrap());
+io::println("{}", receiver.recv().unwrap()); // 42
+
+let listener = std::net::TcpListener::bind("127.0.0.1:7878").unwrap();
+let (client, peer) = listener.accept().unwrap();
+client.write(client.read_line().unwrap()).unwrap();
 ```
 
 ### Control over memory layout
@@ -123,12 +162,6 @@ let shift = |x| {
 #[repr(C)] // C ABI alignment & padding
 struct CPacked {
     a: usize
-    b: u32
-}
-
-#[repr(packed)] // no padding, 1-byte alignment
-struct ZeroPacked {
-    a: u32
     b: u32
 }
 
@@ -141,59 +174,93 @@ struct Aligned {
 }
 ```
 
-There are complete programs in [`example/`](example).
+## The standard library
 
-## Using the CLI
+`std` is written in Rust and registered like any other native module (see
+below). Large modules are lazy: they are only built if a program uses them.
 
-`xur debug` shows the output of individual compiler stages. `tokens` prints
-what the lexer produces:
+| Module        | Contents                                                                 |
+| ------------- | ------------------------------------------------------------------------ |
+| `std`         | `import(path)`, `panic(format, ...)`                                     |
+| `std::io`     | `print`, `println`, with `{}` placeholders                               |
+| `std::fs`     | `read_to_string`, `write`, `append`, `exists`, `remove`, `read_dir`, `File` |
+| `std::net`    | `TcpListener`, `TcpStream`, `UdpSocket`, `UnixListener`, `UnixStream`    |
+| `std::thread` | `spawn`, `sleep`, `JoinHandle::join`                                     |
+| `std::sync`   | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
+| `std::math`   | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
+| `std::any`    | `type_name::<T>()`                                                       |
 
-```console
-$ cargo run -- debug tokens example/math.xur
-1:1      pub        pub
-1:5      enum       enum
-1:10     <ident>    MathError
-1:20     {          {
-...
+Built-in values have methods too: lists (`len`, `push`, `pop`, `get`,
+`insert`, `remove`, `contains`, `extend`, `join`, ...), strings (`len`,
+`split`, `trim`, `to_upper`, `parse_int`, ...) and numbers (`abs`, `pow`,
+`sqrt`, `round`, ...).
+
+## Extending Xur with Rust
+
+Any Rust function whose argument and return types implement `Facet` can be
+registered, and any `#[derive(Facet)]` type becomes a Xur type whose values
+are the Rust values themselves:
+
+```rust
+use facet::Facet;
+
+#[derive(Facet, Clone)]
+struct Point { x: f64, y: f64 }
+
+let registry = xur_std::registry();
+registry
+    .module("geo")
+    .function("distance", |a: Point, b: Point| (a.x - b.x).hypot(a.y - b.y))
+    .ty::<Point>("Point")
+    .function("new", |x: f64, y: f64| Point { x, y }) // Point::new(1.0, 2.0)
+    .method("norm", |p: &Point| p.x.hypot(p.y)) //     p.norm()
+    .method_mut("scale", |p: &mut Point, k: f64| { p.x *= k; p.y *= k }); // in place
 ```
 
-`ast` prints the syntax tree (spans are byte ranges):
+Arguments are converted from Xur values (range-checking integers) and
+results back: `Option` and `Result` become the prelude's enums, `Vec`s
+become lists, and so on. A module can be registered lazily with
+`registry.lazy_module(path, |m| ...)`, and functions that need the running
+program, like `std::import`, take a `Context` instead.
 
-```console
-$ cargo run -- debug ast add.xur
-Module {
-    items: [
-        Item {
-            attrs: [],
-            vis: Public(
-                0..3,
-            ),
-            kind: Fn(
-                Fn {
-                    ident: "add"@7..10,
-...
+## How it works
+
+```text
+source ─▶ lexer ─▶ parser ─▶ AST ─▶ name resolution ─▶ bytecode ─▶ VM
+                                    (follows imports)   (lowered on first call)
 ```
 
-`resolve` loads the whole program, following `std::import`, and shows what
-every name refers to:
+The bytecode is a control-flow graph of basic blocks over virtual
+registers, shaped like Cranelift's IR so that a JIT can later compile the
+same code the interpreter runs; see [ARCHITECTURE.md](ARCHITECTURE.md) for
+the whole journey. `xur debug` shows each stage:
 
 ```console
-$ cargo run -- debug resolve example/main.xur
-...
-example/main.xur:50:9  io                           new local
-example/main.xur:50:14 std::io                      module std::io
-example/main.xur:52:5  io::println                  builtin function std::io::println
-...
-example/main.xur:69:13 math::MathError::DivideByZero variant math::MathError::DivideByZero
-...
+$ cargo run -- debug bytecode example/math.xur
+fn div (captures: 0, params: 2, registers: 9)
+  bb0:
+    check r0: u32
+    check r1: u32
+    r2 = 0
+    r3 = r1 == r2
+    branch r3 ? bb1 : bb2
+  ...
 ```
 
-Errors are shown as annotated source snippets and the command exits
-non-zero. Like rustc, the parser recovers from errors, so every mistake in a
-file is reported in one run:
+| Command                    | Shows                                                    |
+| -------------------------- | -------------------------------------------------------- |
+| `xur run <file>`           | runs the program's `main`                                |
+| `xur debug tokens <file>`  | the tokens of one file                                   |
+| `xur debug ast <file>`     | the syntax tree of one file                              |
+| `xur debug resolve <file>` | what every name in the program refers to                 |
+| `xur debug bytecode <file>`| the bytecode of every function in one file               |
+
+Errors, at compile time or at runtime, are shown as annotated source
+snippets. Like rustc, the parser and resolver recover from errors, so every
+mistake in a file is reported in one run:
 
 ```console
-$ cargo run -- debug ast bad.xur
+$ cargo run -- run bad.xur
 Error: expected one of `(`, `.`, `;`, `?`, `[`, or an operator, found keyword `let`
    ╭─[ bad.xur:2:14 ]
    │
@@ -204,22 +271,26 @@ Error: expected one of `(`, `.`, `;`, `?`, `[`, or an operator, found keyword `l
    │     ─┬─
    │      ╰─── unexpected token
 ───╯
-error: could not parse `bad.xur` due to 1 error(s)
+error: could not compile `bad.xur` due to 1 error(s)
 ```
 
 ## Workspace layout
 
 The compiler is structured after rustc, whose crates these mirror:
 
-| Crate                 | Purpose                                                  | rustc analogue  |
-| --------------------- | -------------------------------------------------------- | --------------- |
-| `crates/xur`          | The `xur` command-line tool                              | `rustc_driver`  |
-| `crates/xur-parser`   | Lexer and recursive-descent parser                       | `rustc_parse`   |
-| `crates/xur-resolve`  | Module loading (`std::import`) and name resolution       | `rustc_resolve` |
-| `crates/xur-ast`      | Syntax tree types                                        | `rustc_ast`     |
-| `crates/xur-errors`   | Diagnostics and their rendering                          | `rustc_errors`  |
-| `crates/xur-span`     | Source map, spans and interned symbols                   | `rustc_span`    |
-| `crates/xur-runtime`  | Runtime (planned)                                        |                 |
+| Crate                 | Purpose                                                       | rustc analogue  |
+| --------------------- | ------------------------------------------------------------- | --------------- |
+| `crates/xur`          | The `xur` command-line tool                                   | `rustc_driver`  |
+| `crates/xur-span`     | Source map, spans and interned symbols                        | `rustc_span`    |
+| `crates/xur-errors`   | Diagnostics and their rendering                               | `rustc_errors`  |
+| `crates/xur-ast`      | Syntax tree types and visitor                                 | `rustc_ast`     |
+| `crates/xur-parser`   | Lexer and recursive-descent parser                            | `rustc_parse`   |
+| `crates/xur-resolve`  | Module loading, name resolution and the prelude               | `rustc_resolve` |
+| `crates/xur-bytecode` | The register-based bytecode and lowering to it                | `rustc_mir_build` |
+| `crates/xur-runtime`  | Values, the native registry and facet conversions             |                 |
+| `crates/xur-vm`       | The bytecode interpreter                                      |                 |
+| `crates/xur-jit`      | A Cranelift JIT for the bytecode (not implemented yet)        | `rustc_codegen_cranelift` |
+| `crates/xur-std`      | The standard library, as native modules                       |                 |
 
 ## Development
 
