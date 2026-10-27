@@ -38,8 +38,14 @@ impl<'src> Lexer<'src> {
     }
 
     fn with_offset(src: &'src str, offset: usize) -> Self {
+        let mut cursor = Cursor::new(src);
+        if src.starts_with("#!") {
+            while cursor.peek().is_some_and(|c| c != '\n') {
+                cursor.bump();
+            }
+        }
         Self {
-            cursor: Cursor::new(src),
+            cursor,
             offset,
             errors: Vec::new(),
         }

@@ -1,3 +1,4 @@
+#!/usr/bin/env -S cargo run --
 use std::io;
 use std::fs;
 use std::cli;
