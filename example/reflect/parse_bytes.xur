@@ -1,0 +1,75 @@
+// Constructing a binary layout at runtime and parsing raw bytes.
+//
+// Run it:
+//
+//     xur run example/reflect/parse_bytes.xur
+//
+// This builds a layout for a simple network packet header by hand
+// (no struct needed), writes a packet to bytes, then parses it back.
+
+use std::io;
+use std::reflect;
+
+fn main() -> Result<()> {
+    // Build a layout at runtime — no struct definition needed.
+    // This is useful when the format comes from a spec or config file.
+    let header = reflect::Layout::new("PacketHeader")
+        .big_endian()
+        .field("version", "u8")
+        .field("type", "u8")
+        .field("length", "u16")
+        .field("sequence", "u32")
+        .bytes("tag", 4)
+        .field("checksum", "u16");
+
+    io::println("Layout: {}", header);
+    io::println("Size:   {} bytes", header.size());
+    io::println("");
+
+    // Show each field's offset and type.
+    io::println("Fields:");
+    for f in header.fields() {
+        io::println("  +{}  {}  {}", f.offset, f.name, f.ty);
+    }
+    io::println("");
+
+    // Build a packet from a record and serialize it.
+    let packet = @{
+        version: 1,
+        type: 0x10,
+        length: 64,
+        sequence: 1001,
+        tag: b"PING",
+        checksum: 0xabcd
+    };
+    let data = header.to_bytes(packet);
+    io::println("Encoded: {}", data.to_hex());
+
+    // Parse it back.
+    let parsed = header.from_bytes(data);
+    io::println("Decoded:");
+    io::println("  version  = {}", parsed.version);
+    io::println("  type     = {}", parsed.type);
+    io::println("  length   = {}", parsed.length);
+    io::println("  sequence = {}", parsed.sequence);
+    io::println("  tag      = {}", parsed.tag);
+    io::println("  checksum = {}", parsed.checksum);
+    io::println("");
+
+    // You can also read/write at offsets into a larger buffer.
+    let buffer = std::bytes::zeroed(header.size() * 3);
+
+    // Write two packets at different offsets.
+    let pkt1 = @{ version: 1, type: 0x01, length: 32, sequence: 1, tag: b"HELO", checksum: 0x1111 };
+    let pkt2 = @{ version: 1, type: 0x02, length: 48, sequence: 2, tag: b"DATA", checksum: 0x2222 };
+    header.write(buffer, 0, pkt1);
+    header.write(buffer, header.size(), pkt2);
+
+    io::println("Buffer with two packets: {}", buffer.to_hex());
+
+    // Read the second packet back.
+    let second = header.read(buffer, header.size());
+    io::println("Second packet: type={}, tag={}", second.type, second.tag);
+
+    Ok(())
+}
