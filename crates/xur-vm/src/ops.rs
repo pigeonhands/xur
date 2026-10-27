@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 
 use xur_ast::{BinOpKind, UnOp};
-use xur_runtime::{Range, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{MapKey, Range, RunResult, RuntimeError, Value, lock};
 
 use crate::interp::Interp;
 
@@ -138,6 +138,12 @@ pub(crate) fn index(base: &Value, index: &Value) -> RunResult<Value> {
             let text: String = chars[slice(range, chars.len())?].iter().collect();
             Ok(Value::str(&text))
         }
+        (Value::Map(map), key) => {
+            let k = MapKey(key.clone());
+            map.get(&k)
+                .map(|v| v.value().clone())
+                .ok_or_else(|| RuntimeError::new(format!("key not found: {}", index.kind())))
+        }
         _ => Err(RuntimeError::new(format!(
             "cannot index {} with {}",
             base.kind(),
@@ -168,6 +174,10 @@ pub(crate) fn set_index(base: &Value, index: &Value, value: Value) -> RunResult<
             let mut bytes = lock(bytes);
             let i = position(*i, bytes.len())?;
             bytes[i] = byte;
+            Ok(())
+        }
+        (Value::Map(map), key) => {
+            map.insert(MapKey(key.clone()), value);
             Ok(())
         }
         _ => Err(RuntimeError::new(format!(

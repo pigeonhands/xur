@@ -43,6 +43,7 @@ iced-x86 = "1.21"
 serde = "1"
 serde_json = "1"
 comfy-table = { version = "7.1", features = ["custom_styling"] }
+dashmap = "6.1"
 pico-args = "0.5"
 inquire = { version = "0.9", features = ["editor"] }
 # cranelift-jit = "0.137"

@@ -87,6 +87,7 @@ fn can_begin_expr(kind: TokenKind<'_>) -> bool {
         | TokenKind::LParen
         | TokenKind::LBracket
         | TokenKind::LBrace
+        | TokenKind::Hash
         | TokenKind::Minus
         | TokenKind::Bang
         | TokenKind::Pipe
@@ -386,6 +387,11 @@ impl Parser<'_> {
                 self.bump();
                 ExprKind::List(self.parse_delimited(TokenKind::RBracket, Self::parse_expr)?)
             }
+            TokenKind::Hash if self.look_ahead(1) == TokenKind::LBrace => {
+                self.bump(); // `#`
+                self.bump(); // `{`
+                self.parse_map_literal()?
+            }
             TokenKind::LBrace => ExprKind::Block(Box::new(self.parse_block()?)),
             TokenKind::At if self.look_ahead(1) == TokenKind::LBrace => {
                 self.bump(); // `@`
@@ -499,6 +505,22 @@ impl Parser<'_> {
             ..self.restrictions
         };
         self.parse_expr_res(restrictions)
+    }
+
+    /// `#{k: v, k2: v2}`, after the `#{`.
+    fn parse_map_literal(&mut self) -> PResult<ExprKind> {
+        let mut entries = Vec::new();
+        while self.token.kind != TokenKind::RBrace {
+            let key = self.parse_expr()?;
+            self.expect(TokenKind::Colon)?;
+            let value = self.parse_expr()?;
+            entries.push((key, value));
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBrace)?;
+        Ok(ExprKind::Map(entries))
     }
 
     /// `()`, `(expr)` or `(a, b, ...)`.

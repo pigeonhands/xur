@@ -14,6 +14,7 @@ mod fs;
 mod io;
 mod json;
 mod list;
+mod map;
 mod math;
 mod mem;
 mod net;
@@ -63,6 +64,7 @@ pub fn register(registry: &Registry) {
     math::register(registry);
     mem::register(registry);
     list::register(registry);
+    map::register(registry);
     bytes::register(registry);
     str::register(registry);
     num::register(registry);

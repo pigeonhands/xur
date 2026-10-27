@@ -49,6 +49,8 @@ pub enum ExprKind {
     Tuple(Vec<Expr>),
     /// `[a, b, c]`
     List(Vec<Expr>),
+    /// `#{k: v, k2: v2}`
+    Map(Vec<(Expr, Expr)>),
     /// `-x`, `!x`
     Unary(UnOp, Box<Expr>),
     /// `a + b`

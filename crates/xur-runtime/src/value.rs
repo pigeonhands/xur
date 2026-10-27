@@ -9,7 +9,10 @@
 
 use std::any::Any;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+use dashmap::DashMap;
 
 use xur_resolve::{DefId, NativeFnId, NativeTypeId, RtType};
 use xur_span::Symbol;
@@ -30,6 +33,8 @@ pub enum Value {
     Str(Arc<str>),
     Tuple(Arc<[Value]>),
     List(Arc<Mutex<Vec<Value>>>),
+    /// `#{k: v}`, shared and mutable like a list.
+    Map(Arc<DashMap<MapKey, Value>>),
     /// A byte buffer, shared and mutable like a list (Python's `bytearray`).
     Bytes(Arc<Mutex<Vec<u8>>>),
     /// An instance of a struct or enum variant defined in Xur.
@@ -208,6 +213,14 @@ impl Value {
         Self::List(Arc::new(Mutex::new(items)))
     }
 
+    pub fn map(entries: Vec<(Value, Value)>) -> Self {
+        let map = DashMap::new();
+        for (k, v) in entries {
+            map.insert(MapKey(k), v);
+        }
+        Self::Map(Arc::new(map))
+    }
+
     pub fn bytes(bytes: Vec<u8>) -> Self {
         Self::Bytes(Arc::new(Mutex::new(bytes)))
     }
@@ -234,6 +247,7 @@ impl Value {
             Self::Str(_) => "string",
             Self::Tuple(_) => "tuple",
             Self::List(_) => "list",
+            Self::Map(_) => "map",
             Self::Bytes(_) => "bytes",
             Self::Adt(_) => "struct or enum",
             Self::Native(_) => "native object",
@@ -258,6 +272,7 @@ pub enum BuiltinType {
     Str,
     Tuple,
     List,
+    Map,
     Bytes,
     Range,
     /// Every struct and enum variant defined in Xur, for methods they all
@@ -275,6 +290,7 @@ impl Value {
             Self::Str(_) => BuiltinType::Str,
             Self::Tuple(_) => BuiltinType::Tuple,
             Self::List(_) => BuiltinType::List,
+            Self::Map(_) => BuiltinType::Map,
             Self::Bytes(_) => BuiltinType::Bytes,
             Self::Range(_) => BuiltinType::Range,
             Self::Adt(_) => BuiltinType::Struct,
@@ -295,6 +311,14 @@ impl PartialEq for Value {
             (Self::Str(a), Self::Str(b)) => a == b,
             (Self::Tuple(a), Self::Tuple(b)) => a == b,
             (Self::List(a), Self::List(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
+            (Self::Map(a), Self::Map(b)) => {
+                Arc::ptr_eq(a, b)
+                    || (a.len() == b.len()
+                        && a.iter().all(|entry| {
+                            b.get(entry.key())
+                                .is_some_and(|v| *v.value() == *entry.value())
+                        }))
+            }
             (Self::Bytes(a), Self::Bytes(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
             (Self::Adt(a), Self::Adt(b)) => a.ctor == b.ctor && a.fields == b.fields,
             // Native objects are compared by identity here; the interpreter
@@ -309,6 +333,33 @@ impl PartialEq for Value {
             (Self::Closure(a), Self::Closure(b)) => Arc::ptr_eq(a, b),
             (Self::Iterator(a), Self::Iterator(b)) => Arc::ptr_eq(a, b),
             _ => false,
+        }
+    }
+}
+
+/// A value used as a map key. Only hashable types (str, int, bool) are
+/// accepted; unhashable ones (list, map, etc.) will panic if used as keys.
+#[derive(Debug, Clone)]
+pub struct MapKey(pub Value);
+
+impl PartialEq for MapKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for MapKey {}
+
+impl Hash for MapKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(&self.0).hash(state);
+        match &self.0 {
+            Value::Unit => {}
+            Value::Bool(b) => b.hash(state),
+            Value::Int(i) => i.hash(state),
+            Value::Str(s) => s.hash(state),
+            Value::Adt(adt) if adt.fields.is_empty() => adt.ctor.hash(state),
+            other => panic!("{} is not hashable", other.kind()),
         }
     }
 }

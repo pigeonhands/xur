@@ -201,6 +201,11 @@ pub enum InstKind {
         dst: Reg,
         items: Vec<Reg>,
     },
+    /// `#{k: v, ...}`: keys and values are interleaved `[k0, v0, k1, v1, ...]`.
+    Map {
+        dst: Reg,
+        entries: Vec<Reg>,
+    },
     /// An instance of a struct or variant defined in Xur.
     Adt {
         dst: Reg,

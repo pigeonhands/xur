@@ -522,6 +522,14 @@ impl<'s> Interp<'s> {
                 let value = Value::list(frame.values(items));
                 frame.set(*dst, value);
             }
+            InstKind::Map { dst, entries } => {
+                let regs = frame.values(entries);
+                let pairs: Vec<(Value, Value)> = regs
+                    .chunks(2)
+                    .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+                    .collect();
+                frame.set(*dst, Value::map(pairs));
+            }
             InstKind::Adt { dst, ctor, fields } => {
                 let value = Value::adt(*ctor, frame.values(fields));
                 frame.set(*dst, value);

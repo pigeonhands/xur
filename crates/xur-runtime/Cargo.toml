@@ -20,3 +20,4 @@ xur-errors.workspace = true
 xur-resolve.workspace = true
 xur-span.workspace = true
 facet.workspace = true
+dashmap.workspace = true

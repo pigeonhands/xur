@@ -194,6 +194,12 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
                 visitor.visit_expr(expr);
             }
         }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                visitor.visit_expr(key);
+                visitor.visit_expr(value);
+            }
+        }
         ExprKind::Binary(_, lhs, rhs)
         | ExprKind::Assign(lhs, rhs, _)
         | ExprKind::Index(lhs, rhs) => {

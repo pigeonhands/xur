@@ -25,6 +25,8 @@ pub enum RtType {
     /// A list. Only the list itself is checked, not each element, so a
     /// check doesn't take time proportional to the list's length.
     List,
+    /// A map (`#{}`). Like List, only the container is checked.
+    Map,
     /// A struct or enum defined in Xur, by its definition.
     Adt {
         def: DefId,
@@ -58,6 +60,7 @@ impl std::fmt::Display for RtType {
                 write!(f, "({})", tys.join(", "))
             }
             Self::List => f.write_str("[_]"),
+            Self::Map => f.write_str("map"),
             Self::Adt { name, .. } | Self::Native { name, .. } => f.write_str(name),
             Self::Fn { params, ret } => {
                 let params: Vec<_> = params.iter().map(ToString::to_string).collect();

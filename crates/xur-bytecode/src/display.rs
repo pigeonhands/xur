@@ -94,6 +94,7 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
         InstKind::SetIndex { base, index, value } => format!("{base:?}[{index:?}] = {value:?}"),
         InstKind::Tuple { dst, items } => format!("{dst:?} = ({})", regs(items)),
         InstKind::List { dst, items } => format!("{dst:?} = [{}]", regs(items)),
+        InstKind::Map { dst, entries } => format!("{dst:?} = #{{{}}}", regs(entries)),
         InstKind::Adt { dst, ctor, fields } => {
             format!("{dst:?} = {}({})", path(*ctor), regs(fields))
         }

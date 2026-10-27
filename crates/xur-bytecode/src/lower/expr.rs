@@ -50,6 +50,16 @@ impl Lowerer<'_> {
                 self.emit(InstKind::List { dst, items }, span);
                 dst
             }
+            ExprKind::Map(pairs) => {
+                let mut entries = Vec::with_capacity(pairs.len() * 2);
+                for (key, value) in pairs {
+                    entries.push(self.expr(key));
+                    entries.push(self.expr(value));
+                }
+                let dst = self.new_reg();
+                self.emit(InstKind::Map { dst, entries }, span);
+                dst
+            }
             ExprKind::Unary(op, operand) => {
                 let src = self.expr(operand);
                 let dst = self.new_reg();

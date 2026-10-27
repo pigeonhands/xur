@@ -1,0 +1,70 @@
+// Maps: `#{ key: value }` literals backed by DashMap.
+//
+//     xur run example/lang/maps.xur
+
+use std::io;
+
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+fn main() -> Result<()> {
+    // Map literals.
+    let scores = #{ "alice": 10, "bob": 20, "carol": 30 };
+    io::println("scores = {}", scores);
+    io::println("len = {}", scores.len());
+
+    // get returns Option.
+    match scores.get("alice") {
+        Some(n) => io::println("alice = {}", n),
+        None    => io::println("alice not found"),
+    }
+    match scores.get("dave") {
+        Some(n) => io::println("dave = {}", n),
+        None    => io::println("dave not found"),
+    }
+
+    // Index access and assignment.
+    scores["dave"] = 40;
+    io::println("after insert: {}", scores);
+    io::println("dave = {}", scores["dave"]);
+
+    // insert and remove methods.
+    scores.insert("eve", 50);
+    io::println("contains eve? {}", scores.contains_key("eve"));
+
+    match scores.remove("bob") {
+        Some(v) => io::println("removed bob = {}", v),
+        None    => io::println("bob not found"),
+    }
+    io::println("after remove: {}", scores);
+
+    // Iteration helpers.
+    io::println("keys: {}", scores.keys());
+    io::println("values: {}", scores.values());
+    for entry in scores.entries() {
+        let (k, v) = entry;
+        io::println("  {} -> {}", k, v);
+    }
+
+    // Empty map.
+    let empty = #{};
+    io::println("empty map: {}, is_empty: {}", empty, empty.is_empty());
+
+    // Integer keys.
+    let ids = #{ 1: "one", 2: "two", 3: "three" };
+    io::println("ids = {}", ids);
+
+    // Enum keys (fieldless enums are hashable).
+    let palette = #{ Color::Red: "#ff0000", Color::Green: "#00ff00", Color::Blue: "#0000ff" };
+    io::println("palette = {}", palette);
+    io::println("red = {}", palette[Color::Red]);
+
+    // clear.
+    ids.clear();
+    io::println("after clear: {}, len: {}", ids, ids.len());
+
+    Ok(())
+}

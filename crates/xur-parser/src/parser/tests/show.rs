@@ -131,6 +131,10 @@ impl Show for Expr {
             ExprKind::Tuple(exprs) if exprs.len() == 1 => format!("({},)", exprs[0].show()),
             ExprKind::Tuple(exprs) => format!("({})", list(exprs)),
             ExprKind::List(exprs) => format!("[{}]", list(exprs)),
+            ExprKind::Map(entries) => {
+                let items: Vec<_> = entries.iter().map(|(k, v)| format!("{}: {}", k.show(), v.show())).collect();
+                format!("#{{{}}}", items.join(", "))
+            }
             ExprKind::Index(list, index) => format!("{}[{}]", list.show(), index.show()),
             ExprKind::Unary(op, operand) => format!("({}{})", op.as_str(), operand.show()),
             ExprKind::Binary(op, lhs, rhs) => {

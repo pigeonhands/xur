@@ -29,6 +29,13 @@ impl Interp<'_> {
             Value::Tuple(items) if items.len() == 1 => format!("({},)", self.repr(&items[0])),
             Value::Tuple(items) => format!("({})", list(items)),
             Value::List(items) => format!("[{}]", list(&lock(items))),
+            Value::Map(map) => {
+                let entries: Vec<_> = map
+                    .iter()
+                    .map(|entry| format!("{}: {}", self.repr(&entry.key().0), self.repr(entry.value())))
+                    .collect();
+                format!("#{{{}}}", entries.join(", "))
+            }
             Value::Bytes(bytes) => format!("b\"{}\"", lock(bytes).escape_ascii()),
             Value::Adt(adt) => {
                 let name = self.def_name(adt.ctor);
