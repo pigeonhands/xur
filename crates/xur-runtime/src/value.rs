@@ -11,7 +11,7 @@ use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use xur_resolve::{DefId, NativeFnId, NativeTypeId};
+use xur_resolve::{DefId, NativeFnId, NativeTypeId, RtType};
 use xur_span::Symbol;
 
 /// Locks `mutex`. A panic while it was held doesn't stop the program from
@@ -53,6 +53,8 @@ pub enum Value {
     Module(DefId),
     /// `a..b`, `a..=b`, `a..`, `..b` over integers.
     Range(Range),
+    /// A type used as a value: `u32`, `fn(u32) -> str`, etc.
+    Type(Box<RtType>),
 }
 
 /// An instance of a struct, or of an enum variant, defined in Xur.
@@ -242,6 +244,7 @@ impl Value {
             Self::Ctor(_) => "constructor",
             Self::Module(_) => "module",
             Self::Range(_) => "range",
+            Self::Type(_) => "type",
         }
     }
 }
@@ -302,6 +305,7 @@ impl PartialEq for Value {
             (Self::Module(a), Self::Module(b)) => a == b,
             (Self::NativeFn(a), Self::NativeFn(b)) => a == b,
             (Self::Range(a), Self::Range(b)) => a == b,
+            (Self::Type(a), Self::Type(b)) => a == b,
             (Self::Closure(a), Self::Closure(b)) => Arc::ptr_eq(a, b),
             (Self::Iterator(a), Self::Iterator(b)) => Arc::ptr_eq(a, b),
             _ => false,

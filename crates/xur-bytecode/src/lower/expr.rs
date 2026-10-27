@@ -8,11 +8,12 @@ use xur_ast::{
     Arm, BinOpKind, Block as AstBlock, Closure, Expr, ExprKind, GenericArgs, LitKind, Local,
     NodeId, Pat, PatKind, Path, RangeLimits, StmtKind, StructExpr, Ty, TyKind, VariantData,
 };
-use xur_resolve::{DefId, DefKind, NativeTypeId, Res};
+use xur_resolve::{DefId, DefKind, NativeTypeId, Res, RtType};
 use xur_span::{Span, Symbol};
 
 use super::{LoopScope, Lowerer};
 use crate::ir::{BlockId, Constant, DefRef, InstKind, RecordFields, Reg, Terminator, TypeArg};
+use crate::types::prim_rt_type;
 use crate::items::ItemRef;
 
 impl Lowerer<'_> {
@@ -209,6 +210,15 @@ impl Lowerer<'_> {
                 self.check_type_coerce(dst, ty, span);
                 dst
             }
+            ExprKind::TypeLiteral(ty) => {
+                let dst = self.new_reg();
+                if let Some(rt) = self.rt_type(ty) {
+                    self.emit(InstKind::TypeLiteral { dst, ty: rt }, span);
+                } else {
+                    self.emit(InstKind::TypeLiteral { dst, ty: RtType::Any }, span);
+                }
+                dst
+            }
             ExprKind::Err => self.error("invalid expression", span),
         }
     }
@@ -255,9 +265,29 @@ impl Lowerer<'_> {
                 }
                 Some(VariantData::Tuple(_)) => DefRef::Ctor(def),
                 _ => {
-                    return self.error("this has named fields; use `Name { field: value }`", span);
+                    let name = self.resolutions.defs.get(def).name.to_string();
+                    let dst = self.new_reg();
+                    self.emit(InstKind::TypeLiteral { dst, ty: RtType::Adt { def, name } }, span);
+                    return dst;
                 }
             },
+            Res::PrimTy(prim) => {
+                let dst = self.new_reg();
+                self.emit(InstKind::TypeLiteral { dst, ty: prim_rt_type(prim) }, span);
+                return dst;
+            }
+            Res::Def(DefKind::Enum, def) => {
+                let name = self.resolutions.defs.get(def).name.to_string();
+                let dst = self.new_reg();
+                self.emit(InstKind::TypeLiteral { dst, ty: RtType::Adt { def, name } }, span);
+                return dst;
+            }
+            Res::Def(DefKind::NativeType(id), def) => {
+                let name = self.resolutions.defs.get(def).name.to_string();
+                let dst = self.new_reg();
+                self.emit(InstKind::TypeLiteral { dst, ty: RtType::Native { id, name } }, span);
+                return dst;
+            }
             Res::TyParamAssoc(..) => {
                 return self.error("type parameter associated functions must be called", span);
             }

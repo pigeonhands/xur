@@ -99,6 +99,8 @@ pub enum ExprKind {
     Cast(Box<Expr>, Ty),
     /// `expr is Pattern`
     Is(Box<Expr>, Box<Pat>),
+    /// A type used as a value: `u32`, `fn(u32) -> str`.
+    TypeLiteral(Ty),
     /// An expression that failed to parse; the error has already been reported.
     Err,
 }

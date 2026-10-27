@@ -80,10 +80,12 @@ pub enum PrimTy {
     Isize,
     F32,
     F64,
+    /// The metatype: accepts values that are themselves types.
+    Type,
 }
 
 impl PrimTy {
-    pub const ALL: [PrimTy; 15] = [
+    pub const ALL: [PrimTy; 16] = [
         Self::Bool,
         Self::Str,
         Self::Bytes,
@@ -99,6 +101,7 @@ impl PrimTy {
         Self::Isize,
         Self::F32,
         Self::F64,
+        Self::Type,
     ];
 
     pub fn name(self) -> &'static str {
@@ -118,6 +121,7 @@ impl PrimTy {
             Self::Isize => "isize",
             Self::F32 => "f32",
             Self::F64 => "f64",
+            Self::Type => "type",
         }
     }
 

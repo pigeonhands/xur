@@ -1,6 +1,6 @@
 //! Calls, method calls and field access, dispatched on values at runtime.
 
-use xur_resolve::{DefId, DefKind, Namespace, Res};
+use xur_resolve::{DefId, DefKind, Namespace, Res, RtType};
 use xur_runtime::{BuiltinType, Record, RunResult, RuntimeError, TypeRef, Value};
 use xur_span::{Span, Symbol};
 
@@ -183,14 +183,16 @@ impl Interp<'_> {
         Ok(Value::adt(adt.ctor, fields))
     }
 
-    /// `module.get_method("name")` or `module.get_method("name", n)`.
+    /// `module.get_method("name")`, `module.get_method("name", 2)`, or
+    /// `module.get_method("name", fn(u32, u32) -> u32)`.
     /// Returns `Ok(fn)` or `Err(message)`.
     fn module_get_method(&mut self, module: DefId, args: &[Value]) -> RunResult<Value> {
-        let (name_str, expected_params) = match args {
-            [Value::Str(name)] => (name.as_ref(), None),
-            [Value::Str(name), Value::Int(n)] => (name.as_ref(), Some(*n as usize)),
+        let (name_str, expected_params, expected_sig) = match args {
+            [Value::Str(name)] => (name.as_ref(), None, None),
+            [Value::Str(name), Value::Int(n)] => (name.as_ref(), Some(*n as usize), None),
+            [Value::Str(name), Value::Type(ty)] => (name.as_ref(), None, Some(ty.as_ref())),
             _ => return Err(RuntimeError::new(
-                "`get_method` takes a name and an optional param count: `mod.get_method(\"name\")` or `mod.get_method(\"name\", 2)`",
+                "`get_method` takes a name and an optional param count or type: `mod.get_method(\"name\")`, `mod.get_method(\"name\", 2)`, or `mod.get_method(\"name\", fn(u32) -> str)`",
             )),
         };
         let name = Symbol::intern(name_str);
@@ -199,16 +201,18 @@ impl Interp<'_> {
             let resolutions = program.resolutions();
             resolutions.lookup(module, Namespace::Value, name)
         };
-        let (value, actual_params) = match res {
+        let (value, actual_params, fn_param_types, fn_ret_type) = match res {
             Some(Res::Def(DefKind::Fn, def)) => {
                 let function = self.shared.code(def)?;
                 let params = function.params as usize;
-                (Value::Fn(def), Some(params))
+                let param_types = function.param_types.clone();
+                let ret_type = function.ret_type.clone();
+                (Value::Fn(def), Some(params), Some(param_types), ret_type)
             }
             Some(Res::Def(DefKind::NativeFn(id), _)) => {
                 let function = self.shared.registry.function(id);
                 let params = function.signature.as_ref().map(|s| s.params.len());
-                (Value::NativeFn(id), params)
+                (Value::NativeFn(id), params, None, None)
             }
             Some(_) => {
                 return Ok(self.result_err(format!("`{name_str}` is not a function")));
@@ -227,6 +231,37 @@ impl Interp<'_> {
                     return Ok(self.result_err(format!(
                         "`{name_str}` takes {actual} parameter(s), expected {expected}"
                     )));
+                }
+            }
+        }
+        if let Some(RtType::Fn { params: sig_params, ret: sig_ret }) = expected_sig {
+            if let Some(actual) = actual_params {
+                if actual != sig_params.len() {
+                    return Ok(self.result_err(format!(
+                        "`{name_str}` takes {actual} parameter(s), expected {}",
+                        sig_params.len()
+                    )));
+                }
+            }
+            if let Some(param_types) = &fn_param_types {
+                for (i, (actual, expected)) in param_types.iter().zip(sig_params.iter()).enumerate() {
+                    if let Some(actual) = actual {
+                        if *expected != RtType::Any && actual != expected {
+                            return Ok(self.result_err(format!(
+                                "`{name_str}` param {} has type {actual}, expected {expected}",
+                                i + 1
+                            )));
+                        }
+                    }
+                }
+            }
+            if **sig_ret != RtType::Any {
+                if let Some(actual_ret) = &fn_ret_type {
+                    if actual_ret != sig_ret.as_ref() {
+                        return Ok(self.result_err(format!(
+                            "`{name_str}` returns {actual_ret}, expected {sig_ret}"
+                        )));
+                    }
                 }
             }
         }

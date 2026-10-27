@@ -164,6 +164,7 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             let args: Vec<_> = args.iter().map(|r| format!("{r:?}")).collect();
             format!("{dst:?} = T{type_param}::{method}({})", args.join(", "))
         }
+        InstKind::TypeLiteral { dst, ty } => format!("{dst:?} = type {ty}"),
         InstKind::Error { message } => format!("error {message:?}"),
     }
 }

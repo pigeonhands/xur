@@ -419,6 +419,10 @@ impl Parser<'_> {
                 self.bump();
                 ExprKind::Continue
             }
+            TokenKind::Keyword(Keyword::Fn) => {
+                let ty = self.parse_ty()?;
+                ExprKind::TypeLiteral(ty)
+            }
             _ => {
                 self.expected(Expected::Expr);
                 return Err(self.unexpected());

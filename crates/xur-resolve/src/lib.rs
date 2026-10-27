@@ -25,6 +25,7 @@ mod names;
 mod native;
 mod natives;
 mod program;
+mod rt_type;
 mod scope;
 
 #[cfg(test)]
@@ -46,6 +47,7 @@ pub use native::{
     NativeVariantDecl, NativeVariantKind,
 };
 pub use program::Program;
+pub use rt_type::RtType;
 
 use imports::Import;
 use scope::Scope;

@@ -196,6 +196,7 @@ impl Show for Expr {
                 }).collect();
                 format!("@{{ {} }}", fields.join(", "))
             }
+            ExprKind::TypeLiteral(ty) => ty.show(),
             ExprKind::Err => "<err>".to_owned(),
         }
     }

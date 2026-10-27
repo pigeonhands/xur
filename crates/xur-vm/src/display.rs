@@ -88,6 +88,7 @@ impl Interp<'_> {
                 let op = if *inclusive { "..=" } else { ".." };
                 format!("{}{op}{}", bound(start), bound(end))
             }
+            Value::Type(ty) => ty.to_string(),
         }
     }
 

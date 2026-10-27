@@ -182,6 +182,7 @@ pub fn walk_local<'a, V: Visitor<'a>>(visitor: &mut V, local: &'a Local) {
 
 pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
     match &expr.kind {
+        ExprKind::TypeLiteral(ty) => visitor.visit_ty(ty),
         ExprKind::Lit(_) | ExprKind::Continue | ExprKind::Err => {}
         ExprKind::Path(path) => visitor.visit_path(path),
         ExprKind::Paren(inner) | ExprKind::Unary(_, inner) | ExprKind::Try(inner) => {

@@ -137,6 +137,33 @@ impl LateResolver<'_, '_> {
         })
     }
 
+    /// Resolves a path in expression position: try value namespace first,
+    /// then fall back to the type namespace so that type names (`u32`,
+    /// `Point`, enum names) can be used as type values.
+    fn resolve_path_value_or_type(&mut self, path: &Path) -> Res {
+        match self.try_resolve_path(path, Namespace::Value) {
+            Ok(res) => {
+                self.r.res.insert(path.id, res);
+                res
+            }
+            Err(value_diag) => {
+                match self.try_resolve_path(path, Namespace::Type) {
+                    Ok(res @ (Res::PrimTy(_) | Res::Def(DefKind::Struct | DefKind::Enum | DefKind::NativeType(_), _))) => {
+                        self.r.res.insert(path.id, res);
+                        res
+                    }
+                    _ => {
+                        if let Some(diag) = value_diag {
+                            self.r.report(diag);
+                        }
+                        self.r.res.insert(path.id, Res::Err);
+                        Res::Err
+                    }
+                }
+            }
+        }
+    }
+
     /// Resolves `path` in `ns` and records the result.
     fn resolve_path(&mut self, path: &Path, ns: Namespace) -> Res {
         let res = match self.try_resolve_path(path, ns) {
@@ -438,7 +465,7 @@ impl<'ast> Visitor<'ast> for LateResolver<'_, '_> {
     fn visit_expr(&mut self, expr: &'ast Expr) {
         match &expr.kind {
             ExprKind::Path(path) => {
-                self.resolve_path(path, Namespace::Value);
+                self.resolve_path_value_or_type(path);
                 visit::walk_path(self, path);
             }
             // A struct literal names a struct or variant, in the type

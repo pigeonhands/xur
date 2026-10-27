@@ -664,6 +664,9 @@ impl<'s> Interp<'s> {
                 let iter = iterate(frame.get(*iterable))?;
                 frame.set(*dst, Value::Iterator(iter));
             }
+            InstKind::TypeLiteral { dst, ty } => {
+                frame.set(*dst, Value::Type(Box::new(ty.clone())));
+            }
             InstKind::Error { message } => return Err(RuntimeError::new(message.clone())),
         }
         Ok(())

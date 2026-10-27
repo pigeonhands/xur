@@ -47,7 +47,7 @@ fn rt_type_or_any(resolutions: &Resolutions, ty: &Ty) -> RtType {
     }
 }
 
-fn prim_rt_type(prim: PrimTy) -> RtType {
+pub(crate) fn prim_rt_type(prim: PrimTy) -> RtType {
     let int = |name, min, max| RtType::Int { name, min, max };
     match prim {
         PrimTy::Bool => RtType::Bool,
@@ -64,6 +64,7 @@ fn prim_rt_type(prim: PrimTy) -> RtType {
         PrimTy::I32 => int("i32", i32::MIN.into(), i32::MAX.into()),
         PrimTy::I64 => int("i64", i64::MIN, i64::MAX),
         PrimTy::Isize => int("isize", i64::MIN, i64::MAX),
+        PrimTy::Type => RtType::Type,
     }
 }
 

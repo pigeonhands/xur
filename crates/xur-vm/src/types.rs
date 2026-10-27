@@ -199,6 +199,7 @@ impl Interp<'_> {
             (RtType::Native { id, .. }, Value::Native(object)) => object.ty == *id,
             (RtType::Native { id, .. }, Value::Record(record)) => record.ty == Some(*id),
             (RtType::Fn { .. }, Value::Fn(_) | Value::NativeFn(_) | Value::Closure(_) | Value::Ctor(_)) => true,
+            (RtType::Type, Value::Type(_)) => true,
             _ => false,
         }
     }
