@@ -8,6 +8,10 @@
 //
 // The DLL is written to `demo.dll` in the current directory and removed at
 // the end. The ELF part reads the running `xur` binary itself.
+//
+// pewter's file types are registered with their real Rust type, so their
+// fields (`coff_header`, `optional_header`, `header`, ...) are read
+// straight through facet, with no getters.
 
 use std::io;
 use std::re;
@@ -27,12 +31,12 @@ fn main() {
     def.add_exports("demo.dll", [("answer", answer)]);
     std::fs::write_bytes("demo.dll", def.write().unwrap()).unwrap();
 
-    // Reading it back as a PE file: headers, sections and their flags.
-    let file = pe::File::open("demo.dll").unwrap();
-    io::println("{}", file);
-    let coff = file.coff_header();
+    // Reading it back as a PE file. `coff_header` and `optional_header` are
+    // fields of the parsed file, read through facet.
+    let file = pe::PEFile::open("demo.dll").unwrap();
+    let coff = file.coff_header;
     io::println("machine: {}, characteristics: {}", coff.machine, pe::file_characteristics_names(coff.characteristics));
-    match file.optional_header().unwrap().windows_specific_fields {
+    match file.optional_header.unwrap().windows_specific_fields {
         OptionalHeaderWindowsSpecific::PE32Plus(fields) => io::println("PE32+, {} byte sections", fields.section_alignment),
         OptionalHeaderWindowsSpecific::PE32(fields) => io::println("PE32, {} byte sections", fields.section_alignment),
     }
@@ -44,7 +48,7 @@ fn main() {
     // Reading it as a loaded image, by virtual address: find the export and
     // disassemble (well, dump) its code.
     let image = re::AnyImage::open("demo.dll").unwrap();
-    io::println("{} based at {}", image, image.image_base().unwrap().to_hex());
+    io::println("{} image based at {}", image.format(), image.image_base().unwrap().to_hex());
     for export in image.exports().unwrap() {
         match export.location {
             ExportLocation::Address(address) => {
@@ -56,9 +60,9 @@ fn main() {
     }
     std::fs::remove("demo.dll").unwrap();
 
-    // The running xur executable, as an ELF file.
-    let exe = elf::File::open("/proc/self/exe").unwrap();
-    let header = exe.header();
+    // The running xur executable, as an ELF file; `header` is a field.
+    let exe = elf::ElfFile::open("/proc/self/exe").unwrap();
+    let header = exe.header;
     let machine = match header.machine {
         ElfMachine::X86_64 => "x86-64",
         ElfMachine::AArch64 => "arm64",

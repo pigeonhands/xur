@@ -85,7 +85,20 @@ impl Vm {
                 _ => return Err(RuntimeError::new("the program has no `main` function")),
             }
         };
-        Interp::new(&self.shared).call_fn(main, Vec::new(), Vec::new())
+        let value = Interp::new(&self.shared).call_fn(main, Vec::new(), Vec::new())?;
+        // A `main` that returns a `Result` fails the program on `Err`, like
+        // Rust's. Any other value, including `Ok`, is a success.
+        if let Value::Adt(adt) = &value {
+            let lang = self.shared.lang;
+            if adt.ctor == lang.err {
+                let inner = adt.fields.first().cloned().unwrap_or(Value::Unit);
+                let shown = Interp::new(&self.shared).display_value(&inner);
+                return Err(RuntimeError::new(format!(
+                    "main returned an error: {shown}"
+                )));
+            }
+        }
+        Ok(value)
     }
 
     /// Diagnostics for modules imported while the program ran.

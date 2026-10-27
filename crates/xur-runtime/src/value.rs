@@ -100,6 +100,11 @@ impl fmt::Debug for ValueIter {
 pub struct NativeObject {
     pub ty: NativeTypeId,
     value: Mutex<Box<dyn Any + Send>>,
+    /// Memory the Rust value borrows, kept alive for as long as the object:
+    /// the file bytes behind a parsed `PEFile<'static>`, for instance. The
+    /// value's `'static` references stay valid because this never moves or
+    /// drops while the value does.
+    _keep_alive: Option<Arc<dyn Any + Send + Sync>>,
 }
 
 impl NativeObject {
@@ -107,6 +112,21 @@ impl NativeObject {
         Self {
             ty,
             value: Mutex::new(value),
+            _keep_alive: None,
+        }
+    }
+
+    /// A native object whose value borrows `keep_alive`, which is held as
+    /// long as the object so those borrows stay valid.
+    pub fn borrowing(
+        ty: NativeTypeId,
+        value: Box<dyn Any + Send>,
+        keep_alive: Arc<dyn Any + Send + Sync>,
+    ) -> Self {
+        Self {
+            ty,
+            value: Mutex::new(value),
+            _keep_alive: Some(keep_alive),
         }
     }
 
@@ -118,6 +138,12 @@ impl NativeObject {
     /// Calls `f` with the Rust value mutably, if it is a `T`.
     pub fn with_mut<T: 'static, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
         lock(&self.value).downcast_mut().map(f)
+    }
+
+    /// The memory this object keeps alive for its value's borrows, to share
+    /// with a part of it parsed from the same bytes.
+    pub fn keep_alive(&self) -> Option<Arc<dyn Any + Send + Sync>> {
+        self._keep_alive.clone()
     }
 
     /// Calls `f` with the Rust value, type-erased.

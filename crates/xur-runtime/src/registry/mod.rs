@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::JoinHandle;
 
-use facet::{Peek, Shape, StructKind, StructType, Type, UserType};
+use facet::{Facet, Peek, Shape, StructKind, StructType, Type, UserType};
 use xur_resolve::{
     DefId, NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
     NativeVariantDecl, NativeVariantKind,
@@ -45,7 +45,7 @@ use xur_span::Symbol;
 
 use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
-use crate::{AdtInfo, BuiltinType, RunResult, TypeRef, Value};
+use crate::{AdtInfo, BuiltinType, RunResult, RuntimeError, TypeRef, Value};
 
 pub use builder::{BuiltinBuilder, ModuleBuilder, TypeBuilder};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
@@ -382,6 +382,22 @@ impl Registry {
         }
         let eq = self.hooks(a.ty).eq;
         a.with_any(|a| b.with_any(|b| eq(a, b)))
+    }
+
+    /// A native object of the type registered for `T`, holding `value` and
+    /// keeping `keep_alive` alive with it so any memory `value` borrows
+    /// stays valid. For types like `PEFile<'static>` that borrow a file's
+    /// bytes: the bytes go in `keep_alive`.
+    pub fn borrowing_object<T: Facet<'static> + Send + 'static>(
+        &self,
+        value: T,
+        keep_alive: Arc<dyn std::any::Any + Send + Sync>,
+    ) -> RunResult<Value> {
+        let ty = self
+            .type_of_shape(T::SHAPE)
+            .ok_or_else(|| RuntimeError::new(format!("`{}` is not a registered type", T::SHAPE)))?;
+        let object = NativeObject::borrowing(ty, Box::new(value), keep_alive);
+        Ok(Value::Native(object.into()))
     }
 
     /// A native object holding a clone of the registered value behind `peek`.

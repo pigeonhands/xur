@@ -5,7 +5,7 @@ use std::any::Any;
 use facet::{Facet, Peek};
 
 use crate::convert::{Builder, ConvertCx, peek_to_value, reflect_error};
-use crate::{RunResult, Value};
+use crate::{RunResult, RuntimeError, Value};
 
 /// Operations on values of one registered type, instantiated where the type
 /// is still known (in [`ModuleBuilder::ty`]) and used where it is erased.
@@ -27,6 +27,24 @@ impl TypeHooks {
         Self {
             clone_peek: clone_peek::<T>,
             set: set::<T>,
+            field: field::<T>,
+            display: display::<T>,
+            eq: eq::<T>,
+        }
+    }
+
+    /// Hooks for a type that is not `Clone`, such as one that borrows memory
+    /// kept alive beside it. Its values can be read (fields, display, `==`)
+    /// but not copied into another value or rebuilt from Xur.
+    pub(super) fn borrowing<T: Facet<'static> + Send + 'static>() -> Self {
+        Self {
+            clone_peek: |_| None,
+            set: |_, _| {
+                Err(RuntimeError::new(format!(
+                    "`{}` cannot be moved into a value",
+                    T::SHAPE
+                )))
+            },
             field: field::<T>,
             display: display::<T>,
             eq: eq::<T>,

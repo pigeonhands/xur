@@ -1,9 +1,8 @@
 //! `std::re::pe`: Windows PE files (`.exe`, `.dll`, `.sys`).
 //!
-//! `pe::File` reads a file as it is; `pe::ImageDef` is an image that can be
-//! changed and written back out.
-
-use std::sync::Arc;
+//! `pe::PEFile` reads a file as it is, its fields (`coff_header`,
+//! `optional_header`, `sections`, ...) read straight through facet;
+//! `pe::ImageDef` is an image that can be changed and written back out.
 
 use facet::{Facet, Peek};
 use pewter::PEFile;
@@ -16,44 +15,12 @@ use pewter::pe::sections::edata::ExportDef;
 use pewter::pe::sections::{SectionFlags, SectionRow};
 use xur_runtime::convert::{ConvertCx, to_value};
 use xur_runtime::registry::ModuleBuilder;
-use xur_runtime::{Record, Registry, RunResult, Value};
+use xur_runtime::{Context, Record, Registry, RunResult, Value};
 use xur_span::Symbol;
 
 use super::flags::register_flags;
-use super::parsed::Parsed;
+use super::parsed::parse_object;
 use crate::error_text;
-
-/// A PE file as read, borrowing its bytes.
-#[derive(Facet, Clone)]
-#[facet(opaque)]
-pub(super) struct File(Arc<Parsed<PEFile<'static>>>);
-
-impl File {
-    fn parse(data: Vec<u8>) -> Result<Self, String> {
-        let parsed = Parsed::new(data, PEFile::parse).map_err(error_text)?;
-        Ok(Self(Arc::new(parsed)))
-    }
-
-    fn get(&self) -> &PEFile<'static> {
-        self.0.get()
-    }
-
-    fn sections(&self) -> &[SectionRow<'static>] {
-        &self.get().sections.0.0
-    }
-}
-
-impl std::fmt::Display for File {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let file = self.get();
-        write!(
-            f,
-            "pe::File({:?}, {} section(s))",
-            file.coff_header.machine,
-            self.sections().len()
-        )
-    }
-}
 
 /// A section's name, without the padding of its 8-byte field.
 fn section_name(row: &SectionRow<'_>) -> String {
@@ -71,51 +38,49 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
     pe.shape_type("OptionalHeaderWindowsSpecificFields32", pe32);
     pe.shape_type("OptionalHeaderWindowsSpecificFields64", pe32_plus);
 
-    pe.ty::<File>("File")
-        .function("parse", File::parse)
-        .function("open", |path: String| {
-            File::parse(std::fs::read(&path).map_err(error_text)?)
+    // pewter's own `PEFile`, holding the bytes it borrows. Its fields are
+    // read through facet; only the computed tables are methods.
+    pe.ty::<PEFile<'static>>("PEFile")
+        .raw_function("parse", |cx, args| open_bytes(cx, args, PEFile::parse))
+        .raw_function("open", |cx, args| open_path(cx, args, PEFile::parse))
+        .method("section_names", |f: &PEFile<'static>| {
+            f.sections.0.0.iter().map(section_name).collect::<Vec<_>>()
         })
-        .method("dos_header", |f: &File| f.get().dos_header.clone())
-        .method("coff_header", |f: &File| f.get().coff_header.clone())
-        .method("optional_header", |f: &File| {
-            f.get().optional_header.clone()
-        })
-        .method("sections", |f: &File| f.sections().to_vec())
-        .method("section_names", |f: &File| {
-            f.sections().iter().map(section_name).collect::<Vec<_>>()
-        })
-        .method("section", |f: &File, name: String| {
-            f.sections()
+        .method("section", |f: &PEFile<'static>, name: String| {
+            f.sections
+                .0
+                .0
                 .iter()
                 .find(|row| section_name(row) == name)
                 .cloned()
         })
-        .method("exports", |f: &File| {
-            f.get().read_export_table().map_err(error_text)
+        .method("exports", |f: &PEFile<'static>| {
+            f.read_export_table().map_err(error_text)
         })
-        .method("imports", |f: &File| {
-            f.get().read_import_table().map_err(error_text)
+        .method("imports", |f: &PEFile<'static>| {
+            f.read_import_table().map_err(error_text)
         })
-        .method("resources", |f: &File| {
-            f.get().read_resource_directory().map_err(error_text)
+        .method("resources", |f: &PEFile<'static>| {
+            f.read_resource_directory().map_err(error_text)
         })
-        .method("relocations", |f: &File| {
-            f.get().read_base_relocation_table().map_err(error_text)
+        .method("relocations", |f: &PEFile<'static>| {
+            f.read_base_relocation_table().map_err(error_text)
         })
-        .method("exceptions", |f: &File| {
-            f.get().read_exeption_table().map_err(error_text)
+        .method("exceptions", |f: &PEFile<'static>| {
+            f.read_exeption_table().map_err(error_text)
         })
-        .method("certificates", |f: &File| {
-            f.get().read_certificate_table().map_err(error_text)
+        .method("certificates", |f: &PEFile<'static>| {
+            f.read_certificate_table().map_err(error_text)
         })
-        .method("clr_header", |f: &File| {
-            f.get().read_clr_runtime_header().map_err(error_text)
+        .method("clr_header", |f: &PEFile<'static>| {
+            f.read_clr_runtime_header().map_err(error_text)
         })
-        .method("to_image_def", |f: &File| {
-            PEImageDef::from_pe_file(f.get().clone())
+        .method("to_image_def", |f: &PEFile<'static>| {
+            PEImageDef::from_pe_file(f.clone())
         });
 
+    // An editable image. Its fields are read through facet too; the methods
+    // change it or compute things facet cannot.
     pe.ty::<PEImageDef>("ImageDef")
         .function("new_dll", PEImageDef::new_dll)
         .function("parse", |data: Vec<u8>| {
@@ -124,12 +89,6 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
         .function("open", |path: String| {
             let data = std::fs::read(&path).map_err(error_text)?;
             PEImageDef::parse(&data).map_err(error_text)
-        })
-        .method("section_names", |def: &PEImageDef| {
-            def.sections
-                .iter()
-                .map(|s| s.name.clone())
-                .collect::<Vec<_>>()
         })
         .method("section", |def: &PEImageDef, name: String| {
             def.sections.by_name(&name).cloned()
@@ -185,6 +144,42 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
     register_flags!(pe, "section_flags", SectionFlags, u32);
     register_flags!(pe, "file_characteristics", ImageFileCharacteristics, u16);
     register_flags!(pe, "dll_characteristics", ImageDllCharacteristics, u16);
+}
+
+/// A `parse(bytes)` raw function for a type that borrows its bytes.
+pub(super) fn open_bytes<T, E>(
+    cx: &mut dyn Context,
+    args: &[Value],
+    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
+) -> RunResult<Value>
+where
+    T: Facet<'static> + Send + 'static,
+    E: std::fmt::Display,
+{
+    let [Value::Bytes(bytes)] = args else {
+        return Err(xur_runtime::RuntimeError::new("expected bytes"));
+    };
+    let data = xur_runtime::lock(bytes).clone();
+    parse_object(cx, data, parse)
+}
+
+/// An `open(path)` raw function for a type that borrows its bytes.
+pub(super) fn open_path<T, E>(
+    cx: &mut dyn Context,
+    args: &[Value],
+    parse: impl FnOnce(&'static [u8]) -> Result<T, E>,
+) -> RunResult<Value>
+where
+    T: Facet<'static> + Send + 'static,
+    E: std::fmt::Display,
+{
+    let [Value::Str(path)] = args else {
+        return Err(xur_runtime::RuntimeError::new("expected a path string"));
+    };
+    match std::fs::read(&**path) {
+        Ok(data) => parse_object(cx, data, parse),
+        Err(error) => Ok(crate::result(cx, Err(error_text(error)))),
+    }
 }
 
 /// The Windows-specific fields of the optional header, which facet sees as

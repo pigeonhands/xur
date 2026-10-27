@@ -68,6 +68,15 @@ fn option(cx: &dyn Context, value: Option<Value>) -> Value {
     }
 }
 
+/// `Ok(value)` or `Err(message)`, as Xur values.
+fn result(cx: &dyn Context, value: Result<Value, String>) -> Value {
+    let lang = cx.lang();
+    match value {
+        Ok(value) => Value::adt(lang.ok, vec![value]),
+        Err(message) => Value::adt(lang.err, vec![Value::str(&message)]),
+    }
+}
+
 /// How Rust errors appear in Xur: as the `Err` of a `Result`, by message.
 fn error_text(error: impl std::fmt::Display) -> String {
     error.to_string()

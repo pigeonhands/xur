@@ -782,12 +782,24 @@ fn structs_know_their_bytes() {
     );
 }
 
-// The example also reads the running executable as an ELF file.
+// The build example reads the running executable as an ELF file too.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
-fn the_re_example_runs() {
-    let output = run_files(&[("example/re.xur", include_str!("../../../example/re.xur"))]);
-    assert_eq!(output, Ok("pe::File(Amd64, 2 section(s))\nmachine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\nAnyImage(pe, 64-bit) based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+fn the_re_build_example_runs() {
+    let output = run_files(&[(
+        "example/re_build.xur",
+        include_str!("../../../example/re_build.xur"),
+    )]);
+    assert_eq!(output, Ok("machine: ImageFileMachine::Amd64, characteristics: [\"EXECUTABLE_IMAGE\", \"LARGE_ADDRESS_AWARE\", \"FILE_DLL\"]\nPE32+, 8192 byte sections\n  .text at 2000: [\"CNT_CODE\", \"MEM_EXECUTE\", \"MEM_READ\"]\n  .edata at 4000: [\"CNT_INITIALIZED_DATA\", \"MEM_READ\"]\npe image based at 180000000\n  answer at 180002000: b82a000000c3\nxur: ElfType::Dyn, 64-bit x86-64\n.text holds code: true, flags [\"ALLOC\", \"EXECINSTR\"]\n".into()));
+}
+
+#[test]
+fn the_re_image_example_runs() {
+    let output = run_files(&[(
+        "example/re_image.xur",
+        include_str!("../../../example/re_image.xur"),
+    )]);
+    assert_eq!(output, Ok("format: pe, 64-bit, pointers 8 bytes\nmachine: Some(ImageFileMachine::Amd64), base 180000000\nanswer at 180002000: first byte b8\n  mapped? true\nstub at 180004000: first byte 90\n  mapped? true\n3 sections, entry at 0\nis elf? false\n".into()));
 }
 
 #[test]
@@ -899,11 +911,11 @@ fn any_image_gives_the_file_inside() {
             let data = ImageDef::new_dll(ImageFileMachine::I386).write().unwrap();
             let image = AnyImage::load(data).unwrap();
             let pe = image.as_pe().unwrap();
-            std::io::println("{} {} {} {}", image, image.format(), pe.coff_header.machine, image.as_elf());
+            std::io::println("{} {}-bit {} {}", image.format(), if image.is_64() { 64 } else { 32 }, pe.coff_header.machine, image.as_elf());
         }
     "#;
     assert_eq!(
         run(src),
-        Ok("AnyImage(pe, 32-bit) pe ImageFileMachine::I386 None\n".into())
+        Ok("pe 32-bit ImageFileMachine::I386 None\n".into())
     );
 }

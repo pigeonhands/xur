@@ -26,7 +26,8 @@ There are complete programs in [`example/`](example):
 | [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
 | [`reflect.xur`](example/reflect.xur)       | listing fields and calling methods by name        |
 | [`layout.xur`](example/layout.xur)         | structs as bytes: padding, packing, byte order    |
-| [`re.xur`](example/re.xur)                 | building a DLL, then reading it and an ELF back   |
+| [`re_build.xur`](example/re_build.xur)     | building a DLL, then reading it and an ELF back   |
+| [`re_image.xur`](example/re_image.xur)     | reading an image by virtual address, PE or ELF    |
 
 ## A taste of Xur
 

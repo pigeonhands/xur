@@ -105,6 +105,33 @@ impl ModuleBuilder<'_> {
             _ty: PhantomData,
         }
     }
+
+    /// Registers the Rust type `T` as `name` without requiring `Clone`, for
+    /// a type that borrows memory kept alive beside it (see
+    /// [`Registry::borrowing_object`]). Its fields and methods work, but it
+    /// cannot be cloned into another value or rebuilt from Xur.
+    pub fn ty_borrowing<T: Facet<'static> + Send + 'static>(
+        &mut self,
+        name: &str,
+    ) -> TypeBuilder<'_, T> {
+        let module = self.module;
+        let id = self.registry.with_inner(|inner| {
+            let id = NativeTypeId(inner.types.len() as u32);
+            inner.types.push(NativeType {
+                name: name.to_owned(),
+                shape: T::SHAPE,
+                functions: Vec::new(),
+                hooks: Some(TypeHooks::borrowing::<T>()),
+            });
+            inner.modules[module].types.push(id);
+            id
+        });
+        TypeBuilder {
+            registry: self.registry,
+            ty: id,
+            _ty: PhantomData,
+        }
+    }
 }
 
 /// Adds functions to the registered native type `T`.
