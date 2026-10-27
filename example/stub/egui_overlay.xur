@@ -1,0 +1,37 @@
+// An egui overlay like hao's egui_demo, but written entirely in Xur.
+//
+// F1 toggles visibility (handled by the stub). The script draws a time
+// scale slider with pause/1x/2x buttons.
+//
+//     cargo build --release -p xur-stub --features egui
+//     XUR_STUB_PATH=example/stub/egui_overlay.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::fmt;
+use std::re::unity::egui;
+use std::re::unity::time;
+
+fn ctor() {
+    egui::init();
+}
+
+fn main() {
+    egui::run("xur", |ui| {
+        let scale = time::scale();
+        ui.label(fmt::format("Time.timeScale: {}", scale));
+        scale = ui.slider_float("", scale, 0.0, 3.0);
+        time::set_scale(scale);
+
+        ui.horizontal(|row| {
+            if row.button("pause") {
+                time::set_scale(0.0);
+            }
+            if row.button("1x") {
+                time::set_scale(1.0);
+            }
+            if row.button("2x") {
+                time::set_scale(2.0);
+            }
+        });
+    });
+}

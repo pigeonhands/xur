@@ -1,0 +1,115 @@
+// A game inspector mod, loaded into a Unity Il2Cpp game via LD_PRELOAD.
+//
+// Like hao's egui_demo, this runs inside the game process. It finds the
+// game's Il2Cpp metadata, dumps the type tree, and reads memory at the
+// GameAssembly's base address.
+//
+// Build the stub, then launch a Unity game with it:
+//
+//     cargo build --release -p xur-stub
+//     # Steam > game > Properties > Launch options:
+//     XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so %command%
+//
+// Or test without a real game (shows process info only):
+//
+//     XUR_STUB_PATH=example/stub/game_inspector.xur \
+//         LD_PRELOAD=target/debug/libxur_stub.so /bin/true
+
+use std::io;
+use std::fs;
+use std::re::proc;
+use std::re::dotnet::il2cpp;
+
+fn main() -> Result<(), str> {
+    let pid = proc::current_pid();
+    io::println("[game_inspector] pid {}", pid);
+
+    // Open our own process to list loaded modules.
+    let handle = proc::open_current()?;
+    let modules = handle.modules()?;
+    io::println("[game_inspector] {} modules loaded", modules.len());
+
+    // Find the GameAssembly module — the sign we're inside a Unity Il2Cpp game.
+    let game_assembly_base = 0;
+    let game_assembly_size = 0;
+    let game_assembly_path = "";
+    let found = false;
+    for m in modules {
+        if m.name.starts_with("GameAssembly") {
+            game_assembly_base = m.base;
+            game_assembly_size = m.size;
+            game_assembly_path = m.path;
+            found = true;
+        }
+    }
+
+    if !found {
+        io::println("[game_inspector] no GameAssembly found — not a Unity Il2Cpp game");
+        io::println("[game_inspector] loaded modules:");
+        for m in modules {
+            io::println("  {} at 0x{} ({} bytes)", m.name, m.base.to_hex(), m.size);
+        }
+        return Ok(());
+    }
+
+    io::println("[game_inspector] GameAssembly at 0x{} ({} bytes)",
+        game_assembly_base.to_hex(), game_assembly_size);
+
+    // Read the first 16 bytes of the GameAssembly (the ELF/PE header).
+    let header = handle.read(game_assembly_base, 16)?;
+    io::println("[game_inspector] header: {}", header.to_hex());
+
+    // The game directory is the parent of the GameAssembly path.
+    let parts = game_assembly_path.split("/");
+    let dir_parts = [];
+    let i = 0;
+    for part in parts {
+        if i < parts.len() - 1 {
+            dir_parts.push(part);
+        }
+        i = i + 1;
+    }
+    let game_dir = dir_parts.join("/");
+    io::println("[game_inspector] game directory: {}", game_dir);
+
+    let game = il2cpp::open(game_dir)?;
+    let images = game.image_names();
+    io::println("[game_inspector] {} assemblies:", images.len());
+    for name in images {
+        io::println("  {}", name);
+    }
+
+    // Dump type summary.
+    let types = game.types();
+    io::println("[game_inspector] {} types total", types.len());
+    io::println("");
+
+    // Show the first 50 types with their fields and methods.
+    let limit = if types.len() < 50 { types.len() } else { 50 };
+    let shown = 0;
+    for ty in types {
+        if shown >= limit { break; }
+        io::println("{}", ty.full_name());
+        for field in ty.fields() {
+            io::println("  {} {}{}", field.type_name(), field.name(),
+                if field.is_static() { " (static)" } else { "" });
+        }
+        for method in ty.methods() {
+            io::println("  {}({}){}", method.name(),
+                method.parameter_type_names().join(", "),
+                if method.is_static() { " static" } else { "" });
+        }
+        shown = shown + 1;
+    }
+
+    if types.len() > limit {
+        io::println("... and {} more types", types.len() - limit);
+    }
+
+    // Generate proxy assemblies.
+    let paths = game.write_assemblies("/tmp/xur-game-proxies")?;
+    io::println("[game_inspector] wrote {} proxy assemblies to /tmp/xur-game-proxies/",
+        paths.len());
+
+    Ok(())
+}

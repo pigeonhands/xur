@@ -1,0 +1,12 @@
+// A simple stub script: runs when the stub is loaded into a process.
+//
+// Test with:
+//     XUR_STUB_PATH=example/stub LD_PRELOAD=target/debug/libxur_stub.so /bin/true
+
+use std::io;
+use std::re::proc;
+
+fn main() {
+    let pid = proc::current_pid();
+    io::println("[hello.xur] running inside pid {}", pid);
+}
