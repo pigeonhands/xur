@@ -2,7 +2,7 @@
 // Missing fields with Option types are filled with None.
 // #[coerce(strict)] requires all fields to be present.
 //
-//     xur run example/coerce.xur
+//     xur run example/lang/coerce.xur
 
 use std::io;
 use std::any;

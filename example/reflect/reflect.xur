@@ -2,7 +2,7 @@
 //
 // Run it:
 //
-//     xur run example/reflect.xur
+//     xur run example/reflect/reflect.xur
 //
 // It prints any value as a tree of its fields, then drives a robot by
 // calling its methods by name, as a command interpreter would.

@@ -1,7 +1,8 @@
 use std::io;
 
 fn main() -> Result<(), str> {
-    let plugin = std::import("./plugin.xur");
+    // folder import: loads ./my_plugin/lib.xur
+    let plugin = std::import("./my_plugin");
 
     // get_method: returns Ok(fn) or Err(message)
     io::println("--- get_method ---");
@@ -34,6 +35,14 @@ fn main() -> Result<(), str> {
     // missing attr
     let missing_attr = plugin.get_attr("nope");
     io::println("missing attr: {}", missing_attr);
+
+    // try_import: returns Result instead of panicking
+    io::println("");
+    io::println("--- try_import ---");
+    let good = std::try_import("./my_plugin");
+    io::println("existing: {}", good.is_ok());
+    let bad = std::try_import("./nonexistent");
+    io::println("missing: {}", bad);
 
     Ok(())
 }

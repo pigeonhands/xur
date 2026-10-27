@@ -298,17 +298,22 @@ fn test_keyword_display() {
 
 #[test]
 fn test_examples_lex_cleanly() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../example");
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../example"));
     let mut count = 0;
-    for entry in std::fs::read_dir(dir).expect("read example dir") {
-        let path = entry.expect("read example entry").path();
-        if path.extension().is_some_and(|ext| ext == "xur") {
-            let src = std::fs::read_to_string(&path).expect("read example file");
-            assert_eq!(Lexer::new(&src).tokenise().1, [], "lex errors in {path:?}");
-            count += 1;
+    let mut dirs = vec![dir.to_owned()];
+    while let Some(d) = dirs.pop() {
+        for entry in std::fs::read_dir(&d).expect("read example dir") {
+            let path = entry.expect("read example entry").path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "xur") {
+                let src = std::fs::read_to_string(&path).expect("read example file");
+                assert_eq!(Lexer::new(&src).tokenise().1, [], "lex errors in {path:?}");
+                count += 1;
+            }
         }
     }
-    assert!(count > 0, "no examples found in {dir}");
+    assert!(count > 0, "no examples found in {}", dir.display());
 }
 
 #[test]

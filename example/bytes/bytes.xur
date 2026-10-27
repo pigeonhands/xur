@@ -2,7 +2,7 @@
 //
 // Run it:
 //
-//     xur run example/bytes.xur
+//     xur run example/bytes/bytes.xur
 //
 // It builds a small binary file format in memory, prints a hex dump of it,
 // patches a field in place and parses it back.

@@ -10,7 +10,7 @@ through [facet](https://facet.rs) reflection.
 > A static type checker and a JIT are future work.
 
 ```console
-$ cargo run -- run example/main.xur
+$ cargo run -- run example/lang/main.xur
 Hello, World
 ...
 ```
@@ -19,17 +19,20 @@ There are complete programs in [`example/`](example):
 
 | Example                                    | Shows                                             |
 | ------------------------------------------ | ------------------------------------------------- |
-| [`main.xur`](example/main.xur)             | most of the language, using `math.xur`            |
-| [`channels.xur`](example/channels.xur)     | threads sending results back over a channel       |
-| [`echo_server.xur`](example/echo_server.xur) | a TCP echo server, to try with `nc`             |
-| [`bytes.xur`](example/bytes.xur)           | building and parsing a binary format with `bytes` |
-| [`structs.xur`](example/structs.xur)       | structs and enum variants with named fields       |
-| [`reflect.xur`](example/reflect.xur)       | listing fields and calling methods by name        |
-| [`layout.xur`](example/layout.xur)         | structs as bytes: padding, packing, byte order    |
-| [`re/image/`](example/re/image)            | building and reading PE/ELF binaries              |
-| [`re/proc/`](example/re/proc)              | inspecting a live process's memory                |
-| [`re/asm/`](example/re/asm)               | decoding/encoding x86 instructions                |
-| [`re/dotnet/`](example/re/dotnet)         | reading and creating .NET assemblies              |
+| [`lang/main.xur`](example/lang/main.xur)           | most of the language, using `math.xur`            |
+| [`lang/structs.xur`](example/lang/structs.xur)     | structs and enum variants with named fields       |
+| [`lang/types.xur`](example/lang/types.xur)         | generics, `T!`, `@` record mode, type inference   |
+| [`lang/coerce.xur`](example/lang/coerce.xur)       | struct coercion with `as` and `try_cast`          |
+| [`json/`](example/json)                            | JSON parsing and struct coercion                  |
+| [`bytes/bytes.xur`](example/bytes/bytes.xur)       | building and parsing a binary format with `bytes` |
+| [`sync/channels.xur`](example/sync/channels.xur)   | threads sending results back over a channel       |
+| [`net/echo_server.xur`](example/net/echo_server.xur) | a TCP echo server, to try with `nc`             |
+| [`reflect/`](example/reflect)                      | listing fields, calling methods, struct layouts    |
+| [`module/`](example/module)                        | dynamic imports and module introspection           |
+| [`re/image/`](example/re/image)                    | building and reading PE/ELF binaries              |
+| [`re/proc/`](example/re/proc)                      | inspecting a live process's memory                |
+| [`re/asm/`](example/re/asm)                        | decoding/encoding x86 instructions                |
+| [`re/dotnet/`](example/re/dotnet)                  | reading and creating .NET assemblies              |
 
 ## A taste of Xur
 
@@ -289,7 +292,7 @@ same code the interpreter runs; see [ARCHITECTURE.md](ARCHITECTURE.md) for
 the whole journey. `xur debug` shows each stage:
 
 ```console
-$ cargo run -- debug bytecode example/math.xur
+$ cargo run -- debug bytecode example/lang/math.xur
 fn div (captures: 0, params: 2, registers: 9)
   bb0:
     check r0: u32

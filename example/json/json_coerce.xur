@@ -1,7 +1,7 @@
 // Struct coercion: JSON records are coerced into typed structs.
 // Missing fields with Option types are filled with None.
 //
-//     xur run example/json_coerce.xur
+//     xur run example/json/json_coerce.xur
 
 struct User {
     name: str

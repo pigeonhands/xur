@@ -3,7 +3,7 @@
 //
 // Run it:
 //
-//     xur run example/channels.xur
+//     xur run example/sync/channels.xur
 //
 // The per-range lines may come in any order, as the threads finish in
 // whatever order they finish.

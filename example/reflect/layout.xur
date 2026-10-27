@@ -4,7 +4,7 @@
 //
 // Run it:
 //
-//     xur run example/layout.xur
+//     xur run example/reflect/layout.xur
 //
 // It lays out the headers of a (simplified) BMP image from struct attributes, writes a tiny
 // image to bytes and reads it back, then describes a record format at

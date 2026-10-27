@@ -2,7 +2,7 @@
 //
 // Run it:
 //
-//     xur run example/echo_server.xur
+//     xur run example/net/echo_server.xur
 //
 // Then, in another terminal, connect with netcat and type some lines:
 //

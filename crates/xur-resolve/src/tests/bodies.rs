@@ -184,8 +184,8 @@ fn use_only_at_top_level() {
 #[test]
 fn examples_resolve_cleanly() {
     resolve_files(&[
-        ("main.xur", include_str!("../../../../example/main.xur")),
-        ("math.xur", include_str!("../../../../example/math.xur")),
+        ("main.xur", include_str!("../../../../example/lang/main.xur")),
+        ("math.xur", include_str!("../../../../example/lang/math.xur")),
     ])
     .assert_no_errors();
 }

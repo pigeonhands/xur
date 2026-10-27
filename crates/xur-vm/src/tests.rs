@@ -182,12 +182,12 @@ fn runtime_errors() {
 fn the_examples_run() {
     let output = run_files(&[
         (
-            "example/main.xur",
-            include_str!("../../../example/main.xur"),
+            "example/lang/main.xur",
+            include_str!("../../../example/lang/main.xur"),
         ),
         (
-            "example/math.xur",
-            include_str!("../../../example/math.xur"),
+            "example/lang/math.xur",
+            include_str!("../../../example/lang/math.xur"),
         ),
     ]);
     insta_like(
@@ -355,8 +355,8 @@ fn unix_sockets() {
 #[test]
 fn the_channels_example_counts_primes() {
     let output = run_files(&[(
-        "example/channels.xur",
-        include_str!("../../../example/channels.xur"),
+        "example/sync/channels.xur",
+        include_str!("../../../example/sync/channels.xur"),
     )])
     .unwrap();
     let mut lines: Vec<_> = output.lines().collect();
@@ -377,10 +377,10 @@ fn the_channels_example_counts_primes() {
 fn the_echo_server_example_compiles() {
     // It serves forever, so only check that it loads without errors.
     let registry = Arc::new(xur_std::registry());
-    let src = include_str!("../../../example/echo_server.xur");
-    let loader = MemoryFileLoader::new([("example/echo_server.xur", src)]);
+    let src = include_str!("../../../example/net/echo_server.xur");
+    let loader = MemoryFileLoader::new([("example/net/echo_server.xur", src)]);
     let (_, diags) = Program::load(
-        Path::new("example/echo_server.xur"),
+        Path::new("example/net/echo_server.xur"),
         Box::new(loader),
         Box::new(registry),
     )
@@ -483,8 +483,8 @@ fn bytes_methods() {
 #[test]
 fn the_bytes_example_runs() {
     let output = run_files(&[(
-        "example/bytes.xur",
-        include_str!("../../../example/bytes.xur"),
+        "example/bytes/bytes.xur",
+        include_str!("../../../example/bytes/bytes.xur"),
     )]);
     assert_eq!(
         output,
@@ -563,8 +563,8 @@ fn struct_literal_errors() {
 #[test]
 fn the_structs_example_runs() {
     let output = run_files(&[(
-        "example/structs.xur",
-        include_str!("../../../example/structs.xur"),
+        "example/lang/structs.xur",
+        include_str!("../../../example/lang/structs.xur"),
     )]);
     assert_eq!(
         output,
@@ -626,8 +626,8 @@ fn reflection_lists_reads_and_calls() {
 #[test]
 fn the_reflect_example_runs() {
     let output = run_files(&[(
-        "example/reflect.xur",
-        include_str!("../../../example/reflect.xur"),
+        "example/reflect/reflect.xur",
+        include_str!("../../../example/reflect/reflect.xur"),
     )]);
     assert_eq!(
         output,
@@ -726,8 +726,8 @@ fn layout_errors() {
 #[test]
 fn the_layout_example_runs() {
     let output = run_files(&[(
-        "example/layout.xur",
-        include_str!("../../../example/layout.xur"),
+        "example/reflect/layout.xur",
+        include_str!("../../../example/reflect/layout.xur"),
     )]);
     assert_eq!(output, Ok("Padded (size 8, align 4) { flag: u8 @ 0, value: u32 @ 4 }\nTagged (size 16, align 16) { tag: bytes[4] @ 0, value: u32 @ 8 }\n58555200000000000000cafe00000000\nBitmap (size 30, align 1) { file: FileHeader @ 0, info: InfoHeader @ 14 }\n38 bytes: 424d26000000000000001e000000100000000200000001000000010018000000ffff00000000\n2x1 pixels at offset 30\n  magic u16 at 0\n  size u32 at 2\n  reserved u32 at 6\n  pixels_at u32 at 10\nRecord (size 12, align 4) { id: u16 @ 0, score: f32 @ 4, alive: bool @ 8 }\n000000000000000000000000070000000000c03f01000000\n{ id: 7, score: 1.5, alive: true }\n".into()));
 }

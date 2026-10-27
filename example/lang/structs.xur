@@ -3,7 +3,7 @@
 //
 // Run it:
 //
-//     xur run example/structs.xur
+//     xur run example/lang/structs.xur
 //
 // Structs are values, like tuples: `p.x = 5` gives `p` an updated copy and
 // leaves every other copy as it was.

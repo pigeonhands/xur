@@ -169,19 +169,24 @@ fn lex_and_parse_errors_are_both_reported() {
 
 #[test]
 fn examples_parse_cleanly() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../example");
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../example"));
     let mut count = 0;
-    for entry in std::fs::read_dir(dir).expect("read example dir") {
-        let path = entry.expect("read example entry").path();
-        if path.extension().is_some_and(|ext| ext == "xur") {
-            let src = std::fs::read_to_string(&path).expect("read example file");
-            let (module, diags) = parse_module_fresh(&src);
-            assert!(diags.is_empty(), "errors in {path:?}: {diags:#?}");
-            assert!(!module.items.is_empty());
-            count += 1;
+    let mut dirs = vec![dir.to_owned()];
+    while let Some(d) = dirs.pop() {
+        for entry in std::fs::read_dir(&d).expect("read example dir") {
+            let path = entry.expect("read example entry").path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "xur") {
+                let src = std::fs::read_to_string(&path).expect("read example file");
+                let (module, diags) = parse_module_fresh(&src);
+                assert!(diags.is_empty(), "errors in {path:?}: {diags:#?}");
+                assert!(!module.items.is_empty());
+                count += 1;
+            }
         }
     }
-    assert!(count > 0, "no examples found in {dir}");
+    assert!(count > 0, "no examples found in {}", dir.display());
 }
 
 #[test]

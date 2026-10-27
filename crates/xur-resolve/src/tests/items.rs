@@ -3,7 +3,7 @@ use super::resolve_src;
 #[test]
 fn prelude_and_examples_declare_without_errors() {
     resolve_src("").assert_no_errors();
-    resolve_src(include_str!("../../../../example/math.xur")).assert_no_errors();
+    resolve_src(include_str!("../../../../example/lang/math.xur")).assert_no_errors();
 }
 
 #[test]
