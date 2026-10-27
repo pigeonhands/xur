@@ -1,0 +1,83 @@
+// Parsing the same bytes as big-endian and little-endian.
+//
+// Run it:
+//
+//     xur run example/reflect/endianness.xur
+
+use std::io;
+use std::reflect;
+use std::assert;
+
+#[repr(packed)]
+#[endian(Big)]
+struct HeaderBE {
+    version: u8
+    kind: u8
+    length: u16
+    sequence: u32
+}
+
+#[repr(packed)]
+#[endian(Little)]
+struct HeaderLE {
+    version: u8
+    kind: u8
+    length: u16
+    sequence: u32
+}
+
+fn main() -> Result<()> {
+    let hex = "01020030000003e9";
+    let data = std::bytes::from_hex(hex)?;
+    io::println("Hex: {}", hex);
+    io::println("");
+
+    // Parse as big-endian.
+    let be_layout = reflect::layout::<HeaderBE>();
+    let be = be_layout.from_bytes(data) as HeaderBE;
+    io::println("Big-endian:");
+    io::println("  version  = {}", be.version);
+    io::println("  kind     = {}", be.kind);
+    io::println("  length   = {}", be.length);
+    io::println("  sequence = {}", be.sequence);
+
+    assert::is_eq(be.version, 1);
+    assert::is_eq(be.kind, 2);
+    assert::is_eq(be.length, 48);
+    assert::is_eq(be.sequence, 1001);
+    io::println("  ok");
+    io::println("");
+
+    // Parse the same bytes as little-endian.
+    let le_layout = reflect::layout::<HeaderLE>();
+    let le = le_layout.from_bytes(data) as HeaderLE;
+    io::println("Little-endian:");
+    io::println("  version  = {}", le.version);
+    io::println("  kind     = {}", le.kind);
+    io::println("  length   = {}", le.length);
+    io::println("  sequence = {}", le.sequence);
+
+    assert::is_eq(le.version, 1);
+    assert::is_eq(le.kind, 2);
+    assert::is_eq(le.length, 0x3000);
+    assert::is_eq(le.sequence, 0xe9030000);
+    io::println("  ok");
+    io::println("");
+
+    // Round-trip: encode as BE, decode as LE, values differ.
+    let be_bytes = be_layout.to_bytes(HeaderBE { version: 1, kind: 2, length: 0x1234, sequence: 0xdeadbeef });
+    io::println("BE encoded:  {}", be_bytes.to_hex());
+
+    let le_bytes = le_layout.to_bytes(HeaderLE { version: 1, kind: 2, length: 0x1234, sequence: 0xdeadbeef });
+    io::println("LE encoded:  {}", le_bytes.to_hex());
+
+    // Same single-byte fields, but multi-byte fields are reversed.
+    let as_le = le_layout.from_bytes(be_bytes) as HeaderLE;
+    assert::is_eq(as_le.version, 1);
+    assert::is_eq(as_le.kind, 2);
+    assert::is_eq(as_le.length, 0x3412);
+    assert::is_eq(as_le.sequence, 0xefbeadde);
+    io::println("BE bytes read as LE: length=0x3412, sequence=0xefbeadde");
+
+    Ok(())
+}

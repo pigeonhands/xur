@@ -74,16 +74,5 @@ fn main() -> Result<()> {
     assert::is_eq(pair_bytes, pair_bytes2);
     io::println("Pair round-trip: ok");
 
-    // Parse a hex string straight into a struct.
-    let raw = std::bytes::from_hex("02200080000007d244415441beef")?;
-    let pkt = layout.from_bytes(raw) as PacketHeader;
-    assert::is_eq(pkt.version, 2);
-    assert::is_eq(pkt.kind, 0x20);
-    assert::is_eq(pkt.length, 128);
-    assert::is_eq(pkt.sequence, 2002);
-    assert::is_eq(pkt.tag, b"DATA");
-    assert::is_eq(pkt.checksum, 0xbeef);
-    io::println("Hex parse: ok");
-
     Ok(())
 }
