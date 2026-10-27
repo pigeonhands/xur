@@ -49,6 +49,9 @@ pub struct Function {
     pub registers: u32,
     /// The function's type parameters, which calls bind by position.
     pub type_params: Vec<Symbol>,
+    /// Which type parameters are required (`T!`): the caller must provide
+    /// a concrete type, not `_`.
+    pub type_param_required: Vec<bool>,
     /// For each parameter, the type-parameter index it uses, if any.
     /// Enables runtime inference of generic args from argument values.
     pub param_type_params: Vec<Option<u32>>,
@@ -145,6 +148,9 @@ pub enum TypeArg {
     Named { name: String, def: Option<DefId> },
     /// The caller's type parameter with this index.
     Param(u32),
+    /// `@`: record mode — values are coerced to records, and `T::new()`
+    /// creates an empty record.
+    Record,
 }
 
 #[derive(Debug)]
@@ -280,15 +286,27 @@ pub enum InstKind {
         value: Reg,
         index: u32,
     },
-    /// Fails at runtime unless `value` has type `ty`.
+    /// Fails at runtime unless `value` has type `ty`. When `coerce` is
+    /// true (the `as` operator), Record → Adt coercion is attempted;
+    /// otherwise the type must match exactly.
     CheckType {
         value: Reg,
         ty: RtType,
+        coerce: bool,
     },
     /// Starts iterating over `iterable`, for a `for` loop.
     IterStart {
         dst: Reg,
         iterable: Reg,
+    },
+    /// `T::name(args)` where `T` is a type parameter, resolved and called
+    /// at runtime. When `T` is a concrete type, dispatches to its associated
+    /// function; when unresolved, falls back to record operations.
+    TyParamCall {
+        dst: Reg,
+        type_param: u32,
+        method: Symbol,
+        args: Vec<Reg>,
     },
     /// Fails at runtime with `message`; lowered for code that resolution
     /// already reported as broken.

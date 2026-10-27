@@ -68,6 +68,7 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
                     .map(|arg| match arg {
                         TypeArg::Named { name, .. } => name.clone(),
                         TypeArg::Param(i) => format!("T{i}"),
+                        TypeArg::Record => "@".to_owned(),
                     })
                     .collect();
                 format!("::<{}>", args.join(", "))
@@ -144,7 +145,14 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
         InstKind::IsTuple { dst, value, len } => format!("{dst:?} = {value:?} is tuple of {len}"),
         InstKind::Project { dst, value, index } => format!("{dst:?} = {value:?}.{index}"),
         InstKind::IterStart { dst, iterable } => format!("{dst:?} = iter {iterable:?}"),
-        InstKind::CheckType { value, ty } => format!("check {value:?}: {ty}"),
+        InstKind::CheckType { value, ty, coerce } => {
+            let op = if *coerce { "coerce" } else { "check" };
+            format!("{op} {value:?}: {ty}")
+        }
+        InstKind::TyParamCall { dst, type_param, method, args } => {
+            let args: Vec<_> = args.iter().map(|r| format!("{r:?}")).collect();
+            format!("{dst:?} = T{type_param}::{method}({})", args.join(", "))
+        }
         InstKind::Error { message } => format!("error {message:?}"),
     }
 }

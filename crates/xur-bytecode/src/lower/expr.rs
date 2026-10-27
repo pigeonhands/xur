@@ -170,7 +170,7 @@ impl Lowerer<'_> {
                 let src = self.expr(inner);
                 let dst = self.new_reg();
                 self.emit(InstKind::Copy { dst, src }, span);
-                self.check_type(dst, ty, span);
+                self.check_type_coerce(dst, ty, span);
                 dst
             }
             ExprKind::Err => self.error("invalid expression", span),
@@ -222,6 +222,9 @@ impl Lowerer<'_> {
                     return self.error("this has named fields; use `Name { field: value }`", span);
                 }
             },
+            Res::TyParamAssoc(..) => {
+                return self.error("type parameter associated functions must be called", span);
+            }
             Res::Err => return self.error("unresolved name", span),
             other => {
                 return self.error(format!("expected a value, found a {}", other.descr()), span);
@@ -291,7 +294,21 @@ impl Lowerer<'_> {
             let fields = RecordFields::Positional(self.exprs(args));
             return self.record(ty, variant, fields, span);
         }
-        let type_args = match &callee.kind {
+        if let ExprKind::Path(path) = &callee.kind
+            && let Some(&Res::TyParamAssoc(param, method)) =
+                self.resolutions.res.get(&path.id)
+        {
+            let type_param = self
+                .type_params
+                .iter()
+                .position(|&p| p == param)
+                .expect("type param resolved but not in scope") as u32;
+            let args = self.exprs(args);
+            let dst = self.new_reg();
+            self.emit(InstKind::TyParamCall { dst, type_param, method, args }, span);
+            return dst;
+        }
+        let mut type_args = match &callee.kind {
             ExprKind::Path(path) => path
                 .segments
                 .last()
@@ -300,6 +317,11 @@ impl Lowerer<'_> {
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
+        if type_args.is_empty() {
+            if let Some(hint) = self.hint_type_arg.take() {
+                type_args.push(hint);
+            }
+        }
         let callee = self.expr(callee);
         let args = self.exprs(args);
         let dst = self.new_reg();
@@ -315,11 +337,21 @@ impl Lowerer<'_> {
         dst
     }
 
+    fn type_arg_from_ty(&self, ty: &Ty) -> Option<TypeArg> {
+        match self.type_arg(ty) {
+            TypeArg::Named { def: None, .. } => None,
+            arg => Some(arg),
+        }
+    }
+
     fn type_args(&self, args: &GenericArgs) -> Vec<TypeArg> {
         args.args.iter().map(|ty| self.type_arg(ty)).collect()
     }
 
     fn type_arg(&self, ty: &Ty) -> TypeArg {
+        if matches!(ty.kind, TyKind::Record) {
+            return TypeArg::Record;
+        }
         if let TyKind::Path(path) = &ty.kind
             && let Some(&Res::Def(DefKind::TyParam, param)) = self.resolutions.res.get(&path.id)
             && let Some(index) = self.type_params.iter().position(|&p| p == param)
@@ -545,6 +577,9 @@ impl Lowerer<'_> {
 
     fn local(&mut self, local: &Local) {
         let try_bind = self.is_try_bind(local);
+        if let Some(ty) = &local.ty {
+            self.hint_type_arg = self.type_arg_from_ty(ty);
+        }
         let init_expr = if try_bind {
             local.init.as_deref().and_then(|e| match &e.kind {
                 ExprKind::Try(inner) => Some(inner.as_ref()),
@@ -558,6 +593,7 @@ impl Lowerer<'_> {
         } else {
             self.expr_or_unit(local.init.as_deref(), local.span)
         };
+        self.hint_type_arg = None;
         if let (Some(ty), Some(_)) = (&local.ty, &local.init) {
             self.check_type(init, ty, local.span);
         }

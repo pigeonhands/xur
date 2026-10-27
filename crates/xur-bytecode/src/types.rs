@@ -36,7 +36,7 @@ fn rt_type_or_any(resolutions: &Resolutions, ty: &Ty) -> RtType {
         ),
         TyKind::Paren(ty) => rt_type_or_any(resolutions, ty),
         TyKind::List(_) => RtType::List,
-        TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => RtType::Any,
+        TyKind::Record | TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => RtType::Any,
     }
 }
 
@@ -75,6 +75,7 @@ pub fn type_name(resolutions: &Resolutions, ty: &Ty) -> String {
         }
         TyKind::Paren(ty) => type_name(resolutions, ty),
         TyKind::List(ty) => format!("[{}]", type_name(resolutions, ty)),
+        TyKind::Record => "@".to_owned(),
         TyKind::Infer | TyKind::ImplicitSelf | TyKind::Err => "_".to_owned(),
     }
 }

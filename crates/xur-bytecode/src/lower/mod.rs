@@ -14,7 +14,7 @@ use xur_ast::{Block as AstBlock, Expr, FnRetTy, NodeId, Param, Ty, TyKind};
 use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, Program, Res, Resolutions};
 use xur_span::{Span, Symbol};
 
-use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, RtType, Terminator};
+use crate::ir::{Block, BlockId, Constant, Function, Inst, InstKind, Reg, RtType, Terminator, TypeArg};
 use crate::items::{ItemIndex, ItemRef};
 
 /// Lowers the function or constant `def`, or returns `None` if `def` is
@@ -29,6 +29,7 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
             for param in &item.generics.params {
                 lowerer.type_params.push(resolutions.node_defs[&param.id]);
                 lowerer.type_param_names.push(param.ident.name);
+                lowerer.type_param_required.push(param.required);
             }
             if let FnRetTy::Ty(ty) = &item.decl.output {
                 lowerer.ret_ty = lowerer.rt_type(ty);
@@ -78,11 +79,15 @@ struct Lowerer<'a> {
     /// The definitions of the function's type parameters, in order.
     type_params: Vec<DefId>,
     type_param_names: Vec<Symbol>,
+    type_param_required: Vec<bool>,
     closures: Vec<Arc<Function>>,
     /// For each parameter, which type param index it uses.
     param_type_params: Vec<Option<u32>>,
     /// The declared return type, checked on return.
     ret_ty: Option<RtType>,
+    /// A type hint from a `let x: Type = call()` binding, passed as a type
+    /// arg to the call when it has none of its own.
+    hint_type_arg: Option<TypeArg>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -100,9 +105,11 @@ impl<'a> Lowerer<'a> {
             loops: Vec::new(),
             type_params: Vec::new(),
             type_param_names: Vec::new(),
+            type_param_required: Vec::new(),
             closures: Vec::new(),
             param_type_params: Vec::new(),
             ret_ty: None,
+            hint_type_arg: None,
         };
         lowerer.current = lowerer.new_block();
         lowerer
@@ -128,6 +135,7 @@ impl<'a> Lowerer<'a> {
             params,
             registers: self.registers,
             type_params: self.type_param_names,
+            type_param_required: self.type_param_required,
             param_type_params: self.param_type_params,
             blocks,
             closures: self.closures,
@@ -160,16 +168,23 @@ impl<'a> Lowerer<'a> {
     /// Returns `value`, checking it against the declared return type.
     fn ret(&mut self, value: Reg, span: Span) {
         if let Some(ty) = self.ret_ty.clone() {
-            self.emit(InstKind::CheckType { value, ty }, span);
+            self.emit(InstKind::CheckType { value, ty, coerce: false }, span);
         }
         self.terminate(Terminator::Return(value), span);
     }
 
     /// Checks at runtime that `value` has the type `ty`, if `ty` is written
-    /// and concrete.
+    /// and concrete. No coercion — use `check_type_coerce` for `as`.
     fn check_type(&mut self, value: Reg, ty: &Ty, span: Span) {
         if let Some(ty) = self.rt_type(ty) {
-            self.emit(InstKind::CheckType { value, ty }, span);
+            self.emit(InstKind::CheckType { value, ty, coerce: false }, span);
+        }
+    }
+
+    /// Checks and coerces `value` to `ty` (the `as` operator).
+    fn check_type_coerce(&mut self, value: Reg, ty: &Ty, span: Span) {
+        if let Some(ty) = self.rt_type(ty) {
+            self.emit(InstKind::CheckType { value, ty, coerce: true }, span);
         }
     }
 
