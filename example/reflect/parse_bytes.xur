@@ -1,75 +1,71 @@
-// Constructing a binary layout at runtime and parsing raw bytes.
+// Binary layout: struct → bytes → record round-trip.
 //
 // Run it:
 //
 //     xur run example/reflect/parse_bytes.xur
 //
-// This builds a layout for a simple network packet header by hand
-// (no struct needed), writes a packet to bytes, then parses it back.
+// Defines a packet header struct with layout attributes, constructs
+// one, serializes it to bytes, then parses those bytes back.
 
 use std::io;
 use std::reflect;
 
-fn main() -> Result<()> {
-    // Build a layout at runtime — no struct definition needed.
-    // This is useful when the format comes from a spec or config file.
-    let header = reflect::Layout::new("PacketHeader")
-        .big_endian()
-        .field("version", "u8")
-        .field("type", "u8")
-        .field("length", "u16")
-        .field("sequence", "u32")
-        .bytes("tag", 4)
-        .field("checksum", "u16");
+#[repr(packed)]
+#[endian(Big)]
+struct PacketHeader {
+    version: u8
+    kind: u8
+    length: u16
+    sequence: u32
+    #[field(size = 4)] tag: bytes
+    checksum: u16
+}
 
-    io::println("Layout: {}", header);
-    io::println("Size:   {} bytes", header.size());
+fn main() -> Result<()> {
+    let layout = reflect::layout::<PacketHeader>();
+    io::println("Layout: {}", layout);
+    io::println("Size:   {} bytes", layout.size());
     io::println("");
 
-    // Show each field's offset and type.
-    io::println("Fields:");
-    for f in header.fields() {
+    for f in layout.fields() {
         io::println("  +{}  {}  {}", f.offset, f.name, f.ty);
     }
     io::println("");
 
-    // Build a packet from a record and serialize it.
-    let packet = @{
+    // Construct a header and serialize it.
+    let header = PacketHeader {
         version: 1,
-        type: 0x10,
+        kind: 0x10,
         length: 64,
         sequence: 1001,
         tag: b"PING",
         checksum: 0xabcd
     };
-    let data = header.to_bytes(packet);
+    let data = layout.to_bytes(header);
     io::println("Encoded: {}", data.to_hex());
 
-    // Parse it back.
-    let parsed = header.from_bytes(data);
+    // Parse the bytes back into a record.
+    let parsed = layout.from_bytes(data);
     io::println("Decoded:");
     io::println("  version  = {}", parsed.version);
-    io::println("  type     = {}", parsed.type);
+    io::println("  kind     = {}", parsed.kind);
     io::println("  length   = {}", parsed.length);
     io::println("  sequence = {}", parsed.sequence);
     io::println("  tag      = {}", parsed.tag);
     io::println("  checksum = {}", parsed.checksum);
     io::println("");
 
-    // You can also read/write at offsets into a larger buffer.
-    let buffer = std::bytes::zeroed(header.size() * 3);
+    // Also works the other way: build a layout at runtime and write
+    // a record literal into it.
+    let runtime_layout = reflect::Layout::new("Pair")
+        .field("x", "i32")
+        .field("y", "i32");
 
-    // Write two packets at different offsets.
-    let pkt1 = @{ version: 1, type: 0x01, length: 32, sequence: 1, tag: b"HELO", checksum: 0x1111 };
-    let pkt2 = @{ version: 1, type: 0x02, length: 48, sequence: 2, tag: b"DATA", checksum: 0x2222 };
-    header.write(buffer, 0, pkt1);
-    header.write(buffer, header.size(), pkt2);
+    let pair_bytes = runtime_layout.to_bytes(@{ x: 42, y: -1 });
+    io::println("Pair bytes: {}", pair_bytes.to_hex());
 
-    io::println("Buffer with two packets: {}", buffer.to_hex());
-
-    // Read the second packet back.
-    let second = header.read(buffer, header.size());
-    io::println("Second packet: type={}, tag={}", second.type, second.tag);
+    let pair = runtime_layout.from_bytes(pair_bytes);
+    io::println("Pair back:  x={}, y={}", pair.x, pair.y);
 
     Ok(())
 }
