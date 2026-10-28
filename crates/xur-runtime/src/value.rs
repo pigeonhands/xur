@@ -275,6 +275,7 @@ pub enum BuiltinType {
     Map,
     Bytes,
     Range,
+    Record,
     /// Every struct and enum variant defined in Xur, for methods they all
     /// have, like `to_bytes`. Their own `impl` functions come first.
     Struct,
@@ -293,6 +294,7 @@ impl Value {
             Self::Map(_) => BuiltinType::Map,
             Self::Bytes(_) => BuiltinType::Bytes,
             Self::Range(_) => BuiltinType::Range,
+            Self::Record(_) => BuiltinType::Record,
             Self::Adt(_) => BuiltinType::Struct,
             _ => return None,
         })

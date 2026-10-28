@@ -1,0 +1,60 @@
+// Record methods: get_field, set_field, get_method, set_method, fields.
+//
+//     xur run example/lang/records.xur
+
+use std::io;
+
+fn greet(name: str) {
+    io::println("hello, {}!", name);
+}
+
+fn main() -> Result<()> {
+    let r = @{ name: "xur", version: 1 };
+    io::println("record: {}", r);
+    io::println("fields: {}", r.fields());
+
+    // get_field returns Option.
+    match r.get_field("name") {
+        Some(v) => io::println("name = {}", v),
+        None    => io::println("name not found"),
+    }
+    match r.get_field("missing") {
+        Some(v) => io::println("missing = {}", v),
+        None    => io::println("missing not found"),
+    }
+
+    // set_field returns a new record (records are immutable).
+    let r2 = r.set_field("lang", "rust");
+    io::println("after set_field: {}", r2);
+    io::println("original unchanged: {}", r);
+
+    // set_field replaces an existing field.
+    let r3 = r.set_field("version", 2);
+    io::println("after replace: {}", r3);
+
+    // set_method attaches a callable.
+    let r4 = r.set_method("greet", greet);
+    io::println("with method: {}", r4);
+
+    match r4.get_method("greet") {
+        Some(f) => f(r4.name),
+        None    => io::println("no greet method"),
+    }
+
+    // get_method returns None for non-callable fields.
+    match r4.get_method("name") {
+        Some(_) => io::println("name is callable??"),
+        None    => io::println("name is not callable (correct)"),
+    }
+
+    // set_method with a closure.
+    let r5 = r.set_method("describe", |rec: _| {
+        io::println("{} v{}", rec.name, rec.version);
+    });
+    match r5.get_method("describe") {
+        Some(f) => f(r5),
+        None    => io::println("no describe method"),
+    }
+
+    Ok(())
+}
