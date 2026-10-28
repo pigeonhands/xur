@@ -1,4 +1,5 @@
 mod debug;
+mod lsp;
 mod run;
 
 use std::io::Read;
@@ -35,6 +36,7 @@ pub fn run(command: Command) -> Result<()> {
                 }
             }
         }
+        Command::Lsp => lsp::run(),
         Command::Debug(command) => debug::run(command),
     }
 }

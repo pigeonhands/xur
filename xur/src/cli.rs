@@ -26,6 +26,8 @@ pub enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Start the language server (LSP), communicating over stdio.
+    Lsp,
     /// Inspect the output of individual compiler stages.
     #[command(subcommand)]
     Debug(DebugCommand),

@@ -22,3 +22,5 @@ xur-errors.workspace = true
 anyhow.workspace = true
 ariadne.workspace = true
 clap.workspace = true
+tower-lsp.workspace = true
+tokio.workspace = true
