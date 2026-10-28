@@ -9,9 +9,11 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use xur_errors::{Diag, Level};
-use xur_ast::{ExprKind, ItemKind, PatKind};
+use xur_ast::{Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind};
 use xur_ast::visit::{self, Visitor};
-use xur_resolve::{DefId, DefKind, Namespace, PrimTy, Program, Res, names};
+use xur_bytecode::{ItemIndex, ItemRef, type_name};
+use xur_resolve::{DefId, DefKind, NativeFnId, Namespace, PrimTy, Program, Res, Resolutions, names};
+use xur_runtime::Registry;
 use xur_span::{Ident, OverlayFileLoader, SourceFile, SourceMap, Span, Symbol};
 
 pub fn run() -> anyhow::Result<()> {
@@ -39,6 +41,8 @@ struct Backend {
 
 struct AnalysisState {
     program: Program,
+    registry: Arc<Registry>,
+    items: ItemIndex,
     diagnosed_uris: HashSet<Url>,
 }
 
@@ -81,8 +85,11 @@ impl Backend {
                     }
                 }
 
+                let items = ItemIndex::new(&program);
                 *self.state.lock().unwrap() = Some(AnalysisState {
                     program,
+                    registry,
+                    items,
                     diagnosed_uris: new_uris,
                 });
             }
@@ -390,38 +397,48 @@ impl LanguageServer for Backend {
         };
         let file_start = file.start;
         let file_end = file.end();
+        let in_file = |span: Span| span.start >= file_start && span.start < file_end;
 
         let param_names = build_param_name_map(program);
         let mut hints = Vec::new();
 
         for module in &program.krate.modules {
-            let mut collector = CallCollector(Vec::new());
-            collector.visit_module(module.ast);
+            let mut call_collector = CallCollector(Vec::new());
+            let mut let_collector = LetCollector(Vec::new());
+            let mut match_collector = MatchCollector(Vec::new());
+            call_collector.visit_module(module.ast);
+            let_collector.visit_module(module.ast);
+            match_collector.visit_module(module.ast);
 
-            for (callee_id, args) in collector.0 {
+            // Parameter name hints at call sites.
+            for (callee_id, args) in call_collector.0 {
                 let Some(&res) = resolutions.res.get(&callee_id) else {
                     continue;
                 };
-                let def_id = match res {
-                    Res::Def(DefKind::Fn, id) => id,
+                let names: Vec<String> = match res {
+                    Res::Def(DefKind::Fn, def_id) => {
+                        match param_names.get(&def_id) {
+                            Some(idents) => idents.iter().map(|id| id.name.to_string()).collect(),
+                            None => continue,
+                        }
+                    }
+                    Res::Def(DefKind::NativeFn(id), _) => {
+                        state.registry.function(id).param_names.clone()
+                    }
                     _ => continue,
                 };
-                let Some(names) = param_names.get(&def_id) else {
-                    continue;
-                };
                 for (i, arg_span) in args.iter().enumerate() {
-                    if arg_span.start < file_start || arg_span.start >= file_end {
+                    if !in_file(*arg_span) {
                         continue;
                     }
                     if let Some(name) = names.get(i) {
-                        let name_str = name.name.as_str();
-                        if name_str == "_" {
+                        if name == "_" || name.is_empty() {
                             continue;
                         }
                         let pos = file.line_col(arg_span.start);
                         hints.push(InlayHint {
                             position: Position::new(pos.line - 1, pos.col - 1),
-                            label: InlayHintLabel::String(format!("{name_str}: ")),
+                            label: InlayHintLabel::String(format!("{name}: ")),
                             kind: Some(InlayHintKind::PARAMETER),
                             padding_left: None,
                             padding_right: None,
@@ -430,6 +447,46 @@ impl LanguageServer for Backend {
                             data: None,
                         });
                     }
+                }
+            }
+
+            // Type hints on let bindings without explicit annotations.
+            for (pat_end, init) in &let_collector.0 {
+                if !in_file(Span { start: *pat_end, end: *pat_end }) {
+                    continue;
+                }
+                if let Some(ty) = infer_expr_type(init, resolutions, &state.items, &state.registry) {
+                    let pos = file.line_col(*pat_end);
+                    hints.push(InlayHint {
+                        position: Position::new(pos.line - 1, pos.col - 1),
+                        label: InlayHintLabel::String(format!(": {ty}")),
+                        kind: Some(InlayHintKind::TYPE),
+                        padding_left: None,
+                        padding_right: None,
+                        text_edits: None,
+                        tooltip: None,
+                        data: None,
+                    });
+                }
+            }
+
+            // Type hints on match scrutinees.
+            for (scrutinee_end, scrutinee) in &match_collector.0 {
+                if !in_file(Span { start: *scrutinee_end, end: *scrutinee_end }) {
+                    continue;
+                }
+                if let Some(ty) = infer_expr_type(scrutinee, resolutions, &state.items, &state.registry) {
+                    let pos = file.line_col(*scrutinee_end);
+                    hints.push(InlayHint {
+                        position: Position::new(pos.line - 1, pos.col - 1),
+                        label: InlayHintLabel::String(format!(": {ty}")),
+                        kind: Some(InlayHintKind::TYPE),
+                        padding_left: Some(true),
+                        padding_right: None,
+                        text_edits: None,
+                        tooltip: None,
+                        data: None,
+                    });
                 }
             }
         }
@@ -640,6 +697,139 @@ impl<'ast> Visitor<'ast> for CallCollector {
         }
         visit::walk_expr(self, expr);
     }
+}
+
+/// Collects let bindings without type annotations: `(pat_span_end, init_expr)`.
+struct LetCollector<'a>(Vec<(usize, &'a Expr)>);
+
+impl<'ast> Visitor<'ast> for LetCollector<'ast> {
+    fn visit_local(&mut self, local: &'ast Local) {
+        if local.ty.is_none()
+            && let Some(init) = &local.init
+        {
+            self.0.push((local.pat.span.end, init));
+        }
+        visit::walk_local(self, local);
+    }
+}
+
+/// Collects match expressions: `(scrutinee_span_end, scrutinee_expr)`.
+struct MatchCollector<'a>(Vec<(usize, &'a Expr)>);
+
+impl<'ast> Visitor<'ast> for MatchCollector<'ast> {
+    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
+        if let ExprKind::Match(scrutinee, _) = &expr.kind {
+            self.0.push((scrutinee.span.end, scrutinee));
+        }
+        visit::walk_expr(self, expr);
+    }
+}
+
+/// Syntactically infers the type of an expression, returning a display name
+/// when one is apparent from the expression form alone (literals, constructors,
+/// known function return types).
+fn infer_expr_type(
+    expr: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+) -> Option<String> {
+    match &expr.kind {
+        ExprKind::Lit(lit) => match &lit.kind {
+            LitKind::Str(_) => Some("str".into()),
+            LitKind::Int(_) => Some("i64".into()),
+            LitKind::Float(_) => Some("f64".into()),
+            LitKind::Bool(_) => Some("bool".into()),
+            LitKind::ByteStr(_) => Some("bytes".into()),
+            LitKind::Err => None,
+        },
+        ExprKind::List(_) => Some("list".into()),
+        ExprKind::Map(_) => Some("map".into()),
+        ExprKind::Record(_) => Some("record".into()),
+        ExprKind::Tuple(elems) => {
+            if elems.is_empty() {
+                return Some("()".into());
+            }
+            let types: Vec<_> = elems.iter()
+                .map(|e| infer_expr_type(e, resolutions, items, registry)
+                    .unwrap_or_else(|| "_".into()))
+                .collect();
+            Some(format!("({})", types.join(", ")))
+        }
+        ExprKind::Struct(s) => {
+            let res = resolutions.res.get(&s.path.id)?;
+            match res {
+                Res::Def(_, def) => Some(resolutions.defs.get(*def).name.to_string()),
+                _ => None,
+            }
+        }
+        ExprKind::Call(callee, _) => {
+            if let ExprKind::Path(path) = &callee.kind {
+                let res = resolutions.res.get(&path.id)?;
+                match res {
+                    Res::Def(DefKind::Fn, def) => {
+                        if let Some(ItemRef::Fn { item, .. }) = items.get(*def) {
+                            match &item.decl.output {
+                                FnRetTy::Ty(ty) => Some(type_name(resolutions, ty)),
+                                FnRetTy::Default(_) => Some("()".into()),
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    Res::Def(DefKind::NativeFn(id), _) => {
+                        native_return_type(*id, registry)
+                    }
+                    Res::Def(DefKind::Struct | DefKind::NativeType(_), def) => {
+                        Some(resolutions.defs.get(*def).name.to_string())
+                    }
+                    Res::Def(DefKind::Variant | DefKind::NativeVariant(_), def) => {
+                        let parent = resolutions.defs.get(*def).parent?;
+                        Some(resolutions.defs.get(parent).name.to_string())
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        ExprKind::MethodCall(mc) => {
+            // Can't resolve method calls without full type info.
+            let _ = mc;
+            None
+        }
+        ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry),
+        ExprKind::Block(block) => {
+            block.stmts.last().and_then(|stmt| {
+                if let xur_ast::StmtKind::Expr(e) = &stmt.kind {
+                    infer_expr_type(e, resolutions, items, registry)
+                } else {
+                    None
+                }
+            })
+        }
+        ExprKind::If(_, then_block, _) => {
+            then_block.stmts.last().and_then(|stmt| {
+                if let xur_ast::StmtKind::Expr(e) = &stmt.kind {
+                    infer_expr_type(e, resolutions, items, registry)
+                } else {
+                    None
+                }
+            })
+        }
+        ExprKind::Match(_, arms) => {
+            arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry))
+        }
+        ExprKind::Path(_) => None,
+        _ => None,
+    }
+}
+
+/// The return type of a native function, mapped to a xur type name.
+fn native_return_type(id: NativeFnId, registry: &Registry) -> Option<String> {
+    let native_fn = registry.function(id);
+    let sig = native_fn.signature.as_ref()?;
+    Some(registry.shape_xur_name(sig.ret))
 }
 
 fn build_param_name_map(program: &Program) -> HashMap<DefId, Vec<Ident>> {

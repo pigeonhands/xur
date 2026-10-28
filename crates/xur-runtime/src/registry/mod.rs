@@ -296,6 +296,32 @@ impl Registry {
         self.read().types[id.0 as usize].name.clone()
     }
 
+    /// The xur display name for `shape`, mapping Rust types to their xur
+    /// equivalents: `String` → `str`, `Vec<u8>` → `bytes`, registered types
+    /// by their xur name, and falling back to the Rust name.
+    pub fn shape_xur_name(&self, shape: &'static Shape) -> String {
+        if let Some(id) = self.type_of_shape(shape) {
+            return self.type_name(id);
+        }
+        let name = shape.type_name().to_string();
+        match name.as_str() {
+            "String" | "&str" | "alloc::string::String" => "str".into(),
+            "bool" => "bool".into(),
+            "i64" => "i64".into(),
+            "f64" => "f64".into(),
+            "i32" => "i32".into(),
+            "u32" => "u32".into(),
+            "u64" => "u64".into(),
+            "usize" => "usize".into(),
+            "()" => "()".into(),
+            "Vec<u8>" | "alloc::vec::Vec<u8>" => "bytes".into(),
+            _ if name.starts_with("Vec<") || name == "Vec" => "list".into(),
+            _ => {
+                name.split('<').next().unwrap_or(&name).into()
+            }
+        }
+    }
+
     /// The native type registered for `shape`, if any.
     pub fn type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
         let index = self
