@@ -25,6 +25,36 @@ impl Interp<'_> {
                 self.native_type_args = caller_type_args;
                 result
             }
+            Value::Ptr(addr) => {
+                let addr = *addr;
+                if addr == 0 {
+                    return Err(RuntimeError::new("cannot call null pointer"));
+                }
+                match args.len() {
+                    0 => {
+                        let f: unsafe extern "C" fn() -> u64 =
+                            unsafe { std::mem::transmute(addr) };
+                        Ok(Value::Int(unsafe { f() } as i64))
+                    }
+                    1 => {
+                        let arg = match &args[0] {
+                            Value::Int(n) => *n as u64,
+                            Value::Ptr(p) => *p,
+                            _ => {
+                                return Err(RuntimeError::new(
+                                    "function pointer arguments must be integers or pointers",
+                                ))
+                            }
+                        };
+                        let f: unsafe extern "C" fn(u64) -> u64 =
+                            unsafe { std::mem::transmute(addr) };
+                        Ok(Value::Int(unsafe { f(arg) } as i64))
+                    }
+                    _ => Err(RuntimeError::new(
+                        "function pointer calls support 0 or 1 arguments",
+                    )),
+                }
+            }
             other => Err(RuntimeError::new(format!(
                 "{} is not callable",
                 other.kind()
