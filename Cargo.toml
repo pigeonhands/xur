@@ -48,5 +48,7 @@ tower-lsp = "0.20"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 pico-args = "0.5"
 inquire = { version = "0.9", features = ["editor"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # cranelift-jit = "0.137"
 # cranelift-module = "0.137"

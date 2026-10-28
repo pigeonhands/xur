@@ -1,0 +1,21 @@
+// Logging with std::log
+//
+//     xur run example/lang/logging.xur
+
+use std::log;
+use std::io;
+
+fn main() -> Result<()> {
+    log::subscriber()
+        .with_max_level("debug")
+        .with_target(false)
+        .with_ansi(true)
+        .init();
+
+    log::info("application started");
+    log::debug("debug details: {}", 42);
+    log::warn("something to watch");
+
+    io::println("done");
+    Ok(())
+}
