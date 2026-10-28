@@ -54,9 +54,25 @@ pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
         .raw_function("encode", encode)
         .raw_function("format", format_insn)
         .raw_function("insn", create_insn)
-        .raw_function("mem", create_mem);
+        .raw_function("mem", create_mem)
+        .raw_function("reg", create_reg);
+
+    x86.ty::<RegOp>("RegOp");
 
     register_insn(&mut x86);
+    register_enums(&mut x86);
+}
+
+fn register_enums(x86: &mut ModuleBuilder<'_>) {
+    let codes: Vec<(&str, i64)> = CODE_MAP.iter().map(|(name, code)| {
+        (name.as_str(), *code as i64)
+    }).collect();
+    x86.repr_enum("Code", &codes);
+
+    let regs: Vec<(&str, i64)> = REG_MAP.iter().map(|(name, reg)| {
+        (name.as_str(), *reg as i64)
+    }).collect();
+    x86.repr_enum("Register", &regs);
 }
 
 // ── decode ──────────────────────────────────────────────────────────
@@ -244,15 +260,15 @@ fn register_insn(x86: &mut ModuleBuilder<'_>) {
 /// Operands can be register names (strings like `"RAX"`), integers, or
 /// memory operands built with `x86::mem(...)`.
 fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let (code_name, ops) = match args.split_first() {
-        Some((Value::Str(name), rest)) => (name, rest),
+    let (code, ops) = match args.split_first() {
+        Some((Value::Str(name), rest)) => (parse_code(name)?, rest),
+        Some((Value::Int(n), rest)) => (int_to_code(*n)?, rest),
         _ => {
             return Err(RuntimeError::new(
-                "`insn` takes a Code name and 0–4 operands",
+                "`insn` takes a Code (name or enum) and 0–4 operands",
             ));
         }
     };
-    let code = parse_code(code_name)?;
     let insn = match ops.len() {
         0 => Ok(Instruction::with(code)),
         1 => build1(code, &ops[0]),
@@ -273,6 +289,18 @@ fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     }
 }
 
+/// A register operand wrapper, so `x86::reg(EAX)` is distinguishable from
+/// the integer `4` (an immediate).
+#[derive(Clone, facet::Facet)]
+#[facet(opaque)]
+struct RegOp(IcedRegister);
+
+impl std::fmt::Display for RegOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 /// A memory operand wrapper for passing through Xur.
 #[derive(Clone, facet::Facet)]
 #[facet(opaque)]
@@ -290,6 +318,16 @@ impl std::fmt::Display for MemOp {
         }
         write!(f, "]")
     }
+}
+
+/// `x86::reg(name_or_enum)` → `RegOp`, typed register operand.
+fn create_reg(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let reg = match args {
+        [Value::Str(s)] => parse_reg(s)?,
+        [Value::Int(n)] => int_to_reg(*n)?,
+        _ => return Err(RuntimeError::new("`reg` takes a register name or Register enum")),
+    };
+    into_value(cx, RegOp(reg))
 }
 
 /// `x86::mem(base)` or `x86::mem(base, index, scale, displacement)`.
@@ -332,19 +370,22 @@ fn parse_operand(value: &Value) -> RunResult<Operand> {
         Value::Str(s) => Ok(Operand::Reg(parse_reg(s)?)),
         Value::Int(n) => Ok(Operand::Imm(*n)),
         Value::Native(obj) => {
-            if let Some(m) = obj.with(|m: &MemOp| m.0) {
-                Ok(Operand::Mem(m))
-            } else {
-                Err(RuntimeError::new(
-                    "operand must be a register name, integer, or memory operand",
-                ))
+            if let Some(r) = obj.with(|r: &RegOp| r.0) {
+                return Ok(Operand::Reg(r));
             }
+            if let Some(m) = obj.with(|m: &MemOp| m.0) {
+                return Ok(Operand::Mem(m));
+            }
+            Err(RuntimeError::new(
+                "operand must be a register, integer, or memory operand",
+            ))
         }
         _ => Err(RuntimeError::new(
-            "operand must be a register name, integer, or memory operand",
+            "operand must be a register, integer, or memory operand",
         )),
     }
 }
+
 
 fn build1(code: Code, op0: &Value) -> RunResult<Instruction> {
     match parse_operand(op0)? {
@@ -409,6 +450,16 @@ fn parse_code(name: &str) -> RunResult<Code> {
         .get(name)
         .copied()
         .ok_or_else(|| RuntimeError::new(format!("unknown Code `{name}`")))
+}
+
+fn int_to_code(n: i64) -> RunResult<Code> {
+    Code::try_from(n as usize)
+        .map_err(|_| RuntimeError::new(format!("invalid Code value `{n}`")))
+}
+
+fn int_to_reg(n: i64) -> RunResult<IcedRegister> {
+    IcedRegister::try_from(n as usize)
+        .map_err(|_| RuntimeError::new(format!("invalid Register value `{n}`")))
 }
 
 fn parse_reg(name: &str) -> RunResult<IcedRegister> {
