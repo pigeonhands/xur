@@ -1,0 +1,46 @@
+use std::io;
+use std::ptr;
+use std::assert;
+
+fn main() -> Result<()> {
+    // Create pointers from integers.
+    let null = ptr::null();
+    assert::is_eq(null.is_null(), true);
+
+    let base = ptr::from_int(0x1000);
+    assert::is_eq(base.is_null(), false);
+    assert::is_eq(base.to_int(), 0x1000);
+
+    // Pointer arithmetic.
+    let next = base + 4;
+    assert::is_eq(next.to_int(), 0x1004);
+
+    let prev = next - 2;
+    assert::is_eq(prev.to_int(), 0x1002);
+
+    // Distance between pointers.
+    assert::is_eq(next - base, 4);
+
+    // Bitwise masking on pointers (page alignment).
+    let addr = ptr::from_int(0x12345678);
+    let page = addr & ~0xFFF;
+    assert::is_eq(page.to_int(), 0x12345000);
+
+    // Comparison.
+    assert::is_eq(base < next, true);
+    assert::is_eq(next > base, true);
+
+    // Hex display.
+    assert::is_eq(base.to_hex(), "0x1000");
+
+    // Pointer type in struct definitions.
+    struct Header {
+        magic: _
+        data: *u8
+    }
+    let h = Header { magic: 0xDEAD, data: ptr::from_int(0x8000) };
+    assert::is_eq(h.data.to_int(), 0x8000);
+
+    io::println("pointers: all assertions passed");
+    Ok(())
+}
