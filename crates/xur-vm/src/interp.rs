@@ -710,6 +710,15 @@ impl<'s> Interp<'s> {
                     frame.set(*inner, v);
                 }
             }
+            InstKind::Deref { dst, ptr } => {
+                let Value::Ptr(addr) = frame.get(*ptr) else {
+                    return Err(RuntimeError::new(format!(
+                        "cannot dereference {}",
+                        frame.get(*ptr).kind()
+                    )));
+                };
+                frame.set(*dst, Value::Int(*addr as i64));
+            }
             InstKind::Error { message } => return Err(RuntimeError::new(message.clone())),
         }
         Ok(())

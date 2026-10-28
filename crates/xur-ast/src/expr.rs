@@ -69,6 +69,8 @@ pub enum ExprKind {
     Record(Vec<ExprField>),
     /// `expr.field`
     Field(Box<Expr>, Ident),
+    /// `*expr`, pointer dereference.
+    Deref(Box<Expr>),
     /// `expr?`
     Try(Box<Expr>),
     /// `list[index]`

@@ -21,6 +21,8 @@ impl Parser<'_> {
             TyKind::List(Box::new(element))
         } else if self.eat_noexpect(TokenKind::At) {
             TyKind::Record
+        } else if self.eat_noexpect(TokenKind::Star) {
+            TyKind::Ptr(Box::new(self.parse_ty()?))
         } else if self.eat_noexpect(TokenKind::Underscore) {
             TyKind::Infer
         } else if self.eat_noexpect(TokenKind::Keyword(Keyword::Fn)) {

@@ -317,6 +317,11 @@ pub enum InstKind {
         dst: Reg,
         ty: RtType,
     },
+    /// Dereferences a pointer: `*ptr`.
+    Deref {
+        dst: Reg,
+        ptr: Reg,
+    },
     /// Whether `value` is the "unwrap" variant of a `#[try(unwrap = V)]`
     /// enum. At runtime: finds the parent enum, reads the attr, resolves
     /// the variant, and checks. `dst` is true when the variant matches;

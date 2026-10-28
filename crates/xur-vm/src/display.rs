@@ -37,6 +37,7 @@ impl Interp<'_> {
                 format!("#{{{}}}", entries.join(", "))
             }
             Value::Bytes(bytes) => format!("b\"{}\"", lock(bytes).escape_ascii()),
+            Value::Ptr(addr) => format!("0x{addr:016x}"),
             Value::Adt(adt) => {
                 let name = self.def_name(adt.ctor);
                 if adt.fields.is_empty() {

@@ -22,6 +22,7 @@ mod net;
 mod num;
 mod path;
 mod process;
+mod ptr;
 pub mod re;
 mod record;
 mod reflect;
@@ -74,6 +75,7 @@ pub fn register(registry: &Registry) {
     str::register(registry);
     num::register(registry);
     path::register(registry);
+    ptr::register(registry);
     record::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]

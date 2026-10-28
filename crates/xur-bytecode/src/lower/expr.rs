@@ -148,6 +148,12 @@ impl Lowerer<'_> {
                 self.emit(InstKind::Index { dst, base, index }, span);
                 dst
             }
+            ExprKind::Deref(inner) => {
+                let ptr = self.expr(inner);
+                let dst = self.new_reg();
+                self.emit(InstKind::Deref { dst, ptr }, span);
+                dst
+            }
             ExprKind::Try(inner) => self.try_(inner, span),
             ExprKind::Block(block) => self.block_value(block),
             ExprKind::If(cond, then, otherwise) => self.if_(cond, then, otherwise.as_deref(), span),

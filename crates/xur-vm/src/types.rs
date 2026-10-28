@@ -178,6 +178,7 @@ impl Interp<'_> {
             | (RtType::Str, Value::Str(_))
             | (RtType::Bytes, Value::Bytes(_))
             | (RtType::Float { .. }, Value::Float(_))
+            | (RtType::Ptr, Value::Ptr(_))
             | (RtType::List, Value::List(_))
             | (RtType::Map, Value::Map(_)) => true,
             (RtType::Int { min, max, .. }, Value::Int(i)) => (min..=max).contains(&i),

@@ -37,6 +37,8 @@ pub enum Value {
     Map(Arc<DashMap<MapKey, Value>>),
     /// A byte buffer, shared and mutable like a list (Python's `bytearray`).
     Bytes(Arc<Mutex<Vec<u8>>>),
+    /// A raw pointer (address), for memory-level operations.
+    Ptr(u64),
     /// An instance of a struct or enum variant defined in Xur.
     Adt(Arc<Adt>),
     /// A value of a registered Rust type, held as the Rust value itself.
@@ -249,6 +251,7 @@ impl Value {
             Self::List(_) => "list",
             Self::Map(_) => "map",
             Self::Bytes(_) => "bytes",
+            Self::Ptr(_) => "pointer",
             Self::Adt(_) => "struct or enum",
             Self::Native(_) => "native object",
             Self::Record(_) => "record",
@@ -274,6 +277,7 @@ pub enum BuiltinType {
     List,
     Map,
     Bytes,
+    Ptr,
     Range,
     Record,
     /// Every struct and enum variant defined in Xur, for methods they all
@@ -293,6 +297,7 @@ impl Value {
             Self::List(_) => BuiltinType::List,
             Self::Map(_) => BuiltinType::Map,
             Self::Bytes(_) => BuiltinType::Bytes,
+            Self::Ptr(_) => BuiltinType::Ptr,
             Self::Range(_) => BuiltinType::Range,
             Self::Record(_) => BuiltinType::Record,
             Self::Adt(_) => BuiltinType::Struct,
@@ -322,6 +327,7 @@ impl PartialEq for Value {
                         }))
             }
             (Self::Bytes(a), Self::Bytes(b)) => Arc::ptr_eq(a, b) || *lock(a) == *lock(b),
+            (Self::Ptr(a), Self::Ptr(b)) => a == b,
             (Self::Adt(a), Self::Adt(b)) => a.ctor == b.ctor && a.fields == b.fields,
             // Native objects are compared by identity here; the interpreter
             // compares their Rust values when the type supports it.

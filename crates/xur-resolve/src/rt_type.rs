@@ -36,6 +36,8 @@ pub enum RtType {
         id: NativeTypeId,
         name: String,
     },
+    /// `*T`, a raw pointer.
+    Ptr,
     /// A function type `fn(A, B) -> C`.
     Fn {
         params: Vec<RtType>,
@@ -59,6 +61,7 @@ impl std::fmt::Display for RtType {
                 let tys: Vec<_> = tys.iter().map(ToString::to_string).collect();
                 write!(f, "({})", tys.join(", "))
             }
+            Self::Ptr => f.write_str("*_"),
             Self::List => f.write_str("[_]"),
             Self::Map => f.write_str("map"),
             Self::Adt { name, .. } | Self::Native { name, .. } => f.write_str(name),

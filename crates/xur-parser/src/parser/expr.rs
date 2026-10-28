@@ -94,6 +94,7 @@ fn can_begin_expr(kind: TokenKind<'_>) -> bool {
         | TokenKind::Minus
         | TokenKind::Bang
         | TokenKind::Tilde
+        | TokenKind::Star
         | TokenKind::Pipe
         | TokenKind::PipePipe
         | TokenKind::DotDot
@@ -296,9 +297,17 @@ impl Parser<'_> {
         Ok(None)
     }
 
-    /// Prefix operators: `-x`, `!x`, `~x`.
+    /// Prefix operators: `-x`, `!x`, `~x`, `*x` (deref).
     fn parse_expr_prefix(&mut self) -> PResult<Expr> {
         let lo = self.token.span;
+        if self.token.kind == TokenKind::Star {
+            self.bump();
+            let operand = self.parse_expr_prefix()?;
+            return Ok(mk_expr(
+                ExprKind::Deref(Box::new(operand)),
+                lo.to(self.prev_token.span),
+            ));
+        }
         let op = match self.token.kind {
             TokenKind::Minus => UnOp::Neg,
             TokenKind::Bang => UnOp::Not,

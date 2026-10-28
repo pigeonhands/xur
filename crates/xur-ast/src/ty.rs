@@ -21,6 +21,8 @@ pub enum TyKind {
     /// `@`, record mode: values are coerced to records, and `T::new()`
     /// creates an empty record.
     Record,
+    /// `*T`, a raw pointer to `T`.
+    Ptr(Box<Ty>),
     /// `_`, or no type written at all, as for the closure parameter in
     /// `|x| x + 1`.
     Infer,

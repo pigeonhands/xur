@@ -71,6 +71,7 @@ impl Show for Ty {
                     None => format!("fn({})", params.join(", ")),
                 }
             }
+            TyKind::Ptr(inner) => format!("*{}", inner.show()),
             TyKind::Record => "@".to_owned(),
             TyKind::Infer => "_".to_owned(),
             TyKind::ImplicitSelf => "Self".to_owned(),
@@ -171,6 +172,7 @@ impl Show for Expr {
                 format!("{} {{ {} }}", literal.path.show(), fields.join(", "))
             }
             ExprKind::Field(expr, field) => format!("{}.{field}", expr.show()),
+            ExprKind::Deref(expr) => format!("(*{})", expr.show()),
             ExprKind::Try(expr) => format!("{}?", expr.show()),
             ExprKind::Block(block) => block.show(),
             ExprKind::If(cond, then, els) => match els {

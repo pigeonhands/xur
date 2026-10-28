@@ -185,7 +185,7 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expr: &'a Expr) {
         ExprKind::TypeLiteral(ty) => visitor.visit_ty(ty),
         ExprKind::Lit(_) | ExprKind::Continue | ExprKind::Err => {}
         ExprKind::Path(path) => visitor.visit_path(path),
-        ExprKind::Paren(inner) | ExprKind::Unary(_, inner) | ExprKind::Try(inner) => {
+        ExprKind::Paren(inner) | ExprKind::Unary(_, inner) | ExprKind::Try(inner) | ExprKind::Deref(inner) => {
             visitor.visit_expr(inner);
         }
         ExprKind::Field(receiver, _) => visitor.visit_expr(receiver),
@@ -318,7 +318,7 @@ pub fn walk_ty<'a, V: Visitor<'a>>(visitor: &mut V, ty: &'a Ty) {
                 visitor.visit_ty(ty);
             }
         }
-        TyKind::Paren(ty) | TyKind::List(ty) => visitor.visit_ty(ty),
+        TyKind::Paren(ty) | TyKind::List(ty) | TyKind::Ptr(ty) => visitor.visit_ty(ty),
         TyKind::Fn { params, ret } => {
             for ty in params {
                 visitor.visit_ty(ty);

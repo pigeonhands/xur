@@ -35,6 +35,7 @@ fn rt_type_or_any(resolutions: &Resolutions, ty: &Ty) -> RtType {
                 .collect(),
         ),
         TyKind::Paren(ty) => rt_type_or_any(resolutions, ty),
+        TyKind::Ptr(_) => RtType::Ptr,
         TyKind::List(_) => RtType::List,
         TyKind::Fn { params, ret } => RtType::Fn {
             params: params.iter().map(|ty| rt_type_or_any(resolutions, ty)).collect(),
@@ -83,6 +84,7 @@ pub fn type_name(resolutions: &Resolutions, ty: &Ty) -> String {
             format!("({})", names.join(", "))
         }
         TyKind::Paren(ty) => type_name(resolutions, ty),
+        TyKind::Ptr(ty) => format!("*{}", type_name(resolutions, ty)),
         TyKind::List(ty) => format!("[{}]", type_name(resolutions, ty)),
         TyKind::Fn { params, ret } => {
             let params: Vec<_> = params.iter().map(|ty| type_name(resolutions, ty)).collect();

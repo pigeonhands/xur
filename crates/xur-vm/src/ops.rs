@@ -56,6 +56,11 @@ impl Interp<'_> {
             (Add, Value::Bytes(a), Value::Bytes(b)) => {
                 Some(Value::bytes([lock(a).clone(), lock(b).clone()].concat()))
             }
+            (Add, Value::Ptr(p), Value::Int(n)) => Some(Value::Ptr(p.wrapping_add(*n as u64))),
+            (Sub, Value::Ptr(p), Value::Int(n)) => Some(Value::Ptr(p.wrapping_sub(*n as u64))),
+            (Sub, Value::Ptr(a), Value::Ptr(b)) => Some(Value::Int((*a as i64).wrapping_sub(*b as i64))),
+            (BitAnd, Value::Ptr(p), Value::Int(m)) => Some(Value::Ptr(p & *m as u64)),
+            (BitOr, Value::Ptr(p), Value::Int(m)) => Some(Value::Ptr(p | *m as u64)),
             (Lt | Le | Gt | Ge, _, _) => compare(lhs, rhs).map(|ordering| {
                 Value::Bool(match op {
                     Lt => ordering.is_lt(),
@@ -128,6 +133,7 @@ fn compare(lhs: &Value, rhs: &Value) -> Option<Ordering> {
         (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
         (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
         (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
+        (Value::Ptr(a), Value::Ptr(b)) => Some(a.cmp(b)),
         _ => None,
     }
 }
