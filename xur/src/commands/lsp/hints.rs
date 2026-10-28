@@ -186,6 +186,10 @@ pub fn infer_expr_type(
             }
             None
         }
+        ExprKind::Deref(inner) => {
+            infer_expr_type(inner, resolutions, items, registry)
+                .and_then(|t| t.strip_prefix('*').map(|s| s.to_string()))
+        }
         ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry),
         ExprKind::Block(block) => {
             block.stmts.last().and_then(|stmt| {
@@ -332,6 +336,7 @@ fn xur_name_to_builtin(name: &str) -> Option<BuiltinType> {
         "map" => BuiltinType::Map,
         "bytes" => BuiltinType::Bytes,
         "record" => BuiltinType::Record,
+        _ if name.starts_with('*') => BuiltinType::Ptr,
         _ => return None,
     })
 }
