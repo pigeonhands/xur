@@ -38,3 +38,17 @@ macro_rules! register_flags {
 }
 
 pub(super) use register_flags;
+
+/// Collects the `(name, value)` pairs of a bitflags type for
+/// [`ModuleBuilder::repr_enum`].
+macro_rules! flag_variants {
+    ($flags:ty, $bits:ty) => {{
+        <$flags>::FLAGS
+            .iter()
+            .filter(|flag| flag.value().bits() != <$bits>::default())
+            .map(|flag| (flag.name(), flag.value().bits() as i64))
+            .collect::<Vec<(&str, i64)>>()
+    }};
+}
+
+pub(super) use flag_variants;

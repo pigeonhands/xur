@@ -74,6 +74,8 @@ pub struct Resolutions {
     native_roots: HashMap<Symbol, DefId>,
     /// Lazy native modules not yet expanded, with their paths.
     lazy_natives: HashMap<DefId, Vec<String>>,
+    /// Native enum variants with `repr_value`, keyed by their DefId.
+    pub native_repr_values: HashMap<DefId, i64>,
 }
 
 impl Resolutions {
@@ -82,7 +84,14 @@ impl Resolutions {
         let mut defs = Definitions::default();
         let mut scopes = HashMap::new();
         let mut lazy_natives = HashMap::new();
-        let native_roots = natives::declare(&mut defs, &mut scopes, &mut lazy_natives, natives);
+        let mut native_repr_values = HashMap::new();
+        let native_roots = natives::declare(
+            &mut defs,
+            &mut scopes,
+            &mut lazy_natives,
+            &mut native_repr_values,
+            natives,
+        );
         Self {
             defs,
             res: HashMap::new(),
@@ -93,6 +102,7 @@ impl Resolutions {
             scopes,
             native_roots,
             lazy_natives,
+            native_repr_values,
         }
     }
 
@@ -195,6 +205,7 @@ struct Resolver<'a> {
     module_defs: Vec<DefId>,
     native_roots: HashMap<Symbol, DefId>,
     lazy_natives: HashMap<DefId, Vec<String>>,
+    native_repr_values: HashMap<DefId, i64>,
     /// `use` declarations not yet resolved.
     pending_imports: Vec<Import<'a>>,
     /// What the type of each `impl` block resolved to, by the impl item.
@@ -215,6 +226,7 @@ impl<'a> Resolver<'a> {
             scopes,
             native_roots,
             lazy_natives,
+            native_repr_values,
         } = resolutions;
         Self {
             krate,
@@ -227,6 +239,7 @@ impl<'a> Resolver<'a> {
             module_defs,
             native_roots,
             lazy_natives,
+            native_repr_values,
             pending_imports: Vec::new(),
             impl_self_tys: HashMap::new(),
             diags: Vec::new(),
@@ -278,6 +291,7 @@ impl<'a> Resolver<'a> {
                 &mut self.defs,
                 &mut self.scopes,
                 &mut self.lazy_natives,
+                &mut self.native_repr_values,
                 scope,
                 path,
                 &contents,
@@ -301,6 +315,7 @@ impl<'a> Resolver<'a> {
             scopes: self.scopes,
             native_roots: self.native_roots,
             lazy_natives: self.lazy_natives,
+            native_repr_values: self.native_repr_values,
         };
         (resolutions, self.diags)
     }

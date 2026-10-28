@@ -81,6 +81,9 @@ pub struct NativeTypeDecl {
 pub struct NativeVariantDecl {
     pub name: String,
     pub kind: NativeVariantKind,
+    /// For `#[repr(inttype)]` enums registered from Rust, the integer
+    /// discriminant. When set, the variant lowers to a constant integer.
+    pub repr_value: Option<i64>,
 }
 
 /// The shape of a native variant's fields, which decides how it is

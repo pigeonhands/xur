@@ -4,6 +4,7 @@
 //! `optional_header`, `sections`, ...) read straight through facet;
 //! `pe::ImageDef` is an image that can be changed and written back out.
 
+use bitflags::Flags;
 use facet::{Facet, Peek};
 use pewter::PEFile;
 use pewter::pe::coff::ImageFileCharacteristics;
@@ -19,7 +20,7 @@ use xur_runtime::{Record, Registry, RunResult, Value};
 use xur_span::Symbol;
 
 use crate::error_text;
-use crate::re::flags::register_flags;
+use crate::re::flags::{flag_variants, register_flags};
 use crate::re::native::{open_bytes, open_path};
 
 /// A section's name, without the padding of its 8-byte field.
@@ -144,6 +145,13 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
     register_flags!(pe, "section_flags", SectionFlags, u32);
     register_flags!(pe, "file_characteristics", ImageFileCharacteristics, u16);
     register_flags!(pe, "dll_characteristics", ImageDllCharacteristics, u16);
+
+    let variants = flag_variants!(SectionFlags, u32);
+    pe.repr_enum("SectionFlags", &variants);
+    let variants = flag_variants!(ImageFileCharacteristics, u16);
+    pe.repr_enum("FileCharacteristics", &variants);
+    let variants = flag_variants!(ImageDllCharacteristics, u16);
+    pe.repr_enum("DllCharacteristics", &variants);
 }
 
 /// The Windows-specific fields of the optional header, which facet sees as

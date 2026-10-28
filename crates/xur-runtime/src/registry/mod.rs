@@ -125,6 +125,9 @@ pub(super) struct NativeType {
     /// `None` for types registered by shape only, whose values are
     /// records rather than native objects.
     hooks: Option<TypeHooks>,
+    /// Explicit variant declarations for repr enums registered from Rust.
+    /// When set, these are used instead of deriving variants from the shape.
+    explicit_variants: Option<Vec<NativeVariantDecl>>,
 }
 
 /// Fills in a lazy module, the first time a program uses it.
@@ -181,6 +184,7 @@ fn variant_decls(shape: &'static Shape) -> Vec<NativeVariantDecl> {
         .map(|variant| NativeVariantDecl {
             name: variant.name.to_owned(),
             kind: variant_kind(variant.data.kind),
+            repr_value: None,
         })
         .collect()
 }
@@ -582,9 +586,12 @@ impl Inner {
                         name: ty.name.clone(),
                         id,
                         functions: ty.functions.clone(),
-                        variants: match ty.hooks {
-                            None => variant_decls(ty.shape),
-                            Some(_) => Vec::new(),
+                        variants: if let Some(ref v) = ty.explicit_variants {
+                            v.clone()
+                        } else if ty.hooks.is_none() {
+                            variant_decls(ty.shape)
+                        } else {
+                            Vec::new()
                         },
                     }
                 })

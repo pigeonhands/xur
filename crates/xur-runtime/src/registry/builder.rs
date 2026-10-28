@@ -7,6 +7,7 @@ use super::hooks::TypeHooks;
 use super::into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 use super::{CallFn, Context, NativeType, Registry, Signature};
 use crate::{BuiltinType, RunResult, Value};
+use xur_resolve::{NativeVariantDecl, NativeVariantKind};
 
 /// Adds items to one module of a [`Registry`].
 pub struct ModuleBuilder<'r> {
@@ -108,10 +109,38 @@ impl ModuleBuilder<'_> {
                 shape,
                 functions: Vec::new(),
                 hooks: None,
+                explicit_variants: None,
             });
             inner.modules[module].types.push(id);
             id
         })
+    }
+
+    /// Registers a `#[repr(inttype)]` enum whose variants are integer
+    /// constants. Each `(name, value)` pair becomes a unit variant that
+    /// lowers to `Const(Int(value))`.
+    pub fn repr_enum(&mut self, name: &str, variants: &[(&str, i64)]) -> &mut Self {
+        let module = self.module;
+        let variant_decls: Vec<NativeVariantDecl> = variants
+            .iter()
+            .map(|(vname, value)| NativeVariantDecl {
+                name: vname.to_string(),
+                kind: NativeVariantKind::Unit,
+                repr_value: Some(*value),
+            })
+            .collect();
+        self.registry.with_inner(|inner| {
+            let id = NativeTypeId(inner.types.len() as u32);
+            inner.types.push(NativeType {
+                name: name.to_owned(),
+                shape: <()>::SHAPE,
+                functions: Vec::new(),
+                hooks: None,
+                explicit_variants: Some(variant_decls),
+            });
+            inner.modules[module].types.push(id);
+        });
+        self
     }
 
     /// Registers the Rust type `T` as `name`. Values of `T` passed to Xur
@@ -128,6 +157,7 @@ impl ModuleBuilder<'_> {
                 shape: T::SHAPE,
                 functions: Vec::new(),
                 hooks: Some(TypeHooks::new::<T>()),
+                explicit_variants: None,
             });
             inner.modules[module].types.push(id);
             id
@@ -155,6 +185,7 @@ impl ModuleBuilder<'_> {
                 shape: T::SHAPE,
                 functions: Vec::new(),
                 hooks: Some(TypeHooks::borrowing::<T>()),
+                explicit_variants: None,
             });
             inner.modules[module].types.push(id);
             id

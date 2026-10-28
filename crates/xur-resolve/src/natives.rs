@@ -16,9 +16,10 @@ pub(crate) fn declare(
     defs: &mut Definitions,
     scopes: &mut HashMap<DefId, Scope>,
     lazy: &mut HashMap<DefId, Vec<String>>,
+    repr_values: &mut HashMap<DefId, i64>,
     modules: &[NativeModule],
 ) -> HashMap<Symbol, DefId> {
-    let mut declarer = Declarer { defs, scopes, lazy };
+    let mut declarer = Declarer { defs, scopes, lazy, repr_values };
     modules
         .iter()
         .map(|module| {
@@ -36,17 +37,19 @@ pub(crate) fn populate(
     defs: &mut Definitions,
     scopes: &mut HashMap<DefId, Scope>,
     lazy: &mut HashMap<DefId, Vec<String>>,
+    repr_values: &mut HashMap<DefId, i64>,
     def: DefId,
     path: Vec<String>,
     contents: &NativeModule,
 ) {
-    Declarer { defs, scopes, lazy }.contents(def, contents, path);
+    Declarer { defs, scopes, lazy, repr_values }.contents(def, contents, path);
 }
 
 struct Declarer<'a> {
     defs: &'a mut Definitions,
     scopes: &'a mut HashMap<DefId, Scope>,
     lazy: &'a mut HashMap<DefId, Vec<String>>,
+    repr_values: &'a mut HashMap<DefId, i64>,
 }
 
 impl Declarer<'_> {
@@ -92,6 +95,9 @@ impl Declarer<'_> {
                 parent: Some(scope),
                 span: None,
             });
+            if let Some(value) = variant.repr_value {
+                self.repr_values.insert(def, value);
+            }
             let namespaces = match variant.kind {
                 NativeVariantKind::Unit | NativeVariantKind::Tuple => Namespace::BOTH,
                 NativeVariantKind::Named => Namespace::TYPE,

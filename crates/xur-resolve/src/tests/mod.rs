@@ -112,6 +112,7 @@ pub(crate) fn natives() -> Vec<NativeModule> {
                 .map(|(name, kind)| NativeVariantDecl {
                     name: name.to_owned(),
                     kind,
+                    repr_value: None,
                 })
                 .collect(),
             },

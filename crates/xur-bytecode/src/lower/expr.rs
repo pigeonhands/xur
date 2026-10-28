@@ -261,6 +261,12 @@ impl Lowerer<'_> {
             Res::Def(DefKind::NativeFn(id), _) => DefRef::Native(id),
             Res::Def(DefKind::Const, def) => DefRef::Const(def),
             Res::Def(DefKind::Mod, def) => DefRef::Module(def),
+            Res::Def(DefKind::NativeVariant(_), def)
+                if self.resolutions.native_repr_values.contains_key(&def) =>
+            {
+                let v = self.resolutions.native_repr_values[&def];
+                return self.constant(Constant::Int(v), span);
+            }
             // A unit variant of a native enum; the VM rejects other kinds.
             Res::Def(DefKind::NativeVariant(ty), def) => {
                 let variant = Some(self.resolutions.defs.get(def).name);
