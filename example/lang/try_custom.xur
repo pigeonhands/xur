@@ -1,0 +1,45 @@
+use std::io;
+use std::assert;
+
+#[try(unwrap = "Success")]
+enum ApiResult<T> {
+    Success(T)
+    NotFound
+    RateLimited(_)
+}
+
+fn fetch_user(id: _) -> ApiResult<str> {
+    if id == 1 {
+        ApiResult::Success("alice")
+    } else if id == 0 {
+        ApiResult::NotFound
+    } else {
+        ApiResult::RateLimited(60)
+    }
+}
+
+fn get_greeting(id: _) -> ApiResult<str> {
+    let name = fetch_user(id)?;
+    ApiResult::Success("hello, " + name)
+}
+
+fn main() -> Result<()> {
+    // ? on user-defined enum unwraps the Success variant.
+    let greeting = get_greeting(1);
+    assert::is_eq(greeting, ApiResult::Success("hello, alice"));
+
+    // Non-success variants propagate through ?.
+    let not_found = get_greeting(0);
+    assert::is_eq(not_found, ApiResult::NotFound);
+
+    let limited = get_greeting(99);
+    assert::is_eq(limited, ApiResult::RateLimited(60));
+
+    // ? also works on the built-in Option and Result types.
+    let opt: Option<_> = Some(42);
+    let val = opt.unwrap();
+    assert::is_eq(val, 42);
+
+    io::println("try_custom: all assertions passed");
+    Ok(())
+}

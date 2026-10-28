@@ -1,0 +1,34 @@
+use std::io;
+use std::assert;
+
+fn main() -> Result<()> {
+    // Basic bitwise operations on integers.
+    let a = 0xFF;
+    let b = 0x0F;
+
+    assert::is_eq(a & b, 0x0F);
+    assert::is_eq(a | b, 0xFF);
+    assert::is_eq(a ^ b, 0xF0);
+    assert::is_eq(~0, -1);
+
+    // Shift operators.
+    assert::is_eq(1 << 8, 256);
+    assert::is_eq(256 >> 4, 16);
+
+    // Combining flags with bitwise OR and testing with AND.
+    let read    = 1 << 0;
+    let write   = 1 << 1;
+    let execute = 1 << 2;
+
+    let perms = read | write | execute;
+    assert::is_eq(perms & read != 0, true);
+    assert::is_eq(perms & write != 0, true);
+
+    // Clearing a flag with AND + NOT.
+    let no_write = perms & ~write;
+    assert::is_eq(no_write & write != 0, false);
+    assert::is_eq(no_write & read != 0, true);
+
+    io::println("bitwise: all assertions passed");
+    Ok(())
+}
