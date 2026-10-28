@@ -119,6 +119,24 @@ impl Resolutions {
         }
     }
 
+    /// Every name declared in `scope` in namespace `ns`.
+    pub fn scope_entries(&self, scope: DefId, ns: Namespace) -> Vec<(Symbol, Res)> {
+        let Some(s) = self.scopes.get(&scope) else {
+            return Vec::new();
+        };
+        s.iter(ns).map(|(name, b)| (name, b.res)).collect()
+    }
+
+    /// The definition of a top-level root module by name (e.g. `std`).
+    pub fn root_module(&self, name: Symbol) -> Option<DefId> {
+        self.native_roots.get(&name).copied()
+    }
+
+    /// All top-level root modules (currently native; will include packages).
+    pub fn root_modules(&self) -> impl Iterator<Item = (Symbol, DefId)> + '_ {
+        self.native_roots.iter().map(|(&name, &def)| (name, def))
+    }
+
     /// Every function of the struct, enum or native type `ty`, in the order
     /// they were defined.
     pub fn assoc_fns(&self, ty: DefId) -> Vec<(Symbol, DefId)> {

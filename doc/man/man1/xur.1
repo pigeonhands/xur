@@ -17,6 +17,8 @@ xur \- run and inspect Xur programs
 .br
 .B xur debug bytecode
 .I file
+.br
+.B xur lsp
 .SH DESCRIPTION
 .B xur
 is the command-line interface for the Xur programming language, a
@@ -60,6 +62,13 @@ Print what every name in the program resolves to after following imports.
 .TP
 .B debug bytecode \fIfile\fR
 Print the compiled bytecode of every function in the program.
+.TP
+.B lsp
+Start the language server, communicating over stdio.
+Provides diagnostics, go-to-definition, hover, find-references,
+completions, and parameter-name inlay hints.
+Editors launch this as a subprocess;
+see the Neovim and VS Code examples below.
 .SH EXAMPLES
 Run a program:
 .PP

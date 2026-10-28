@@ -9,8 +9,10 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use xur_errors::{Diag, Level};
-use xur_resolve::{Program, Res, names};
-use xur_span::{OverlayFileLoader, SourceFile, SourceMap, Span};
+use xur_ast::{ExprKind, ItemKind, PatKind};
+use xur_ast::visit::{self, Visitor};
+use xur_resolve::{DefId, DefKind, Namespace, PrimTy, Program, Res, names};
+use xur_span::{Ident, OverlayFileLoader, SourceFile, SourceMap, Span, Symbol};
 
 pub fn run() -> anyhow::Result<()> {
     tokio::runtime::Builder::new_multi_thread()
@@ -23,7 +25,6 @@ pub fn run() -> anyhow::Result<()> {
                 client,
                 documents: Mutex::new(HashMap::new()),
                 state: Mutex::new(None),
-                workspace_root: Mutex::new(None),
             });
             Server::new(stdin, stdout, socket).serve(service).await;
             Ok(())
@@ -34,7 +35,6 @@ struct Backend {
     client: Client,
     documents: Mutex<HashMap<Url, String>>,
     state: Mutex<Option<AnalysisState>>,
-    workspace_root: Mutex<Option<PathBuf>>,
 }
 
 struct AnalysisState {
@@ -100,32 +100,25 @@ impl Backend {
     }
 
     fn find_root(&self, changed_uri: &Url) -> Option<PathBuf> {
-        if let Some(ws) = self.workspace_root.lock().unwrap().as_ref() {
-            let main = ws.join("main.xur");
-            if main.is_file() {
-                return Some(main);
-            }
-        }
         uri_to_path(changed_uri)
     }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        if let Some(uri) = params.root_uri
-            && let Some(path) = uri_to_path(&uri)
-        {
-            *self.workspace_root.lock().unwrap() = Some(path);
-        }
-
+    async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![".".into(), ":".into()]),
+                    ..Default::default()
+                }),
                 definition_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
@@ -296,6 +289,154 @@ impl LanguageServer for Backend {
         Ok(Some(locations))
     }
 
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let state = self.state.lock().unwrap();
+        let Some(state) = state.as_ref() else {
+            return Ok(None);
+        };
+        let program = &state.program;
+        let resolutions = program.resolutions();
+
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+
+        let prefix = {
+            let docs = self.documents.lock().unwrap();
+            docs.get(uri).and_then(|src| line_prefix(src, pos))
+        };
+
+        let module_def = find_module_def(program, uri);
+        let mut items = Vec::new();
+
+        let path_scope = prefix.as_deref()
+            .and_then(|pfx| resolve_path_prefix(pfx, module_def?, resolutions));
+
+        if let Some(scope) = path_scope {
+            for (name, res) in resolutions.scope_entries(scope, Namespace::Value) {
+                items.push(CompletionItem {
+                    label: name.as_str().to_owned(),
+                    kind: Some(completion_kind(res)),
+                    ..Default::default()
+                });
+            }
+            for (name, res) in resolutions.scope_entries(scope, Namespace::Type) {
+                items.push(CompletionItem {
+                    label: name.as_str().to_owned(),
+                    kind: Some(completion_kind(res)),
+                    ..Default::default()
+                });
+            }
+        } else {
+            if let Some(def_id) = module_def {
+                for (name, res) in resolutions.scope_entries(def_id, Namespace::Value) {
+                    items.push(CompletionItem {
+                        label: name.as_str().to_owned(),
+                        kind: Some(completion_kind(res)),
+                        ..Default::default()
+                    });
+                }
+                for (name, res) in resolutions.scope_entries(def_id, Namespace::Type) {
+                    items.push(CompletionItem {
+                        label: name.as_str().to_owned(),
+                        kind: Some(completion_kind(res)),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            for (name, _) in resolutions.root_modules() {
+                items.push(CompletionItem {
+                    label: name.as_str().to_owned(),
+                    kind: Some(CompletionItemKind::MODULE),
+                    ..Default::default()
+                });
+            }
+
+            for ty in PrimTy::ALL {
+                items.push(CompletionItem {
+                    label: ty.name().to_owned(),
+                    kind: Some(CompletionItemKind::CLASS),
+                    ..Default::default()
+                });
+            }
+
+            for kw in KEYWORDS {
+                items.push(CompletionItem {
+                    label: (*kw).to_owned(),
+                    kind: Some(CompletionItemKind::KEYWORD),
+                    ..Default::default()
+                });
+            }
+        }
+
+        items.sort_by(|a, b| a.label.cmp(&b.label));
+        items.dedup_by(|a, b| a.label == b.label);
+        Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let state = self.state.lock().unwrap();
+        let Some(state) = state.as_ref() else {
+            return Ok(None);
+        };
+        let program = &state.program;
+        let sm = &program.krate.source_map;
+        let resolutions = program.resolutions();
+
+        let uri = &params.text_document.uri;
+        let file = find_file_by_uri(sm, uri);
+        let Some(file) = file else {
+            return Ok(None);
+        };
+        let file_start = file.start;
+        let file_end = file.end();
+
+        let param_names = build_param_name_map(program);
+        let mut hints = Vec::new();
+
+        for module in &program.krate.modules {
+            let mut collector = CallCollector(Vec::new());
+            collector.visit_module(module.ast);
+
+            for (callee_id, args) in collector.0 {
+                let Some(&res) = resolutions.res.get(&callee_id) else {
+                    continue;
+                };
+                let def_id = match res {
+                    Res::Def(DefKind::Fn, id) => id,
+                    _ => continue,
+                };
+                let Some(names) = param_names.get(&def_id) else {
+                    continue;
+                };
+                for (i, arg_span) in args.iter().enumerate() {
+                    if arg_span.start < file_start || arg_span.start >= file_end {
+                        continue;
+                    }
+                    if let Some(name) = names.get(i) {
+                        let name_str = name.name.as_str();
+                        if name_str == "_" {
+                            continue;
+                        }
+                        let pos = file.line_col(arg_span.start);
+                        hints.push(InlayHint {
+                            position: Position::new(pos.line - 1, pos.col - 1),
+                            label: InlayHintLabel::String(format!("{name_str}: ")),
+                            kind: Some(InlayHintKind::PARAMETER),
+                            padding_left: None,
+                            padding_right: None,
+                            text_edits: None,
+                            tooltip: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(Some(hints))
+    }
+
     async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
@@ -421,3 +562,123 @@ fn same_target(a: Res, b: Res) -> bool {
         _ => false,
     }
 }
+
+fn find_module_def(program: &Program, uri: &Url) -> Option<xur_resolve::DefId> {
+    let path = uri_to_path(uri)?;
+    let resolutions = program.resolutions();
+    for (i, module) in program.krate.modules.iter().enumerate() {
+        if module.path == path {
+            return resolutions.module_defs.get(i).copied();
+        }
+    }
+    None
+}
+
+fn completion_kind(res: Res) -> CompletionItemKind {
+    match res {
+        Res::Def(DefKind::Fn | DefKind::NativeFn(_), _) => CompletionItemKind::FUNCTION,
+        Res::Def(DefKind::Mod, _) => CompletionItemKind::MODULE,
+        Res::Def(DefKind::Struct | DefKind::NativeType(_), _) => CompletionItemKind::STRUCT,
+        Res::Def(DefKind::Enum, _) => CompletionItemKind::ENUM,
+        Res::Def(DefKind::Variant | DefKind::NativeVariant(_), _) => {
+            CompletionItemKind::ENUM_MEMBER
+        }
+        Res::Def(DefKind::Const, _) => CompletionItemKind::CONSTANT,
+        Res::Def(DefKind::TyParam, _) => CompletionItemKind::TYPE_PARAMETER,
+        Res::PrimTy(_) => CompletionItemKind::CLASS,
+        Res::Local(_) => CompletionItemKind::VARIABLE,
+        Res::TyParamAssoc(..) => CompletionItemKind::METHOD,
+        Res::Err => CompletionItemKind::TEXT,
+    }
+}
+
+fn line_prefix(src: &str, pos: Position) -> Option<String> {
+    let line = src.lines().nth(pos.line as usize)?;
+    let col = (pos.character as usize).min(line.len());
+    Some(line[..col].to_owned())
+}
+
+fn resolve_path_prefix(
+    prefix: &str,
+    module_def: DefId,
+    resolutions: &xur_resolve::Resolutions,
+) -> Option<DefId> {
+    let trimmed = prefix.trim_start();
+    if !trimmed.ends_with("::") {
+        return None;
+    }
+    let path_str = trimmed.trim_end_matches("::");
+    let segments: Vec<&str> = path_str.rsplit("::").collect::<Vec<_>>().into_iter().rev().collect();
+    let first = segments.first()?;
+    let first = first.split_whitespace().last()?;
+    if first.is_empty() {
+        return None;
+    }
+
+    let first_sym = Symbol::intern(first);
+    let first_res = resolutions.lookup(module_def, Namespace::Type, first_sym)
+        .or_else(|| resolutions.root_module(first_sym).map(|id| Res::Def(DefKind::Mod, id)))?;
+    let mut scope = first_res.scope()?;
+
+    for &seg in &segments[1..] {
+        let res = resolutions.lookup(scope, Namespace::Type, Symbol::intern(seg))?;
+        scope = res.scope()?;
+    }
+
+    Some(scope)
+}
+
+struct CallCollector(Vec<(xur_ast::NodeId, Vec<Span>)>);
+
+impl<'ast> Visitor<'ast> for CallCollector {
+    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
+        if let ExprKind::Call(callee, args) = &expr.kind
+            && let ExprKind::Path(path) = &callee.kind
+        {
+            let arg_spans: Vec<_> = args.iter().map(|a| a.span).collect();
+            self.0.push((path.id, arg_spans));
+        }
+        visit::walk_expr(self, expr);
+    }
+}
+
+fn build_param_name_map(program: &Program) -> HashMap<DefId, Vec<Ident>> {
+    let resolutions = program.resolutions();
+    let mut map = HashMap::new();
+    for module in &program.krate.modules {
+        for item in &module.ast.items {
+            if let ItemKind::Fn(f) = &item.kind
+                && let Some(&def_id) = resolutions.node_defs.get(&item.id)
+            {
+                let names = param_idents(&f.decl.inputs);
+                map.insert(def_id, names);
+            }
+            if let ItemKind::Impl(imp) = &item.kind {
+                for impl_item in &imp.items {
+                    if let ItemKind::Fn(f) = &impl_item.kind
+                        && let Some(&def_id) = resolutions.node_defs.get(&impl_item.id)
+                    {
+                        let names = param_idents(&f.decl.inputs);
+                        map.insert(def_id, names);
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+fn param_idents(inputs: &[xur_ast::Param]) -> Vec<Ident> {
+    inputs.iter().filter_map(|p| {
+        if let PatKind::Ident(ident) = &p.pat.kind {
+            Some(*ident)
+        } else {
+            None
+        }
+    }).collect()
+}
+
+const KEYWORDS: &[&str] = &[
+    "as", "break", "const", "continue", "else", "enum", "false", "fn", "for", "if", "impl",
+    "in", "is", "let", "loop", "match", "pub", "return", "struct", "true", "use", "while",
+];
