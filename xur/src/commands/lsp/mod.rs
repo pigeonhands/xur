@@ -18,7 +18,10 @@ use xur_resolve::{DefKind, Namespace, Program, Res};
 use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
-use hints::{CallCollector, LetCollector, MatchCollector, build_param_name_map, infer_expr_type};
+use hints::{
+    CallCollector, LetCollector, MatchCollector, build_param_name_map, infer_expr_type,
+    method_at_offset, method_signature,
+};
 use util::*;
 
 pub fn run() -> anyhow::Result<()> {
@@ -233,24 +236,41 @@ impl LanguageServer for Backend {
         let Some(offset) = uri_position_to_offset(sm, uri, pos) else {
             return Ok(None);
         };
-        let Some(name) = name_at_offset(program, offset) else {
-            return Ok(None);
-        };
-        let Some(&res) = resolutions.res.get(&name.id) else {
-            return Ok(None);
-        };
 
-        let description = hover::describe(
-            res, resolutions, &state.items, &state.registry, sm,
-        );
-        let (_, range) = span_to_range(sm, name.span);
-        Ok(Some(Hover {
-            contents: HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: format!("```xur\n{description}\n```"),
-            }),
-            range: Some(range),
-        }))
+        // Try resolved names first (paths, patterns).
+        if let Some(name) = name_at_offset(program, offset)
+            && let Some(&res) = resolutions.res.get(&name.id)
+        {
+            let description = hover::describe(
+                res, resolutions, &state.items, &state.registry, sm,
+            );
+            let (_, range) = span_to_range(sm, name.span);
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: format!("```xur\n{description}\n```"),
+                }),
+                range: Some(range),
+            }));
+        }
+
+        // Fall back to method calls (dispatched at runtime, not in the name map).
+        if let Some(mc) = method_at_offset(program, &state.items, &state.registry, offset)
+            && let Some(sig) = method_signature(
+                mc.receiver_ty.as_deref(), &mc.method_name, &state.registry,
+            )
+        {
+            let (_, range) = span_to_range(sm, mc.method_span);
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: format!("```xur\n{sig}\n```"),
+                }),
+                range: Some(range),
+            }));
+        }
+
+        Ok(None)
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {

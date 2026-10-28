@@ -296,6 +296,14 @@ impl Registry {
         self.read().types[id.0 as usize].name.clone()
     }
 
+    /// The native type registered under `name`, if any.
+    pub fn type_id_by_name(&self, name: &str) -> Option<NativeTypeId> {
+        let inner = self.read();
+        inner.types.iter().enumerate().find_map(|(i, ty)| {
+            (ty.name == name).then_some(NativeTypeId(i as u32))
+        })
+    }
+
     /// The xur display name for `shape`, mapping Rust types to their xur
     /// equivalents: `String` → `str`, `Vec<u8>` → `bytes`, registered types
     /// by their xur name, and falling back to the Rust name.
