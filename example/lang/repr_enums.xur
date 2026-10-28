@@ -1,0 +1,45 @@
+use std::io;
+use std::assert;
+
+#[repr(u32)]
+enum SectionFlags {
+    CNT_CODE = 0x20
+    MEM_EXECUTE = 0x20000000
+    MEM_READ = 0x40000000
+    MEM_WRITE = 0x80000000
+}
+
+#[repr(u8)]
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+fn main() -> Result<()> {
+    // Repr enum variants are integers.
+    assert::is_eq(SectionFlags::CNT_CODE, 0x20);
+    assert::is_eq(SectionFlags::MEM_EXECUTE, 0x20000000);
+
+    // Combine with bitwise OR, test with bitwise AND.
+    let flags = SectionFlags::CNT_CODE | SectionFlags::MEM_READ | SectionFlags::MEM_EXECUTE;
+    assert::is_eq(flags & SectionFlags::CNT_CODE != 0, true);
+    assert::is_eq(flags & SectionFlags::MEM_WRITE != 0, false);
+
+    // Auto-incrementing discriminants start at 0.
+    assert::is_eq(Color::Red, 0);
+    assert::is_eq(Color::Green, 1);
+    assert::is_eq(Color::Blue, 2);
+
+    // Pattern matching works on repr enums.
+    let c = Color::Green;
+    let name = match c {
+        Color::Red => "red",
+        Color::Green => "green",
+        Color::Blue => "blue",
+    };
+    assert::is_eq(name, "green");
+
+    io::println("repr_enums: all assertions passed");
+    Ok(())
+}
