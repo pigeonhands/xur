@@ -399,11 +399,17 @@ impl Parser<'_> {
         } else {
             VariantData::Unit
         };
+        let discriminant = if self.eat(TokenKind::Eq) {
+            Some(Box::new(self.parse_expr()?))
+        } else {
+            None
+        };
         Ok(Variant {
             id: self.next_id(),
             attrs,
             ident,
             data,
+            discriminant,
             span: lo.to(self.prev_token.span),
         })
     }

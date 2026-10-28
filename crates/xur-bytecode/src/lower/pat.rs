@@ -27,9 +27,13 @@ impl Lowerer<'_> {
                     );
                     self.locals.insert(pat.id, reg);
                 }
-                // A unit variant, unit struct or constant named alone.
                 Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
-                    self.test_ctor(value, ctor, fail, span)
+                    if let Some(v) = self.items.repr_value(ctor) {
+                        let expected = self.constant(Constant::Int(v), span);
+                        self.test_eq(value, expected, fail, span);
+                    } else {
+                        self.test_ctor(value, ctor, fail, span);
+                    }
                 }
                 Some(res @ Res::Def(DefKind::NativeVariant(_), _)) => {
                     self.test_record(res, value, fail, span)
@@ -170,7 +174,12 @@ impl Lowerer<'_> {
     fn pat_path(&mut self, path: &Path, value: Reg, fail: BlockId) {
         match self.resolutions.res.get(&path.id).copied() {
             Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
-                self.test_ctor(value, ctor, fail, path.span)
+                if let Some(v) = self.items.repr_value(ctor) {
+                    let expected = self.constant(Constant::Int(v), path.span);
+                    self.test_eq(value, expected, fail, path.span);
+                } else {
+                    self.test_ctor(value, ctor, fail, path.span);
+                }
             }
             Some(res @ Res::Def(DefKind::NativeVariant(_) | DefKind::NativeType(_), _)) => {
                 self.test_record(res, value, fail, path.span)

@@ -17,7 +17,7 @@ impl Interp<'_> {
             .items
             .read()
             .unwrap_or_else(PoisonError::into_inner);
-        let ItemRef::Ctor { data, attrs } = items.get(def)? else {
+        let ItemRef::Ctor { data, attrs, .. } = items.get(def)? else {
             return None;
         };
         let program = self.shared.program();

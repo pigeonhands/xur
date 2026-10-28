@@ -262,6 +262,9 @@ impl Lowerer<'_> {
             }
             Res::Def(DefKind::Struct | DefKind::Variant, def) => match self.ctor_shape(def) {
                 Some(VariantData::Unit) => {
+                    if let Some(v) = self.items.repr_value(def) {
+                        return self.constant(Constant::Int(v), span);
+                    }
                     let dst = self.new_reg();
                     self.emit(
                         InstKind::Adt {

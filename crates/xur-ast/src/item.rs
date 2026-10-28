@@ -146,5 +146,7 @@ pub struct Variant {
     pub attrs: Vec<Attribute>,
     pub ident: Ident,
     pub data: VariantData,
+    /// `= expr` for `#[repr(inttype)]` enums.
+    pub discriminant: Option<Box<Expr>>,
     pub span: Span,
 }
