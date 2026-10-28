@@ -145,8 +145,11 @@ impl<'src> Lexer<'src> {
             '>' if c.eat('=') => TokenKind::GtEq,
             '>' => TokenKind::Gt,
             '&' if c.eat('&') => TokenKind::AmpAmp,
+            '&' => TokenKind::Amp,
             '|' if c.eat('|') => TokenKind::PipePipe,
             '|' => TokenKind::Pipe,
+            '^' => TokenKind::Caret,
+            '~' => TokenKind::Tilde,
             '@' => TokenKind::At,
 
             _ => return None,

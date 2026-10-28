@@ -15,6 +15,11 @@ pub enum BinOpKind {
     Mul,
     Div,
     Rem,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
     And,
     Or,
     Eq,
@@ -33,6 +38,11 @@ impl BinOpKind {
             Self::Mul => "*",
             Self::Div => "/",
             Self::Rem => "%",
+            Self::BitAnd => "&",
+            Self::BitOr => "|",
+            Self::BitXor => "^",
+            Self::Shl => "<<",
+            Self::Shr => ">>",
             Self::And => "&&",
             Self::Or => "||",
             Self::Eq => "==",
@@ -48,6 +58,10 @@ impl BinOpKind {
         match self {
             Self::Mul | Self::Div | Self::Rem => Precedence::Product,
             Self::Add | Self::Sub => Precedence::Sum,
+            Self::Shl | Self::Shr => Precedence::Shift,
+            Self::BitAnd => Precedence::BitAnd,
+            Self::BitXor => Precedence::BitXor,
+            Self::BitOr => Precedence::BitOr,
             Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => Precedence::Compare,
             Self::And => Precedence::And,
             Self::Or => Precedence::Or,
@@ -75,6 +89,8 @@ pub enum UnOp {
     Neg,
     /// `!x`
     Not,
+    /// `~x`
+    BitNot,
 }
 
 impl UnOp {
@@ -82,6 +98,7 @@ impl UnOp {
         match self {
             Self::Neg => "-",
             Self::Not => "!",
+            Self::BitNot => "~",
         }
     }
 }
@@ -102,11 +119,19 @@ pub enum Precedence {
     And,
     /// `a == b`, `a < b`, ...
     Compare,
+    /// `a | b`
+    BitOr,
+    /// `a ^ b`
+    BitXor,
+    /// `a & b`
+    BitAnd,
+    /// `a << b`, `a >> b`
+    Shift,
     /// `a + b`, `a - b`
     Sum,
     /// `a * b`, `a / b`, `a % b`
     Product,
-    /// `-a`, `!a`
+    /// `-a`, `!a`, `~a`
     Prefix,
     /// Calls, field access, `?`, literals, paths, blocks, ...
     Unambiguous,
@@ -130,7 +155,11 @@ mod tests {
     #[test]
     fn product_binds_tighter_than_sum_than_compare() {
         assert!(BinOpKind::Mul.precedence() > BinOpKind::Add.precedence());
-        assert!(BinOpKind::Add.precedence() > BinOpKind::Lt.precedence());
+        assert!(BinOpKind::Add.precedence() > BinOpKind::Shl.precedence());
+        assert!(BinOpKind::Shl.precedence() > BinOpKind::BitAnd.precedence());
+        assert!(BinOpKind::BitAnd.precedence() > BinOpKind::BitXor.precedence());
+        assert!(BinOpKind::BitXor.precedence() > BinOpKind::BitOr.precedence());
+        assert!(BinOpKind::BitOr.precedence() > BinOpKind::Lt.precedence());
         assert!(BinOpKind::Lt.precedence() > BinOpKind::And.precedence());
         assert!(BinOpKind::And.precedence() > BinOpKind::Or.precedence());
         assert!(BinOpKind::Or.precedence() > Precedence::Range);

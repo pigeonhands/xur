@@ -17,6 +17,7 @@ pub(crate) fn unary(op: UnOp, value: &Value) -> RunResult<Value> {
         (UnOp::Neg, Value::Int(i)) => i.checked_neg().map(Value::Int).ok_or_else(overflow),
         (UnOp::Neg, Value::Float(f)) => Ok(Value::Float(-f)),
         (UnOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
+        (UnOp::BitNot, Value::Int(i)) => Ok(Value::Int(!i)),
         _ => Err(RuntimeError::new(format!(
             "cannot apply `{}` to {}",
             op.as_str(),
@@ -34,6 +35,11 @@ impl Interp<'_> {
             (Add | Sub | Mul | Div | Rem, Value::Int(a), Value::Int(b)) => {
                 Some(int_op(op, *a, *b)?)
             }
+            (BitAnd, Value::Int(a), Value::Int(b)) => Some(Value::Int(a & b)),
+            (BitOr, Value::Int(a), Value::Int(b)) => Some(Value::Int(a | b)),
+            (BitXor, Value::Int(a), Value::Int(b)) => Some(Value::Int(a ^ b)),
+            (Shl, Value::Int(a), Value::Int(b)) => Some(shift_left(*a, *b)?),
+            (Shr, Value::Int(a), Value::Int(b)) => Some(shift_right(*a, *b)?),
             (Add | Sub | Mul | Div | Rem, Value::Float(a), Value::Float(b)) => {
                 Some(Value::Float(match op {
                     Add => a + b,
@@ -95,6 +101,22 @@ fn int_op(op: BinOpKind, a: i64, b: i64) -> RunResult<Value> {
         _ => a.checked_rem(b),
     };
     result.map(Value::Int).ok_or_else(overflow)
+}
+
+fn shift_left(a: i64, b: i64) -> RunResult<Value> {
+    let shift = u32::try_from(b)
+        .map_err(|_| RuntimeError::new(format!("invalid shift amount: {b}")))?;
+    a.checked_shl(shift)
+        .map(Value::Int)
+        .ok_or_else(overflow)
+}
+
+fn shift_right(a: i64, b: i64) -> RunResult<Value> {
+    let shift = u32::try_from(b)
+        .map_err(|_| RuntimeError::new(format!("invalid shift amount: {b}")))?;
+    a.checked_shr(shift)
+        .map(Value::Int)
+        .ok_or_else(overflow)
 }
 
 fn overflow() -> RuntimeError {

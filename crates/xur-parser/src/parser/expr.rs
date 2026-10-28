@@ -2,8 +2,8 @@
 //! `parse_expr_assoc_with`.
 //!
 //! Binding strength, weakest first: closures and jumps, `=`, `..`, `||`,
-//! `&&`, comparisons, `+ -`, `* / %`, prefix `- !`, then postfix calls,
-//! method calls, field access and `?`.
+//! `&&`, comparisons, `|`, `^`, `&`, `<< >>`, `+ -`, `* / %`,
+//! prefix `- ! ~`, then postfix calls, method calls, field access and `?`.
 
 use std::ops::Bound;
 
@@ -35,6 +35,9 @@ impl AssocOp {
             TokenKind::Star => binary(BinOpKind::Mul),
             TokenKind::Slash => binary(BinOpKind::Div),
             TokenKind::Percent => binary(BinOpKind::Rem),
+            TokenKind::Amp => binary(BinOpKind::BitAnd),
+            TokenKind::Pipe => binary(BinOpKind::BitOr),
+            TokenKind::Caret => binary(BinOpKind::BitXor),
             TokenKind::AmpAmp => binary(BinOpKind::And),
             TokenKind::PipePipe => binary(BinOpKind::Or),
             TokenKind::EqEq => binary(BinOpKind::Eq),
@@ -90,6 +93,7 @@ fn can_begin_expr(kind: TokenKind<'_>) -> bool {
         | TokenKind::Hash
         | TokenKind::Minus
         | TokenKind::Bang
+        | TokenKind::Tilde
         | TokenKind::Pipe
         | TokenKind::PipePipe
         | TokenKind::DotDot
@@ -160,13 +164,34 @@ impl Parser<'_> {
         self.parse_expr_assoc_rest(min, lhs)
     }
 
+    /// Returns the next infix operator. Two adjacent `<` or `>` tokens with
+    /// no whitespace between them are fused into `Shl` / `Shr` (the lexer
+    /// keeps them separate so that closing generics like `>>` still work).
+    /// The bool is `true` when two tokens were fused.
+    fn next_assoc_op(&self) -> (Option<AssocOp>, bool) {
+        if self.token.kind == TokenKind::Lt && self.look_ahead(1) == TokenKind::Lt {
+            let next = self.tokens[self.pos + 1];
+            if self.token.span.end == next.span.start {
+                return (Some(AssocOp::Binary(BinOpKind::Shl)), true);
+            }
+        }
+        if self.token.kind == TokenKind::Gt && self.look_ahead(1) == TokenKind::Gt {
+            let next = self.tokens[self.pos + 1];
+            if self.token.span.end == next.span.start {
+                return (Some(AssocOp::Binary(BinOpKind::Shr)), true);
+            }
+        }
+        (AssocOp::from_token(self.token.kind), false)
+    }
+
     /// Continues `lhs` with infix operators binding at least as tightly as `min`.
     fn parse_expr_assoc_rest(&mut self, min: Bound<Precedence>, mut lhs: Expr) -> PResult<Expr> {
         loop {
             if self.restrictions.stmt_expr && lhs.is_block_like() {
                 return Ok(lhs);
             }
-            let Some(op) = AssocOp::from_token(self.token.kind) else {
+            let (op, compound) = self.next_assoc_op();
+            let Some(op) = op else {
                 self.expected(Expected::Operator);
                 return Ok(lhs);
             };
@@ -179,8 +204,15 @@ impl Parser<'_> {
             }
 
             let lhs_span = lhs.span;
-            let op_span = self.token.span;
+            let op_span = if compound {
+                self.token.span.to(self.tokens[self.pos + 1].span)
+            } else {
+                self.token.span
+            };
             self.bump();
+            if compound {
+                self.bump();
+            }
             let rhs_min = match op.fixity() {
                 Fixity::Right => Bound::Included(prec),
                 Fixity::Left | Fixity::None => Bound::Excluded(prec),
@@ -264,12 +296,13 @@ impl Parser<'_> {
         Ok(None)
     }
 
-    /// Prefix operators: `-x`, `!x`.
+    /// Prefix operators: `-x`, `!x`, `~x`.
     fn parse_expr_prefix(&mut self) -> PResult<Expr> {
         let lo = self.token.span;
         let op = match self.token.kind {
             TokenKind::Minus => UnOp::Neg,
             TokenKind::Bang => UnOp::Not,
+            TokenKind::Tilde => UnOp::BitNot,
             _ => return self.parse_expr_dot_or_call(),
         };
         self.bump();

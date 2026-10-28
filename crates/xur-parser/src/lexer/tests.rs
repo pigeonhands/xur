@@ -402,13 +402,13 @@ fn test_int_followed_by_method_call() {
 
 #[test]
 fn test_all_errors_are_reported() {
-    let kinds: Vec<_> = lex_errors("$ \"a\n~").into_iter().map(|e| e.kind).collect();
+    let kinds: Vec<_> = lex_errors("$ \"a\n`").into_iter().map(|e| e.kind).collect();
     assert_eq!(
         kinds,
         [
             LexErrorKind::UnexpectedChar('$'),
             LexErrorKind::UnterminatedString,
-            LexErrorKind::UnexpectedChar('~'),
+            LexErrorKind::UnexpectedChar('`'),
         ]
     );
 }
