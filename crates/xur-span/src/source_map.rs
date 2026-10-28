@@ -125,6 +125,26 @@ impl FileLoader for MemoryFileLoader {
     }
 }
 
+/// Reads from in-memory overrides first, then falls back to disk.
+pub struct OverlayFileLoader {
+    overrides: HashMap<PathBuf, String>,
+}
+
+impl OverlayFileLoader {
+    pub fn new(overrides: HashMap<PathBuf, String>) -> Self {
+        Self { overrides }
+    }
+}
+
+impl FileLoader for OverlayFileLoader {
+    fn read_file(&self, path: &Path) -> io::Result<String> {
+        if let Some(src) = self.overrides.get(path) {
+            return Ok(src.clone());
+        }
+        RealFileLoader.read_file(path)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct SourceMap {
     files: Vec<Arc<SourceFile>>,
@@ -203,6 +223,19 @@ mod tests {
     fn line_col_at_end_of_input() {
         let file = single("a\nb");
         assert_eq!(file.line_col(file.end()), LineCol { line: 2, col: 2 });
+    }
+
+    #[test]
+    fn overlay_loader_prefers_memory() {
+        let path = PathBuf::from("/nonexistent/test.xur");
+        let mut overrides = HashMap::new();
+        overrides.insert(path.clone(), "memory content".into());
+        let loader = OverlayFileLoader::new(overrides);
+
+        assert_eq!(loader.read_file(&path).unwrap(), "memory content");
+        assert!(loader
+            .read_file(Path::new("/nonexistent/other.xur"))
+            .is_err());
     }
 
     #[test]
