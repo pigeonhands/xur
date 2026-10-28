@@ -13,6 +13,17 @@ use crate::{
     NativeVariantKind, Program, names,
 };
 
+pub(crate) const TEST_PRELUDE: &str = "\
+#[try(unwrap = \"Ok\")]
+pub enum Result<T, E = str> { Ok(T) Err(E) }
+pub use Result::Ok;
+pub use Result::Err;
+#[try(unwrap = \"Some\")]
+pub enum Option<T> { Some(T) None }
+pub use Option::Some;
+pub use Option::None;
+";
+
 /// A program loaded from memory and resolved. The first file is the root.
 pub(crate) struct Resolved {
     pub program: Program,
@@ -22,7 +33,7 @@ pub(crate) struct Resolved {
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
     let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
     let (program, diags) =
-        Program::load(Path::new(files[0].0), loader, Box::new(natives()), Some(xur_std::PRELUDE)).expect("root exists");
+        Program::load(Path::new(files[0].0), loader, Box::new(natives()), Some(TEST_PRELUDE)).expect("root exists");
     let errors = diags.into_iter().map(|d| d.message).collect();
     Resolved { program, errors }
 }

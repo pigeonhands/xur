@@ -28,8 +28,8 @@ impl Program {
     /// modules of `natives` (such as `std`) available by name.
     ///
     /// When `prelude` is `Some`, its source is loaded as module 0 and its
-    /// public items are in scope everywhere. Pass `xur_std::PRELUDE` for
-    /// the standard prelude, or your own source to replace it.
+    /// public items are in scope everywhere. Pass the standard library's
+    /// `PRELUDE` constant, or your own source to replace it.
     ///
     /// Fails only if `root` itself cannot be read; everything else wrong
     /// with the program is returned as diagnostics.

@@ -42,6 +42,17 @@ mod tests {
 
     use super::*;
 
+    const TEST_PRELUDE: &str = "\
+#[try(unwrap = \"Ok\")]
+pub enum Result<T, E = str> { Ok(T) Err(E) }
+pub use Result::Ok;
+pub use Result::Err;
+#[try(unwrap = \"Some\")]
+pub enum Option<T> { Some(T) None }
+pub use Option::Some;
+pub use Option::None;
+";
+
     #[test]
     fn finds_the_prelude_variants() {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
@@ -49,7 +60,7 @@ mod tests {
             Path::new("main.xur"),
             Box::new(loader),
             Box::new(Vec::new()),
-            Some(xur_std::PRELUDE),
+            Some(TEST_PRELUDE),
         )
         .unwrap();
         let lang = LangItems::new(&program);

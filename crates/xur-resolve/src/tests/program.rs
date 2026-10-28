@@ -2,7 +2,7 @@ use std::path::Path;
 
 use xur_span::MemoryFileLoader;
 
-use super::{natives, resolve_files};
+use super::{natives, resolve_files, TEST_PRELUDE};
 use crate::{Program, Res};
 
 const FILES: &[(&str, &str)] = &[
@@ -23,7 +23,7 @@ fn load() -> Program {
         Path::new("main.xur"),
         Box::new(MemoryFileLoader::new(FILES.iter().copied())),
         Box::new(natives()),
-        Some(xur_std::PRELUDE),
+        Some(TEST_PRELUDE),
     )
     .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
@@ -86,7 +86,7 @@ fn missing_root_fails() {
             Path::new("nope.xur"),
             Box::new(MemoryFileLoader::new(FILES.iter().copied())),
             Box::new(natives()),
-            Some(xur_std::PRELUDE),
+            Some(TEST_PRELUDE),
         )
         .is_err()
     );
@@ -132,7 +132,7 @@ fn load_lazy(src: &str) -> (usize, Vec<String>) {
     let expansions = natives.expansions.clone();
     let loader = MemoryFileLoader::new([("main.xur", src)]);
     let (_, diags) =
-        Program::load(Path::new("main.xur"), Box::new(loader), Box::new(natives), Some(xur_std::PRELUDE)).unwrap();
+        Program::load(Path::new("main.xur"), Box::new(loader), Box::new(natives), Some(TEST_PRELUDE)).unwrap();
     let messages = diags.into_iter().map(|d| d.message).collect();
     (
         expansions.load(std::sync::atomic::Ordering::SeqCst),

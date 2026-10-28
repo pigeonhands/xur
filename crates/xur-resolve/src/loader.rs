@@ -36,7 +36,7 @@ pub struct Crate {
 impl Crate {
     /// A crate containing only the prelude, ready for its root module to be
     /// added next. The prelude source is provided by the caller (typically
-    /// from `xur_std::PRELUDE`).
+    /// from the standard library's generated `PRELUDE` constant).
     pub(crate) fn with_prelude(
         loader: &mut Loader,
         diags: &mut Vec<Diag>,
@@ -294,7 +294,7 @@ mod tests {
             Path::new(files[0].0),
             loader,
             Box::new(crate::tests::natives()),
-            Some(xur_std::PRELUDE),
+            Some(crate::tests::TEST_PRELUDE),
         )
         .unwrap();
         (
