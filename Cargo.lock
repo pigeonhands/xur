@@ -2092,7 +2092,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xur"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ariadne",
@@ -2113,14 +2113,14 @@ dependencies = [
 
 [[package]]
 name = "xur-ast"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "xur-span",
 ]
 
 [[package]]
 name = "xur-bytecode"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "xur-ast",
  "xur-resolve",
@@ -2130,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "xur-errors"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ariadne",
  "xur-span",
@@ -2138,7 +2138,7 @@ dependencies = [
 
 [[package]]
 name = "xur-parser"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "strum 0.27.2",
  "thiserror",
@@ -2150,18 +2150,17 @@ dependencies = [
 
 [[package]]
 name = "xur-resolve"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "xur-ast",
  "xur-errors",
  "xur-parser",
  "xur-span",
- "xur-std",
 ]
 
 [[package]]
 name = "xur-runtime"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "dashmap 6.2.1",
  "facet",
@@ -2169,16 +2168,15 @@ dependencies = [
  "xur-errors",
  "xur-resolve",
  "xur-span",
- "xur-std",
 ]
 
 [[package]]
 name = "xur-span"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "xur-std"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bitflags 2.13.2",
  "comfy-table",
@@ -2204,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "xur-stub"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ctor 0.4.3",
  "facet",
@@ -2222,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "xur-vm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "xur-ast",
  "xur-bytecode",

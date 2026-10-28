@@ -6,23 +6,23 @@ exclude = ["crates/xur-jit"]
 default-members = ["xur"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pigeonhands/xur"
 
 
 [workspace.dependencies]
-xur-ast = { path = "crates/xur-ast", version = "0.1.1" }
-xur-bytecode = { path = "crates/xur-bytecode", version = "0.1.1" }
-xur-errors = { path = "crates/xur-errors", version = "0.1.1" }
-xur-jit = { path = "crates/xur-jit", version = "0.1.1" }
-xur-parser = { path = "crates/xur-parser", version = "0.1.1" }
-xur-resolve = { path = "crates/xur-resolve", version = "0.1.1" }
-xur-runtime = { path = "crates/xur-runtime", version = "0.1.1" }
-xur-std = { path = "crates/xur-std", version = "0.1.1" }
-xur-vm = { path = "crates/xur-vm", version = "0.1.1" }
-xur-span = { path = "crates/xur-span", version = "0.1.1" }
+xur-ast = { path = "crates/xur-ast", version = "0.1.2" }
+xur-bytecode = { path = "crates/xur-bytecode", version = "0.1.2" }
+xur-errors = { path = "crates/xur-errors", version = "0.1.2" }
+xur-jit = { path = "crates/xur-jit", version = "0.1.2" }
+xur-parser = { path = "crates/xur-parser", version = "0.1.2" }
+xur-resolve = { path = "crates/xur-resolve", version = "0.1.2" }
+xur-runtime = { path = "crates/xur-runtime", version = "0.1.2" }
+xur-std = { path = "crates/xur-std", version = "0.1.2" }
+xur-vm = { path = "crates/xur-vm", version = "0.1.2" }
+xur-span = { path = "crates/xur-span", version = "0.1.2" }
 strum = { version = "0.27", features = ["derive"] }
 unicode-ident = "1.0"
 thiserror = "2.0"
