@@ -19,7 +19,7 @@ use xur_errors::Diag;
 use xur_parser::parse_file;
 use xur_span::{FileLoader, SourceMap, Span, Symbol};
 
-const PRELUDE: &str = include_str!("prelude.xur");
+include!(concat!(env!("OUT_DIR"), "/prelude.rs"));
 
 /// Index of a module in [`Crate::modules`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

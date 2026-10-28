@@ -1,0 +1,55 @@
+pub enum Option<T> {
+    Some(T)
+    None
+}
+
+pub use Option::Some;
+pub use Option::None;
+
+impl<T> Option<T> {
+    pub fn is_some(self) -> bool {
+        match self {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    pub fn is_none(self) -> bool {
+        !self.is_some()
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Some(value) => value,
+            None => std::panic("called `unwrap` on `None`"),
+        }
+    }
+
+    pub fn expect(self, message: str) -> T {
+        match self {
+            Some(value) => value,
+            None => std::panic("{}", message),
+        }
+    }
+
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Some(value) => value,
+            None => default,
+        }
+    }
+
+    pub fn map(self, f: _) -> Option<_> {
+        match self {
+            Some(value) => Some(f(value)),
+            None => None,
+        }
+    }
+
+    pub fn ok_or(self, error: _) -> Result<T, _> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err(error),
+        }
+    }
+}
