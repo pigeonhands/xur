@@ -14,7 +14,7 @@ use xur_ast::{
     Attribute, Block as AstBlock, Expr, FnRetTy, LitKind, MetaItemInner, MetaItemKind, NodeId,
     Param, Ty, TyKind,
 };
-use xur_resolve::{DefId, DefKind, LangItems, ModuleIdx, Namespace, Program, Res, Resolutions};
+use xur_resolve::{DefId, DefKind, ModuleIdx, Namespace, Program, Res, Resolutions};
 use xur_span::{Span, Symbol};
 
 use crate::ir::{Block, BlockId, Constant, Decorator, DefRef, Function, Inst, InstKind, Reg, RtType, Terminator, TypeArg};
@@ -52,7 +52,7 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
             lowerer.terminate(Terminator::Return(value), item.expr.span);
             Some(lowerer.finish(name, 0, 0, item.expr.span))
         }
-        ItemRef::Ctor { .. } => None,
+        ItemRef::Ctor { .. } | ItemRef::Enum { .. } => None,
     }
 }
 
@@ -74,7 +74,6 @@ struct Lowerer<'a> {
     program: &'a Program,
     resolutions: &'a Resolutions,
     items: &'a ItemIndex,
-    lang: LangItems,
     module: ModuleIdx,
     blocks: Vec<BlockData>,
     current: BlockId,
@@ -104,7 +103,6 @@ impl<'a> Lowerer<'a> {
             program,
             resolutions: program.resolutions(),
             items,
-            lang: program.lang_items(),
             module,
             blocks: Vec::new(),
             current: BlockId(0),

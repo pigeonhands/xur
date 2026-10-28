@@ -703,10 +703,94 @@ impl<'s> Interp<'s> {
             InstKind::TypeLiteral { dst, ty } => {
                 frame.set(*dst, Value::Type(Box::new(ty.clone())));
             }
+            InstKind::IsTryUnwrap { dst, inner, value } => {
+                let (is, unwrapped) = self.is_try_unwrap(frame.get(*value))?;
+                frame.set(*dst, Value::Bool(is));
+                if let Some(v) = unwrapped {
+                    frame.set(*inner, v);
+                }
+            }
             InstKind::Error { message } => return Err(RuntimeError::new(message.clone())),
         }
         Ok(())
     }
+
+    fn is_try_unwrap(&self, value: &Value) -> RunResult<(bool, Option<Value>)> {
+        let Value::Adt(adt) = value else {
+            return Err(RuntimeError::new(format!(
+                "cannot apply `?` to {}",
+                value.kind()
+            )));
+        };
+        let program = self.shared.program.read().unwrap();
+        let resolutions = program.resolutions();
+        let variant_def = resolutions.defs.get(adt.ctor);
+        let enum_def = variant_def
+            .parent
+            .ok_or_else(|| RuntimeError::new("cannot apply `?` to this value"))?;
+
+        let items = self.shared.items.read().unwrap();
+        let attrs = match items.get(enum_def) {
+            Some(xur_bytecode::ItemRef::Enum { attrs }) => attrs,
+            _ => {
+                return Err(RuntimeError::new(
+                    "cannot apply `?`: type has no #[try(unwrap)] attribute",
+                ));
+            }
+        };
+
+        let unwrap_name = find_try_unwrap_attr(attrs).ok_or_else(|| {
+            let name = resolutions.def_path(enum_def);
+            RuntimeError::new(format!(
+                "cannot apply `?` to `{name}`: add #[try(unwrap = VariantName)]"
+            ))
+        })?;
+
+        let unwrap_sym = xur_span::Symbol::intern(unwrap_name);
+        let unwrap_def = resolutions
+            .lookup(enum_def, xur_resolve::Namespace::Value, unwrap_sym)
+            .and_then(|res| match res {
+                xur_resolve::Res::Def(DefKind::Variant, def) => Some(def),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                RuntimeError::new(format!(
+                    "`?` attribute names variant `{unwrap_name}` which does not exist"
+                ))
+            })?;
+
+        if adt.ctor == unwrap_def {
+            let inner = adt.fields.first().cloned().unwrap_or(Value::Unit);
+            Ok((true, Some(inner)))
+        } else {
+            Ok((false, None))
+        }
+    }
+}
+
+fn find_try_unwrap_attr(attrs: &[xur_ast::Attribute]) -> Option<&str> {
+    use xur_ast::{LitKind, MetaItemInner, MetaItemKind};
+    for attr in attrs {
+        let is_try = attr.meta.path.as_ident().is_some_and(|id| id.name.as_str() == "try");
+        if !is_try {
+            continue;
+        }
+        if let MetaItemKind::List(items) = &attr.meta.kind {
+            for item in items {
+                if let MetaItemInner::MetaItem(meta) = item {
+                    let is_unwrap = meta.path.as_ident().is_some_and(|id| id.name.as_str() == "unwrap");
+                    if is_unwrap {
+                        if let MetaItemKind::NameValue(lit) = &meta.kind {
+                            if let LitKind::Str(name) = &lit.kind {
+                                return Some(name.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// An iterator over a list (a snapshot of it), a range or a string's

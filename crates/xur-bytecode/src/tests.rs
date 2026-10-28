@@ -109,26 +109,22 @@ fn try_returns_errors_early() {
             "fn f(r: Result<i64, i64>) -> Result<i64, i64> { let v = r?; Ok(v + 1) }",
             "f",
         ),
-        "fn f (captures: 0, params: 1, registers: 8)
+        "fn f (captures: 0, params: 1, registers: 7)
   bb0:
     check r0: Result
-    r2 = r0 is Result::Ok
-    branch r2 ? bb1 : bb2
+    r1, r2 = try_unwrap r0
+    branch r1 ? bb1 : bb2
   bb1:
-    r1 = r0.0
-    goto bb4
+    goto bb3
   bb2:
-    r3 = r0 is Option::Some
-    branch r3 ? bb1 : bb3
-  bb3:
     return? r0
-  bb4:
-    r4 = r1
-    r5 = 1
-    r6 = r4 + r5
-    r7 = Result::Ok(r6)
-    check r7: Result
-    return r7",
+  bb3:
+    r3 = r2
+    r4 = 1
+    r5 = r3 + r4
+    r6 = Result::Ok(r5)
+    check r6: Result
+    return r6",
     );
 }
 

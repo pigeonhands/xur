@@ -581,47 +581,33 @@ impl Lowerer<'_> {
         dst
     }
 
-    /// `value?`: the `Ok` or `Some` value, or else return the `Err` or
-    /// `None` itself.
+    /// `value?`: the unwrap variant's inner value, or else return the
+    /// value itself. Uses `#[try(unwrap = V)]` on the enum at runtime.
     fn try_(&mut self, inner: &Expr, span: Span) -> Reg {
         let value = self.expr(inner);
+        let is = self.new_reg();
         let result = self.new_reg();
-        let (unwrap, check_some, early_return, join) = (
-            self.new_block(),
-            self.new_block(),
-            self.new_block(),
-            self.new_block(),
-        );
-        for (ctor, otherwise) in [(self.lang.ok, check_some), (self.lang.some, early_return)] {
-            let is = self.new_reg();
-            self.emit(
-                InstKind::IsCtor {
-                    dst: is,
-                    value,
-                    ctor,
-                },
-                span,
-            );
-            self.terminate(
-                Terminator::Branch {
-                    cond: is,
-                    then: unwrap,
-                    otherwise,
-                },
-                span,
-            );
-            self.switch_to(otherwise);
-        }
-        self.terminate(Terminator::TryReturn(value), span);
-        self.switch_to(unwrap);
+        let (unwrap, early_return) = (self.new_block(), self.new_block());
         self.emit(
-            InstKind::Project {
-                dst: result,
+            InstKind::IsTryUnwrap {
+                dst: is,
+                inner: result,
                 value,
-                index: 0,
             },
             span,
         );
+        self.terminate(
+            Terminator::Branch {
+                cond: is,
+                then: unwrap,
+                otherwise: early_return,
+            },
+            span,
+        );
+        self.switch_to(early_return);
+        self.terminate(Terminator::TryReturn(value), span);
+        let join = self.new_block();
+        self.switch_to(unwrap);
         self.terminate(Terminator::Goto(join), span);
         self.switch_to(join);
         result

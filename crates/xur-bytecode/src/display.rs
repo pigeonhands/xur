@@ -166,6 +166,9 @@ fn inst_text(kind: &InstKind, resolutions: &Resolutions) -> String {
             format!("{dst:?} = T{type_param}::{method}({})", args.join(", "))
         }
         InstKind::TypeLiteral { dst, ty } => format!("{dst:?} = type {ty}"),
+        InstKind::IsTryUnwrap { dst, inner, value } => {
+            format!("{dst:?}, {inner:?} = try_unwrap {value:?}")
+        }
         InstKind::Error { message } => format!("error {message:?}"),
     }
 }

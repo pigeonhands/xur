@@ -1,3 +1,4 @@
+#[try(unwrap = "Ok")]
 pub enum Result<T, E = str> {
     Ok(T)
     Err(E)

@@ -315,6 +315,15 @@ pub enum InstKind {
         dst: Reg,
         ty: RtType,
     },
+    /// Whether `value` is the "unwrap" variant of a `#[try(unwrap = V)]`
+    /// enum. At runtime: finds the parent enum, reads the attr, resolves
+    /// the variant, and checks. `dst` is true when the variant matches;
+    /// `inner` holds the unwrapped field 0 in that case.
+    IsTryUnwrap {
+        dst: Reg,
+        inner: Reg,
+        value: Reg,
+    },
     /// Fails at runtime with `message`; lowered for code that resolution
     /// already reported as broken.
     Error {

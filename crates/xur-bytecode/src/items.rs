@@ -24,6 +24,10 @@ pub enum ItemRef {
         data: &'static VariantData,
         attrs: &'static [Attribute],
     },
+    /// An enum definition: its attributes (e.g. `#[try(unwrap = Ok)]`).
+    Enum {
+        attrs: &'static [Attribute],
+    },
 }
 
 /// Every function, constant and constructor of the loaded modules, by
@@ -134,7 +138,10 @@ impl Visitor<'static> for Indexer<'_> {
                 let attrs = &item.attrs;
                 self.add(item.id, ItemRef::Ctor { data, attrs });
             }
-            ItemKind::Enum(..) | ItemKind::Impl(_) | ItemKind::Use(_) => {}
+            ItemKind::Enum(..) => {
+                self.add(item.id, ItemRef::Enum { attrs: &item.attrs });
+            }
+            ItemKind::Impl(_) | ItemKind::Use(_) => {}
         }
         visit::walk_item(self, item);
     }
