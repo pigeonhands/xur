@@ -2187,6 +2187,7 @@ dependencies = [
  "hao-runtime",
  "iced-x86",
  "inquire",
+ "libc",
  "pewter",
  "pico-args",
  "procodile",
