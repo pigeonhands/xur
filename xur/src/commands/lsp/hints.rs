@@ -302,19 +302,24 @@ fn user_method_return_type(
     }
 }
 
-/// The position (0-based) of a type parameter among its parent's generic params.
+/// Position of a type parameter within its owning generic param list.
+/// Impl block params are created consecutively by `declare_generics`,
+/// so we find the contiguous run of TyParams sharing the same parent.
 fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<usize> {
-    let parent = resolutions.defs.get(param_def).parent?;
-    let mut position = 0;
-    for (id, data) in resolutions.defs.iter() {
-        if data.parent == Some(parent) && data.kind == DefKind::TyParam {
-            if id == param_def {
-                return Some(position);
-            }
-            position += 1;
+    let parent = resolutions.defs.get(param_def).parent;
+    let all: Vec<_> = resolutions.defs.iter().collect();
+    let idx = all.iter().position(|(id, _)| *id == param_def)?;
+    // Walk backwards to find the start of this contiguous TyParam group.
+    let mut start = idx;
+    while start > 0 {
+        let (_, prev) = &all[start - 1];
+        if prev.kind == DefKind::TyParam && prev.parent == parent {
+            start -= 1;
+        } else {
+            break;
         }
     }
-    None
+    Some(idx - start)
 }
 
 fn xur_name_to_builtin(name: &str) -> Option<BuiltinType> {
