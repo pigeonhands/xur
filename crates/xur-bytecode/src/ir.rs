@@ -47,6 +47,8 @@ pub struct Function {
     /// captures.
     pub params: u32,
     pub registers: u32,
+    /// How many of `type_params` come from the enclosing impl block.
+    pub impl_type_param_count: u32,
     /// The function's type parameters, which calls bind by position.
     pub type_params: Vec<Symbol>,
     /// Which type parameters are required (`T!`): the caller must provide

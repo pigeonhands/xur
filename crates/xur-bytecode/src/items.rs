@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 
 use xur_ast::visit::{self, Visitor};
-use xur_ast::{Attribute, ConstItem, FieldDef, Fn, Item, ItemKind, NodeId, Variant, VariantData};
+use xur_ast::{
+    Attribute, ConstItem, FieldDef, Fn, Generics, Item, ItemKind, NodeId, Variant, VariantData,
+};
 use xur_resolve::{DefId, ModuleIdx, Program, Resolutions};
 
 /// What lowering needs to know about a definition.
@@ -13,6 +15,7 @@ pub enum ItemRef {
         item: &'static Fn,
         attrs: &'static [Attribute],
         module: ModuleIdx,
+        impl_generics: Option<&'static Generics>,
     },
     Const {
         item: &'static ConstItem,
@@ -54,6 +57,7 @@ impl ItemIndex {
                 resolutions: program.resolutions(),
                 module: ModuleIdx(i),
                 items: &mut self.items,
+                current_impl: None,
             };
             indexer.visit_module(module.ast);
         }
@@ -110,6 +114,7 @@ struct Indexer<'a> {
     resolutions: &'a Resolutions,
     module: ModuleIdx,
     items: &'a mut HashMap<DefId, ItemRef>,
+    current_impl: Option<&'static Generics>,
 }
 
 impl Indexer<'_> {
@@ -126,7 +131,10 @@ impl Visitor<'static> for Indexer<'_> {
     fn visit_item(&mut self, item: &'static Item) {
         let module = self.module;
         match &item.kind {
-            ItemKind::Fn(func) => self.add(item.id, ItemRef::Fn { item: func, attrs: &item.attrs, module }),
+            ItemKind::Fn(func) => {
+                let impl_generics = self.current_impl;
+                self.add(item.id, ItemRef::Fn { item: func, attrs: &item.attrs, module, impl_generics });
+            }
             ItemKind::Const(konst) => self.add(
                 item.id,
                 ItemRef::Const {
@@ -141,7 +149,18 @@ impl Visitor<'static> for Indexer<'_> {
             ItemKind::Enum(..) => {
                 self.add(item.id, ItemRef::Enum { attrs: &item.attrs });
             }
-            ItemKind::Impl(_) | ItemKind::Use(_) => {}
+            ItemKind::Impl(imp) => {
+                let saved = self.current_impl;
+                self.current_impl = if imp.generics.params.is_empty() {
+                    None
+                } else {
+                    Some(&imp.generics)
+                };
+                visit::walk_item(self, item);
+                self.current_impl = saved;
+                return;
+            }
+            ItemKind::Use(_) => {}
         }
         visit::walk_item(self, item);
     }

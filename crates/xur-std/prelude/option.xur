@@ -40,14 +40,14 @@ impl<T> Option<T> {
         }
     }
 
-    pub fn map(self, f: _) -> Option<_> {
+    pub fn map<U>(self, f: fn(T) -> U) -> Option<U> {
         match self {
             Some(value) => Some(f(value)),
             None => None,
         }
     }
 
-    pub fn ok_or(self, error: _) -> Result<T, _> {
+    pub fn ok_or<E>(self, error: E) -> Result<T, E> {
         match self {
             Some(value) => Ok(value),
             None => Err(error),

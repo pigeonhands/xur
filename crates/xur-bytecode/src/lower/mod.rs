@@ -27,8 +27,19 @@ pub fn lower(program: &Program, items: &ItemIndex, def: DefId) -> Option<Functio
     let resolutions = program.resolutions();
     let name = resolutions.def_path(def);
     match items.get(def)? {
-        ItemRef::Fn { item, attrs, module } => {
+        ItemRef::Fn { item, attrs, module, impl_generics } => {
             let mut lowerer = Lowerer::new(program, items, module);
+            let impl_type_param_count = if let Some(generics) = impl_generics {
+                for param in &generics.params {
+                    lowerer.type_params.push(resolutions.node_defs[&param.id]);
+                    lowerer.type_param_names.push(param.ident.name);
+                    lowerer.type_param_required.push(param.required);
+                }
+                generics.params.len() as u32
+            } else {
+                0
+            };
+            lowerer.impl_type_param_count = impl_type_param_count;
             for param in &item.generics.params {
                 lowerer.type_params.push(resolutions.node_defs[&param.id]);
                 lowerer.type_param_names.push(param.ident.name);
@@ -81,6 +92,7 @@ struct Lowerer<'a> {
     /// The register of each local variable, by its binding pattern.
     locals: HashMap<NodeId, Reg>,
     loops: Vec<LoopScope>,
+    impl_type_param_count: u32,
     /// The definitions of the function's type parameters, in order.
     type_params: Vec<DefId>,
     type_param_names: Vec<Symbol>,
@@ -109,6 +121,7 @@ impl<'a> Lowerer<'a> {
             registers: 0,
             locals: HashMap::new(),
             loops: Vec::new(),
+            impl_type_param_count: 0,
             type_params: Vec::new(),
             type_param_names: Vec::new(),
             type_param_required: Vec::new(),
@@ -142,6 +155,7 @@ impl<'a> Lowerer<'a> {
             captures,
             params,
             registers: self.registers,
+            impl_type_param_count: self.impl_type_param_count,
             type_params: self.type_param_names,
             type_param_required: self.type_param_required,
             param_type_params: self.param_type_params,
