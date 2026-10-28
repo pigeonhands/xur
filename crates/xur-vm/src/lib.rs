@@ -127,6 +127,11 @@ impl Vm {
         Some(Ok(value))
     }
 
+    /// Flushes any buffered output.
+    pub fn flush_stdout(&self) {
+        let _ = lock(&self.shared.stdout).flush();
+    }
+
     /// Diagnostics for modules imported while the program ran.
     pub fn take_diagnostics(&self) -> Vec<Diag> {
         std::mem::take(&mut lock(&self.shared.diags))

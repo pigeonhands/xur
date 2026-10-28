@@ -393,10 +393,10 @@ impl Lowerer<'_> {
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
-        if type_args.is_empty() {
-            if let Some(hint) = self.hint_type_arg.take() {
-                type_args.push(hint);
-            }
+        if type_args.is_empty()
+            && let Some(hint) = self.hint_type_arg.take()
+        {
+            type_args.push(hint);
         }
         let callee = self.expr(callee);
         let args = self.exprs(args);

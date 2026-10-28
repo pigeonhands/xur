@@ -131,7 +131,7 @@ pub(crate) fn register(registry: &Registry) {
             let items = lock(list).clone();
             let mut result = Vec::new();
             for item in items {
-                match cx.call(f, &[item.clone()])? {
+                match cx.call(f, std::slice::from_ref(&item))? {
                     Value::Bool(true) => result.push(item),
                     Value::Bool(false) => {}
                     _ => return Err(RuntimeError::new("filter predicate must return a bool")),

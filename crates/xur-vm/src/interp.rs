@@ -259,10 +259,9 @@ impl<'s> Interp<'s> {
                 if idx < type_args.len()
                     && type_args[idx].def.is_none()
                     && !type_args[idx].is_record()
+                    && let Some(tr) = self.type_ref_of(arg)
                 {
-                    if let Some(tr) = self.type_ref_of(arg) {
-                        type_args[idx] = tr;
-                    }
+                    type_args[idx] = tr;
                 }
             }
         }

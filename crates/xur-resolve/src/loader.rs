@@ -242,10 +242,10 @@ fn find_imports(module: &LoadedModule) -> Vec<Import> {
 /// `my_plugin/lib.xur`.
 pub(crate) fn module_name(path: &Path) -> Symbol {
     let stem = path.file_stem().unwrap_or(path.as_os_str());
-    if stem == "lib" {
-        if let Some(parent) = path.parent().and_then(|p| p.file_name()) {
-            return Symbol::intern(&parent.to_string_lossy());
-        }
+    if stem == "lib"
+        && let Some(parent) = path.parent().and_then(|p| p.file_name())
+    {
+        return Symbol::intern(&parent.to_string_lossy());
     }
     Symbol::intern(&stem.to_string_lossy())
 }

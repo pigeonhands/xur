@@ -225,33 +225,33 @@ impl Interp<'_> {
                 )));
             }
         };
-        if let Some(expected) = expected_params {
-            if let Some(actual) = actual_params {
-                if actual != expected {
-                    return Ok(self.result_err(format!(
-                        "`{name_str}` takes {actual} parameter(s), expected {expected}"
-                    )));
-                }
-            }
+        if let Some(expected) = expected_params
+            && let Some(actual) = actual_params
+            && actual != expected
+        {
+            return Ok(self.result_err(format!(
+                "`{name_str}` takes {actual} parameter(s), expected {expected}"
+            )));
         }
         if let Some(RtType::Fn { params: sig_params, ret: sig_ret }) = expected_sig {
-            if let Some(actual) = actual_params {
-                if actual != sig_params.len() {
-                    return Ok(self.result_err(format!(
-                        "`{name_str}` takes {actual} parameter(s), expected {}",
-                        sig_params.len()
-                    )));
-                }
+            if let Some(actual) = actual_params
+                && actual != sig_params.len()
+            {
+                return Ok(self.result_err(format!(
+                    "`{name_str}` takes {actual} parameter(s), expected {}",
+                    sig_params.len()
+                )));
             }
             if let Some(param_types) = &fn_param_types {
                 for (i, (actual, expected)) in param_types.iter().zip(sig_params.iter()).enumerate() {
-                    if let Some(actual) = actual {
-                        if *expected != RtType::Any && actual != expected {
-                            return Ok(self.result_err(format!(
-                                "`{name_str}` param {} has type {actual}, expected {expected}",
-                                i + 1
-                            )));
-                        }
+                    if let Some(actual) = actual
+                        && *expected != RtType::Any
+                        && actual != expected
+                    {
+                        return Ok(self.result_err(format!(
+                            "`{name_str}` param {} has type {actual}, expected {expected}",
+                            i + 1
+                        )));
                     }
                 }
             }

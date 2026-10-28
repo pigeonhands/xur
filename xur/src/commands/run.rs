@@ -59,6 +59,8 @@ fn run_program(
         Err(error) => bail!("couldn't start the interpreter: {error}"),
     };
 
+    vm.flush_stdout();
+
     let program = vm.program();
     let source_map = &program.krate.source_map;
     diagnostics::emit(source_map, vm.take_diagnostics())?;

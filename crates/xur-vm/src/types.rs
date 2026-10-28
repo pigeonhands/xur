@@ -36,10 +36,10 @@ impl Interp<'_> {
         if self.has_type(value, ty) {
             return Ok(None);
         }
-        if matches!(value, Value::Record(r) if r.ty.is_none()) {
-            if let Some(coerced) = self.try_coerce(value, ty)? {
-                return Ok(Some(coerced));
-            }
+        if matches!(value, Value::Record(r) if r.ty.is_none())
+            && let Some(coerced) = self.try_coerce(value, ty)?
+        {
+            return Ok(Some(coerced));
         }
         let found = match value {
             Value::Int(i) if matches!(ty, RtType::Int { .. }) => i.to_string(),
