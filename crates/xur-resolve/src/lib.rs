@@ -137,6 +137,16 @@ impl Resolutions {
         self.native_roots.iter().map(|(&name, &def)| (name, def))
     }
 
+    /// The DefId of a struct or enum with the given name (e.g. `Result`),
+    /// searching all definitions.
+    pub fn find_type(&self, name: &str) -> Option<DefId> {
+        self.defs.iter().find_map(|(id, data)| {
+            matches!(data.kind, DefKind::Struct | DefKind::Enum)
+                .then(|| (data.name.as_str() == name).then_some(id))
+                .flatten()
+        })
+    }
+
     /// Every function of the struct, enum or native type `ty`, in the order
     /// they were defined.
     pub fn assoc_fns(&self, ty: DefId) -> Vec<(Symbol, DefId)> {

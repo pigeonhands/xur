@@ -330,6 +330,28 @@ impl Registry {
         }
     }
 
+    /// The return-type Shape of a native function, if it has a signature.
+    pub fn native_return_shape(&self, id: NativeFnId) -> Option<&'static Shape> {
+        self.function(id).signature.as_ref().map(|s| s.ret)
+    }
+
+    /// Extract the xur name of the `index`th type parameter from a generic
+    /// Shape: for `Result<T, E>`, index 0 → T, index 1 → E; for `Option<T>`,
+    /// index 0 → T.
+    pub fn shape_type_param(&self, shape: &'static Shape, index: usize) -> Option<String> {
+        if let Ok(r) = shape.def.into_result() {
+            return match index {
+                0 => Some(self.shape_xur_name(r.t())),
+                1 => Some(self.shape_xur_name(r.e())),
+                _ => None,
+            };
+        }
+        if let Ok(o) = shape.def.into_option() {
+            return (index == 0).then(|| self.shape_xur_name(o.t()));
+        }
+        None
+    }
+
     /// The native type registered for `shape`, if any.
     pub fn type_of_shape(&self, shape: &'static Shape) -> Option<NativeTypeId> {
         let index = self

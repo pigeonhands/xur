@@ -2084,6 +2084,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "clap",
+ "facet",
  "tokio",
  "tower-lsp",
  "xur-ast",

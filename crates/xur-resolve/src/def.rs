@@ -213,6 +213,13 @@ impl Definitions {
         &self.defs[id.0 as usize]
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (DefId, &DefData)> {
+        self.defs
+            .iter()
+            .enumerate()
+            .map(|(i, d)| (DefId(i as u32), d))
+    }
+
     /// `id` and its parents, outermost first: for `std::io::println`, the
     /// definitions of `std`, `io` and `println`.
     pub fn lineage(&self, id: DefId) -> Vec<DefId> {

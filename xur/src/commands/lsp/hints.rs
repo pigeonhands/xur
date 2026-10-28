@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use xur_ast::{Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind};
+use xur_ast::{Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind, TyKind};
 use xur_ast::visit::{self, Visitor};
 use xur_bytecode::{ItemIndex, ItemRef, type_name};
 use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
 use xur_runtime::{BuiltinType, Registry};
-use xur_span::{Ident, Span};
+use xur_span::{Ident, Span, Symbol};
 
 pub struct CallCollector(pub Vec<(xur_ast::NodeId, Vec<Span>)>);
 
@@ -174,7 +174,17 @@ pub fn infer_expr_type(
         ExprKind::MethodCall(mc) => {
             let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry);
             let method = mc.seg.ident.name.as_str();
-            method_return_type(receiver_ty.as_deref(), method, registry)
+            // Try native/builtin method lookup first.
+            if let Some(ty) = method_return_type(receiver_ty.as_deref(), method, registry) {
+                return Some(ty);
+            }
+            // Try user-defined impl methods via the resolution system.
+            if let Some(receiver_name) = receiver_ty.as_deref() {
+                return user_method_return_type(
+                    receiver_name, method, &mc.receiver, resolutions, items, registry,
+                );
+            }
+            None
         }
         ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry),
         ExprKind::Block(block) => {
@@ -214,6 +224,97 @@ fn native_return_type(id: NativeFnId, registry: &Registry) -> Option<String> {
     let native_fn = registry.function(id);
     let sig = native_fn.signature.as_ref()?;
     Some(registry.shape_xur_name(sig.ret))
+}
+
+/// Walk the receiver expression to find a native function call's return Shape.
+/// Handles `native_fn(args)`, chained `.method()` on native results, `(expr)`,
+/// and `expr?` (peels Result/Option).
+fn native_call_return_shape(
+    expr: &Expr,
+    resolutions: &Resolutions,
+    registry: &Registry,
+) -> Option<&'static facet::Shape> {
+    match &expr.kind {
+        ExprKind::Call(callee, _) => {
+            if let ExprKind::Path(path) = &callee.kind
+                && let Some(Res::Def(DefKind::NativeFn(id), _)) = resolutions.res.get(&path.id)
+            {
+                return registry.native_return_shape(*id);
+            }
+            None
+        }
+        ExprKind::MethodCall(mc) => {
+            let receiver_shape = native_call_return_shape(&mc.receiver, resolutions, registry)?;
+            let receiver_name = registry.shape_xur_name(receiver_shape);
+            let method = mc.seg.ident.name.as_str();
+            let id = resolve_method(&receiver_name, method, registry)?;
+            registry.native_return_shape(id)
+        }
+        ExprKind::Paren(inner) => native_call_return_shape(inner, resolutions, registry),
+        ExprKind::Try(inner) => {
+            let shape = native_call_return_shape(inner, resolutions, registry)?;
+            if let Ok(r) = shape.def.into_result() {
+                return Some(r.t());
+            }
+            if let Ok(o) = shape.def.into_option() {
+                return Some(o.t());
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Resolve a user-defined `impl` method's return type through the resolution
+/// system. If the return type is a type parameter (e.g. `T` in `unwrap() -> T`),
+/// tries to resolve it via the receiver's native Shape.
+fn user_method_return_type(
+    receiver_name: &str,
+    method: &str,
+    receiver_expr: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+) -> Option<String> {
+    let type_def = resolutions.find_type(receiver_name)?;
+    let res = resolutions.assoc_fn(type_def, Symbol::intern(method))?;
+    match res {
+        Res::Def(DefKind::Fn, def) => {
+            let ItemRef::Fn { item, .. } = items.get(def)? else { return None };
+            match &item.decl.output {
+                FnRetTy::Ty(ty) => {
+                    if let TyKind::Path(path) = &ty.kind
+                        && let Some(&Res::Def(DefKind::TyParam, param_def)) =
+                            resolutions.res.get(&path.id)
+                    {
+                        let index = type_param_position(resolutions, param_def)?;
+                        let shape =
+                            native_call_return_shape(receiver_expr, resolutions, registry)?;
+                        return registry.shape_type_param(shape, index);
+                    }
+                    Some(type_name(resolutions, ty))
+                }
+                FnRetTy::Default(_) => Some("()".into()),
+            }
+        }
+        Res::Def(DefKind::NativeFn(id), _) => native_return_type(id, registry),
+        _ => None,
+    }
+}
+
+/// The position (0-based) of a type parameter among its parent's generic params.
+fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<usize> {
+    let parent = resolutions.defs.get(param_def).parent?;
+    let mut position = 0;
+    for (id, data) in resolutions.defs.iter() {
+        if data.parent == Some(parent) && data.kind == DefKind::TyParam {
+            if id == param_def {
+                return Some(position);
+            }
+            position += 1;
+        }
+    }
+    None
 }
 
 fn xur_name_to_builtin(name: &str) -> Option<BuiltinType> {

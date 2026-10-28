@@ -164,3 +164,37 @@ fn lazy_modules_can_fill_in_submodules() {
     assert_eq!(expanded.modules[0].name, "inner");
     assert_eq!(expanded.modules[0].functions[0].name, "deep");
 }
+
+#[test]
+fn shape_xur_name_maps_rust_types() {
+    let registry = registry();
+    assert_eq!(registry.shape_xur_name(String::SHAPE), "str");
+    assert_eq!(registry.shape_xur_name(bool::SHAPE), "bool");
+    assert_eq!(registry.shape_xur_name(i64::SHAPE), "i64");
+    assert_eq!(registry.shape_xur_name(f64::SHAPE), "f64");
+    assert_eq!(registry.shape_xur_name(<Vec<String>>::SHAPE), "list");
+    assert_eq!(registry.shape_xur_name(<Vec<u8>>::SHAPE), "bytes");
+    assert_eq!(registry.shape_xur_name(<()>::SHAPE), "()");
+    // Result and Option fall through to the short name.
+    assert_eq!(
+        registry.shape_xur_name(<Result<Vec<String>, String>>::SHAPE),
+        "Result",
+    );
+    assert_eq!(registry.shape_xur_name(<Option<String>>::SHAPE), "Option");
+    // Registered types use their xur name.
+    assert_eq!(registry.shape_xur_name(Point::SHAPE), "Point");
+    // shape_type_param extracts generic arguments.
+    assert_eq!(
+        registry.shape_type_param(<Result<Vec<String>, String>>::SHAPE, 0),
+        Some("list".into()),
+    );
+    assert_eq!(
+        registry.shape_type_param(<Result<Vec<String>, String>>::SHAPE, 1),
+        Some("str".into()),
+    );
+    assert_eq!(
+        registry.shape_type_param(<Option<i64>>::SHAPE, 0),
+        Some("i64".into()),
+    );
+    assert_eq!(registry.shape_type_param(String::SHAPE, 0), None);
+}

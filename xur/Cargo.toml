@@ -19,6 +19,7 @@ xur-std.workspace = true
 xur-vm.workspace = true
 xur-span.workspace = true
 xur-errors.workspace = true
+facet.workspace = true
 anyhow.workspace = true
 ariadne.workspace = true
 clap.workspace = true
