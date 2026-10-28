@@ -1,0 +1,46 @@
+// Assemble a tiny x86-64 function, write it to executable memory,
+// and call it through a raw pointer.
+//
+//     xur run example/re/asm/call_ptr.xur
+//
+// Builds `mov eax, 42; ret`, allocates an RWX page, writes the
+// machine code into it, then calls the page as a function pointer.
+// The return value (RAX = 42) comes back as an integer.
+
+use std::io;
+use std::mem;
+use std::assert;
+use std::re::asm::x86;
+
+fn main() -> Result<()> {
+    // Build the instructions using enum operands.
+    let eax = x86::reg(x86::Register::EAX);
+    let mov = x86::insn(x86::Code::Mov_r32_imm32, eax, 42)?;
+    let ret = x86::insn(x86::Code::Retnq)?;
+    io::println("assembled:");
+    io::println("  {}", x86::format(mov, "intel"));
+    io::println("  {}", x86::format(ret, "intel"));
+
+    // Encode to machine code bytes.
+    let code: bytes = x86::encode(64, [mov, ret], 0)?;
+    io::println("bytes: {}", code.to_hex());
+
+    // Allocate a page, write the code, make it executable.
+    let page_size = 4096;
+    let page: *fn() = mem::alloc_page(page_size);
+    mem::write_bytes(page, code);
+    mem::protect(page, page_size, "rx");
+
+    io::println("page at {}", page.to_hex());
+
+    // Call the function pointer — mov eax,42; ret returns 42.
+    let result = page();
+    io::println("result: {}", result);
+    assert::is_eq(result, 42);
+
+    // Clean up.
+    mem::free_page(page, page_size);
+
+    io::println("call_ptr: all assertions passed");
+    Ok(())
+}

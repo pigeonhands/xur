@@ -19,13 +19,13 @@ fn all_examples() -> [str] {
     // or external targets (reverse-engineering tools).
     let skip = ["cli", "net", "re", "stub"];
     let entries = fs::read_dir("example").unwrap();
-    let folders = entries.filter(|e| !e.ends_with(".xur"));
+    let folders: [str] = entries.filter(|e| !e.ends_with(".xur"));
     let examples = [];
     for folder in folders {
         if skip.contains(folder) {
             continue;
         }
-        let dir = path::join("example", folder);
+        let dir: str = path::join("example", folder);
         let files = fs::read_dir(dir).unwrap();
         for file in files.filter(|e| e.ends_with(".xur")) {
             examples.push(path::join(folder, file));
@@ -178,12 +178,13 @@ fn main() -> Result<()> {
 
     // Interactive mode: pick a category, then an example.
     let entries = fs::read_dir("example")?;
-    let folders = entries.filter(|e| !e.ends_with(".xur"));
+    let folders: [str] = entries.filter(|e| !e.ends_with(".xur"));
 
     let folder = cli::select("Pick a category:", folders);
 
-    let files = fs::read_dir(path::join("example", folder))?;
-    let examples = files.filter(|e| e.ends_with(".xur"));
+    let dir: str = path::join("example", folder);
+    let files = fs::read_dir(dir)?;
+    let examples: [str] = files.filter(|e| e.ends_with(".xur"));
 
     let file = cli::select("Pick an example:", examples);
 
