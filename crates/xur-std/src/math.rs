@@ -5,11 +5,11 @@ use xur_runtime::Registry;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::math")
-        .function("sqrt", |x: f64| x.sqrt())
-        .function("pow", |x: f64, y: f64| x.powf(y))
-        .function("abs", |x: f64| x.abs())
-        .function("min", |a: i64, b: i64| a.min(b))
-        .function("max", |a: i64, b: i64| a.max(b));
+        .named_function("sqrt", &["x"], |x: f64| x.sqrt())
+        .named_function("pow", &["base", "exp"], |x: f64, y: f64| x.powf(y))
+        .named_function("abs", &["x"], |x: f64| x.abs())
+        .named_function("min", &["a", "b"], |a: i64, b: i64| a.min(b))
+        .named_function("max", &["a", "b"], |a: i64, b: i64| a.max(b));
 }
 
 #[cfg(test)]

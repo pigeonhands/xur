@@ -34,9 +34,9 @@ fn drain_args(inner: &mut pico_args::Arguments) -> Vec<OsString> {
 
 fn keys(args: &[Value]) -> Result<pico_args::Keys, RuntimeError> {
     match args {
-        [Value::Str(long)] => Ok(pico_args::Keys::from(leak_str(&**long))),
+        [Value::Str(long)] => Ok(pico_args::Keys::from(leak_str(long))),
         [Value::Str(short), Value::Str(long)] => {
-            Ok(pico_args::Keys::from([leak_str(&**short), leak_str(&**long)]))
+            Ok(pico_args::Keys::from([leak_str(short), leak_str(long)]))
         }
         _ => Err(RuntimeError::new(
             "expected one or two string key arguments",
@@ -52,7 +52,7 @@ fn prompt_text(args: &[Value]) -> RunResult<Value> {
     let [Value::Str(message)] = args else {
         return Err(RuntimeError::new("`prompt` takes a message string"));
     };
-    inquire::Text::new(&**message)
+    inquire::Text::new(message)
         .prompt()
         .map(|s| Value::str(&s))
         .map_err(|e| RuntimeError::new(error_text(e)))
@@ -62,7 +62,7 @@ fn prompt_confirm(args: &[Value]) -> RunResult<Value> {
     let [Value::Str(message)] = args else {
         return Err(RuntimeError::new("`confirm` takes a message string"));
     };
-    inquire::Confirm::new(&**message)
+    inquire::Confirm::new(message)
         .prompt()
         .map(Value::Bool)
         .map_err(|e| RuntimeError::new(error_text(e)))
@@ -84,7 +84,7 @@ fn prompt_select(args: &[Value]) -> RunResult<Value> {
     if options.is_empty() {
         return Err(RuntimeError::new("options list must not be empty"));
     }
-    inquire::Select::new(&**message, options)
+    inquire::Select::new(message, options)
         .prompt()
         .map(|s| Value::str(&s))
         .map_err(|e| RuntimeError::new(error_text(e)))
@@ -106,7 +106,7 @@ fn prompt_multi_select(args: &[Value]) -> RunResult<Value> {
     if options.is_empty() {
         return Err(RuntimeError::new("options list must not be empty"));
     }
-    inquire::MultiSelect::new(&**message, options)
+    inquire::MultiSelect::new(message, options)
         .prompt()
         .map(|selected| Value::list(selected.into_iter().map(|s| Value::str(&s)).collect()))
         .map_err(|e| RuntimeError::new(error_text(e)))
@@ -116,7 +116,7 @@ fn prompt_password(args: &[Value]) -> RunResult<Value> {
     let [Value::Str(message)] = args else {
         return Err(RuntimeError::new("`password` takes a message string"));
     };
-    inquire::Password::new(&**message)
+    inquire::Password::new(message)
         .without_confirmation()
         .prompt()
         .map(|s| Value::str(&s))
@@ -127,7 +127,7 @@ fn prompt_editor(args: &[Value]) -> RunResult<Value> {
     let [Value::Str(message)] = args else {
         return Err(RuntimeError::new("`editor` takes a message string"));
     };
-    inquire::Editor::new(&**message)
+    inquire::Editor::new(message)
         .prompt()
         .map(|s| Value::str(&s))
         .map_err(|e| RuntimeError::new(error_text(e)))
@@ -390,16 +390,16 @@ pub(crate) fn register(registry: &Registry) {
                 }
             });
         // Declarative parsing
-        module.raw_function("parse", |cx, args| parse_spec(cx, args));
+        module.named_raw_function("parse", &["specs"], |cx, args| parse_spec(cx, args));
         // Table
-        module.raw_function("table", |cx, args| table(cx, args));
+        module.named_raw_function("table", &["headers", "rows"], |cx, args| table(cx, args));
         // Prompts
         module
-            .raw_function("prompt", |_cx, args| prompt_text(args))
-            .raw_function("confirm", |_cx, args| prompt_confirm(args))
-            .raw_function("select", |_cx, args| prompt_select(args))
-            .raw_function("multi_select", |_cx, args| prompt_multi_select(args))
-            .raw_function("password", |_cx, args| prompt_password(args))
-            .raw_function("editor", |_cx, args| prompt_editor(args));
+            .named_raw_function("prompt", &["message"], |_cx, args| prompt_text(args))
+            .named_raw_function("confirm", &["message"], |_cx, args| prompt_confirm(args))
+            .named_raw_function("select", &["message", "options"], |_cx, args| prompt_select(args))
+            .named_raw_function("multi_select", &["message", "options"], |_cx, args| prompt_multi_select(args))
+            .named_raw_function("password", &["message"], |_cx, args| prompt_password(args))
+            .named_raw_function("editor", &["message"], |_cx, args| prompt_editor(args));
     });
 }

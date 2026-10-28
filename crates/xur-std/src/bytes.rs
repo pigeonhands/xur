@@ -15,9 +15,9 @@ type Bytes = Arc<Mutex<Vec<u8>>>;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::bytes")
-        .function("zeroed", |len: usize| vec![0u8; len])
-        .function("from_list", |bytes: Vec<u8>| bytes)
-        .function("from_hex", from_hex);
+        .named_function("zeroed", &["len"], |len: usize| vec![0u8; len])
+        .named_function("from_list", &["bytes"], |bytes: Vec<u8>| bytes)
+        .named_function("from_hex", &["hex"], from_hex);
     registry
         .builtin(BuiltinType::Str)
         .function("to_bytes", |s: String| s.into_bytes())

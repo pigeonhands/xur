@@ -5,11 +5,11 @@ use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::assert")
-        .raw_function("is_eq", |cx, args| is_eq(cx, args))
-        .raw_function("is_ne", |cx, args| is_ne(cx, args))
-        .raw_function("is_true", |_, args| is_true(args))
-        .raw_function("is_false", |_, args| is_false(args))
-        .raw_function("fail", |cx, args| fail(cx, args));
+        .named_raw_function("is_eq", &["left", "right"], |cx, args| is_eq(cx, args))
+        .named_raw_function("is_ne", &["left", "right"], |cx, args| is_ne(cx, args))
+        .named_raw_function("is_true", &["value"], |_, args| is_true(args))
+        .named_raw_function("is_false", &["value"], |_, args| is_false(args))
+        .named_raw_function("fail", &["message"], |cx, args| fail(cx, args));
 }
 
 fn is_eq(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {

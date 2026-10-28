@@ -73,6 +73,7 @@ pub(crate) fn natives() -> Vec<NativeModule> {
         NativeFnDecl {
             name: name.to_owned(),
             id: NativeFnId(next),
+            param_names: Vec::new(),
         }
     };
     let module = |name: &str, functions, modules| NativeModule {

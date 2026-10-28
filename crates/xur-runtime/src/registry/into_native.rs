@@ -35,6 +35,7 @@ macro_rules! impl_into_native_fn {
                 let signature = Signature {
                     params: vec![$($arg::SHAPE),*],
                     ret: R::SHAPE,
+                    param_names: Vec::new(),
                 };
                 let arity = signature.params.len();
                 let call = move |cx: &mut dyn Context, args: &[Value]| {
@@ -86,6 +87,7 @@ macro_rules! impl_into_native_fn {
         let signature = Signature {
             params: vec![$ty::SHAPE, $($arg::SHAPE),*],
             ret: $ret::SHAPE,
+            param_names: Vec::new(),
         };
         let arity = signature.params.len();
         let call = move |cx: &mut dyn Context, args: &[Value]| {

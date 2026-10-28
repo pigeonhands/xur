@@ -44,13 +44,13 @@ pub fn registry() -> Registry {
 pub fn register(registry: &Registry) {
     registry
         .module("std")
-        .raw_function("import", import)
-        .raw_function("try_import", try_import)
-        .raw_function("panic", panic)
-        .raw_function("argv", argv);
+        .named_raw_function("import", &["path"], import)
+        .named_raw_function("try_import", &["path"], try_import)
+        .named_raw_function("panic", &["format", "args"], panic)
+        .named_raw_function("argv", &[], argv);
     registry
         .module("std::fmt")
-        .raw_function("format", format);
+        .named_raw_function("format", &["template", "args"], format);
     io::register(registry);
     fs::register(registry);
     process::register(registry);

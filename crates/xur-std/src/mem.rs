@@ -9,15 +9,15 @@ use crate::reflect::layout::{layout_of_def, type_arg_layout};
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::mem")
-        .raw_function("size_of", |cx, args| {
+        .named_raw_function("size_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "size_of")?;
             Ok(Value::Int(layout.byte_size() as i64))
         })
-        .raw_function("align_of", |cx, args| {
+        .named_raw_function("align_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "align_of")?;
             Ok(Value::Int(layout.alignment() as i64))
         })
-        .raw_function("from_bytes", |cx, args| {
+        .named_raw_function("from_bytes", &["data"], |cx, args| {
             let [Value::Bytes(data)] = args else {
                 return Err(RuntimeError::new(
                     "`from_bytes` takes bytes: `from_bytes::<T>(data)`",
@@ -26,13 +26,13 @@ pub(crate) fn register(registry: &Registry) {
             let layout = type_arg_layout(cx, &[], "from_bytes")?;
             layout.read(&lock(data), 0)
         })
-        .raw_function("size_of_val", |cx, args| {
+        .named_raw_function("size_of_val", &["value"], |cx, args| {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`size_of_val` takes a struct"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
         })
-        .raw_function("to_bytes", struct_to_bytes);
+        .named_raw_function("to_bytes", &["value"], struct_to_bytes);
     registry
         .builtin(BuiltinType::Struct)
         .raw_function("to_bytes", struct_to_bytes)

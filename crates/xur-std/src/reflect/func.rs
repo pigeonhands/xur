@@ -4,21 +4,21 @@ use xur_runtime::{RunResult, RuntimeError, Value};
 
 pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
     let mut func = module.submodule("func");
-    func.raw_function("name", |cx, args| {
+    func.named_raw_function("name", &["f"], |cx, args| {
         let [value] = args else { return arity("name", "f") };
         let info = cx
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::name` expects a function"))?;
         Ok(Value::str(&info.name))
     })
-    .raw_function("params", |cx, args| {
+    .named_raw_function("params", &["f"], |cx, args| {
         let [value] = args else { return arity("params", "f") };
         let info = cx
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::params` expects a function"))?;
         Ok(Value::Int(info.param_count as i64))
     })
-    .raw_function("param_names", |cx, args| {
+    .named_raw_function("param_names", &["f"], |cx, args| {
         let [value] = args else { return arity("param_names", "f") };
         let info = cx
             .fn_info(value)
@@ -33,7 +33,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .collect();
         Ok(Value::list(names))
     })
-    .raw_function("param_types", |cx, args| {
+    .named_raw_function("param_types", &["f"], |cx, args| {
         let [value] = args else { return arity("param_types", "f") };
         let info = cx
             .fn_info(value)
@@ -48,7 +48,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .collect();
         Ok(Value::list(types))
     })
-    .raw_function("return_type", |cx, args| {
+    .named_raw_function("return_type", &["f"], |cx, args| {
         let [value] = args else { return arity("return_type", "f") };
         let info = cx
             .fn_info(value)

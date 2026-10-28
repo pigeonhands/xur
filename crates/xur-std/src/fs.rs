@@ -24,18 +24,18 @@ impl File {
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::fs")
-        .function("read_to_string", |path: String| {
+        .named_function("read_to_string", &["path"], |path: String| {
             fs::read_to_string(path).map_err(error_text)
         })
-        .function("read", |path: String| fs::read(path).map_err(error_text))
-        .function("write_bytes", |path: String, data: Vec<u8>| {
+        .named_function("read", &["path"], |path: String| fs::read(path).map_err(error_text))
+        .named_function("write_bytes", &["path", "data"], |path: String, data: Vec<u8>| {
             fs::write(path, data).map_err(error_text)
         })
-        .function("write", |path: String, contents: String| {
+        .named_function("write", &["path", "contents"], |path: String, contents: String| {
             fs::write(path, contents).map_err(error_text)
         })
-        .function(
-            "append",
+        .named_function(
+            "append", &["path", "contents"],
             |path: String, contents: String| -> Result<(), String> {
                 let mut file = fs::OpenOptions::new()
                     .append(true)
@@ -45,14 +45,14 @@ pub(crate) fn register(registry: &Registry) {
                 file.write_all(contents.as_bytes()).map_err(error_text)
             },
         )
-        .function("exists", |path: String| Path::new(&path).exists())
-        .function("remove", |path: String| {
+        .named_function("exists", &["path"], |path: String| Path::new(&path).exists())
+        .named_function("remove", &["path"], |path: String| {
             fs::remove_file(path).map_err(error_text)
         })
-        .function("create_dir_all", |path: String| {
+        .named_function("create_dir_all", &["path"], |path: String| {
             fs::create_dir_all(path).map_err(error_text)
         })
-        .function("read_dir", |path: String| -> Result<Vec<String>, String> {
+        .named_function("read_dir", &["path"], |path: String| -> Result<Vec<String>, String> {
             let mut names = fs::read_dir(path)
                 .map_err(error_text)?
                 .map(|entry| entry.map(|e| e.file_name().to_string_lossy().into_owned()))

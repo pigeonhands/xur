@@ -40,7 +40,24 @@ impl ModuleBuilder<'_> {
     /// types implement [`Facet`].
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
-        let decl = self.registry.add_fn(name, Some(signature), call);
+        let decl = self.registry.add_fn(name, Some(signature), Vec::new(), call);
+        let module = self.module;
+        self.registry
+            .with_inner(|inner| inner.modules[module].functions.push(decl));
+        self
+    }
+
+    /// Like [`function`](Self::function), with explicit parameter names for
+    /// LSP hover and inlay hints.
+    pub fn named_function<Marker>(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        f: impl IntoNativeFn<Marker>,
+    ) -> &mut Self {
+        let (signature, call) = f.into_native();
+        let names = params.iter().map(|s| s.to_string()).collect();
+        let decl = self.registry.add_fn(name, Some(signature), names, call);
         let module = self.module;
         self.registry
             .with_inner(|inner| inner.modules[module].functions.push(decl));
@@ -54,7 +71,23 @@ impl ModuleBuilder<'_> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        let decl = self.registry.add_fn(name, None, Box::new(f));
+        let decl = self.registry.add_fn(name, None, Vec::new(), Box::new(f));
+        let module = self.module;
+        self.registry
+            .with_inner(|inner| inner.modules[module].functions.push(decl));
+        self
+    }
+
+    /// Like [`raw_function`](Self::raw_function), with explicit parameter
+    /// names for LSP hover and inlay hints.
+    pub fn named_raw_function(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        let names = params.iter().map(|s| s.to_string()).collect();
+        let decl = self.registry.add_fn(name, None, names, Box::new(f));
         let module = self.module;
         self.registry
             .with_inner(|inner| inner.modules[module].functions.push(decl));
@@ -157,7 +190,7 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        let decl = self.registry.add_fn(name, None, Box::new(f));
+        let decl = self.registry.add_fn(name, None, Vec::new(), Box::new(f));
         let ty = self.ty;
         self.registry
             .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
@@ -182,7 +215,7 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
     }
 
     fn add(&mut self, name: &str, signature: Signature, call: Box<CallFn>) -> &mut Self {
-        let decl = self.registry.add_fn(name, Some(signature), call);
+        let decl = self.registry.add_fn(name, Some(signature), Vec::new(), call);
         let ty = self.ty;
         self.registry
             .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
@@ -219,7 +252,7 @@ impl<'r> BuiltinBuilder<'r> {
     }
 
     fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
-        let decl = self.registry.add_fn(name, signature, call);
+        let decl = self.registry.add_fn(name, signature, Vec::new(), call);
         let key = (self.ty, name.to_owned());
         self.registry
             .with_inner(|inner| inner.builtin_methods.insert(key, decl.id));

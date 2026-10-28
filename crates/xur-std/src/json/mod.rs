@@ -24,8 +24,8 @@ impl JsonValue {
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::json")
-        .raw_function("parse", parse)
-        .raw_function("stringify", stringify);
+        .named_raw_function("parse", &["text"], parse)
+        .named_raw_function("stringify", &["value"], stringify);
 }
 
 /// `std::json::parse(text) -> Result<value, str>`
@@ -241,8 +241,8 @@ mod tests {
         let r = call_parse(&mut cx, "42");
         assert_eq!(unwrap_ok(&cx, &r), Value::Int(42));
 
-        let r = call_parse(&mut cx, "3.14");
-        assert_eq!(unwrap_ok(&cx, &r), Value::Float(3.14));
+        let r = call_parse(&mut cx, "2.75");
+        assert_eq!(unwrap_ok(&cx, &r), Value::Float(2.75));
 
         let r = call_parse(&mut cx, "true");
         assert_eq!(unwrap_ok(&cx, &r), Value::Bool(true));

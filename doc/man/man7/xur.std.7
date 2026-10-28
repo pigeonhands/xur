@@ -19,6 +19,17 @@ and
 .B readln
 for reading a line from stdin.
 .TP
+.B std::io::c
+ANSI colour helpers.
+.BR red ,
+.BR green ,
+.BR yellow ,
+.BR blue ,
+.BR magenta ,
+.BR cyan ,
+.BR bold ,
+.BR dim .
+.TP
 .B std::fs
 Filesystem access.
 .BR read_bytes ,
@@ -137,6 +148,35 @@ Numeric conversions:
 Format strings.
 .B format(template, args...)
 returns a formatted string.
+.TP
+.B std::xur
+Runtime metadata.
+.B invoked_by()
+returns how the program was launched
+.RB ( \(dqcli\(dq " or " \(dqstub\(dq ).
+.SH RECORD METHODS
+All records support these builtin methods:
+.TP
+.B fields()
+Returns a list of field name strings.
+.TP
+.B get_field(name)
+Returns
+.B Some(value)
+or
+.BR None .
+.TP
+.B set_field(name, value)
+Returns a new record with the field added or replaced.
+.TP
+.B get_method(name)
+Returns
+.B Some(fn)
+or
+.BR None .
+.TP
+.B set_method(name, fn)
+Returns a new record with the method attached.
 .SH BUILT-IN FUNCTIONS
 These are available without importing
 .BR std :

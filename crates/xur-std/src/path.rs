@@ -9,7 +9,7 @@ use crate::error_text;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::path")
-        .raw_function("join", |_cx, args| {
+        .named_raw_function("join", &["parts"], |_cx, args| {
             if args.is_empty() {
                 return Ok(xur_runtime::Value::str(""));
             }
@@ -27,43 +27,43 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(xur_runtime::Value::str(&path.to_string_lossy()))
         })
-        .function("parent", |path: String| -> Option<String> {
+        .named_function("parent", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned())
         })
-        .function("file_name", |path: String| -> Option<String> {
+        .named_function("file_name", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
         })
-        .function("stem", |path: String| -> Option<String> {
+        .named_function("stem", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .file_stem()
                 .map(|n| n.to_string_lossy().into_owned())
         })
-        .function("extension", |path: String| -> Option<String> {
+        .named_function("extension", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .extension()
                 .map(|e| e.to_string_lossy().into_owned())
         })
-        .function("with_extension", |path: String, ext: String| -> String {
+        .named_function("with_extension", &["path", "ext"], |path: String, ext: String| -> String {
             Path::new(&path)
                 .with_extension(ext)
                 .to_string_lossy()
                 .into_owned()
         })
-        .function("is_absolute", |path: String| Path::new(&path).is_absolute())
-        .function("is_relative", |path: String| Path::new(&path).is_relative())
-        .function("is_dir", |path: String| Path::new(&path).is_dir())
-        .function("is_file", |path: String| Path::new(&path).is_file())
-        .function("exists", |path: String| Path::new(&path).exists())
-        .function("absolute", |path: String| -> Result<String, String> {
+        .named_function("is_absolute", &["path"], |path: String| Path::new(&path).is_absolute())
+        .named_function("is_relative", &["path"], |path: String| Path::new(&path).is_relative())
+        .named_function("is_dir", &["path"], |path: String| Path::new(&path).is_dir())
+        .named_function("is_file", &["path"], |path: String| Path::new(&path).is_file())
+        .named_function("exists", &["path"], |path: String| Path::new(&path).exists())
+        .named_function("absolute", &["path"], |path: String| -> Result<String, String> {
             std::fs::canonicalize(&path)
                 .map(|p| p.to_string_lossy().into_owned())
                 .map_err(error_text)
         })
-        .function("components", |path: String| -> Vec<String> {
+        .named_function("components", &["path"], |path: String| -> Vec<String> {
             Path::new(&path)
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy().into_owned())

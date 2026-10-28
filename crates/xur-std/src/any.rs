@@ -10,10 +10,10 @@ use crate::result;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::any")
-        .raw_function("type_name", type_name)
-        .raw_function("try_cast", try_cast)
-        .raw_function("record", to_record)
-        .raw_function("type_name_val", type_name_val);
+        .named_raw_function("type_name", &[], type_name)
+        .named_raw_function("try_cast", &["value"], try_cast)
+        .named_raw_function("record", &["value"], to_record)
+        .named_raw_function("type_name_val", &["value"], type_name_val);
 }
 
 /// `type_name::<T>()`: the name of `T`.

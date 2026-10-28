@@ -61,6 +61,7 @@ pub struct NativeModule {
 pub struct NativeFnDecl {
     pub name: String,
     pub id: NativeFnId,
+    pub param_names: Vec<String>,
 }
 
 /// A native type and its methods and associated functions, which are in

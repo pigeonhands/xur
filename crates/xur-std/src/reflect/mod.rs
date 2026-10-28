@@ -25,31 +25,31 @@ use crate::option;
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::reflect", |module| {
         module
-            .raw_function("type_name", |cx, args| {
+            .named_raw_function("type_name", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("type_name", "value");
                 };
                 Ok(Value::str(&type_name(cx, value)))
             })
-            .raw_function("fields", |cx, args| {
+            .named_raw_function("fields", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("fields", "value");
                 };
                 Ok(names(fields(cx, value)))
             })
-            .raw_function("has_field", |cx, args| {
+            .named_raw_function("has_field", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("has_field", "value, name");
                 };
                 Ok(Value::Bool(fields(cx, value).iter().any(|f| f == &**name)))
             })
-            .raw_function("get", |cx, args| {
+            .named_raw_function("get", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("get", "value, name");
                 };
                 cx.field(value, name)
             })
-            .raw_function("try_get", |cx, args| {
+            .named_raw_function("try_get", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("try_get", "value, name");
                 };
@@ -59,31 +59,31 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 Ok(option(cx, found))
             })
-            .raw_function("set", |cx, args| {
+            .named_raw_function("set", &["value", "name", "new_value"], |cx, args| {
                 let [value, Value::Str(name), new] = args else {
                     return arity("set", "value, name, new_value");
                 };
                 cx.set_field(value, name, new.clone())
             })
-            .raw_function("variant", |cx, args| {
+            .named_raw_function("variant", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("variant", "value");
                 };
                 Ok(option(cx, variant(cx, value).map(|name| Value::str(&name))))
             })
-            .raw_function("methods", |cx, args| {
+            .named_raw_function("methods", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("methods", "value");
                 };
                 Ok(names(cx.methods(value)))
             })
-            .raw_function("has_method", |cx, args| {
+            .named_raw_function("has_method", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("has_method", "value, name");
                 };
                 Ok(Value::Bool(cx.methods(value).iter().any(|m| m == &**name)))
             })
-            .raw_function("call", |cx, args| {
+            .named_raw_function("call", &["value", "name", "args"], |cx, args| {
                 let [receiver, Value::Str(name), Value::List(call_args)] = args else {
                     return arity("call", "value, name, [args]");
                 };

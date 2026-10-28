@@ -28,7 +28,7 @@ pub fn set_argv(script: Option<String>, args: Vec<String>) {
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::xur")
-        .raw_function("invoked_by", |_cx, args| {
+        .named_raw_function("invoked_by", &[], |_cx, args| {
             if !args.is_empty() {
                 return Err(RuntimeError::new("`invoked_by` takes no arguments"));
             }

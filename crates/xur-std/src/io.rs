@@ -9,18 +9,20 @@ use crate::fmt::format;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::io")
-        .raw_function("print", |cx, args| print(cx, args, ""))
-        .raw_function("println", |cx, args| print(cx, args, "\n"))
-        .raw_function("eprint", |cx, args| eprint(cx, args, ""))
-        .raw_function("eprintln", |cx, args| eprint(cx, args, "\n"))
-        .function("red", |s: String| format!("\x1b[31m{s}\x1b[0m"))
-        .function("green", |s: String| format!("\x1b[32m{s}\x1b[0m"))
-        .function("yellow", |s: String| format!("\x1b[33m{s}\x1b[0m"))
-        .function("blue", |s: String| format!("\x1b[34m{s}\x1b[0m"))
-        .function("magenta", |s: String| format!("\x1b[35m{s}\x1b[0m"))
-        .function("cyan", |s: String| format!("\x1b[36m{s}\x1b[0m"))
-        .function("bold", |s: String| format!("\x1b[1m{s}\x1b[0m"))
-        .function("dim", |s: String| format!("\x1b[2m{s}\x1b[0m"));
+        .named_raw_function("print", &["format", "args"], |cx, args| print(cx, args, ""))
+        .named_raw_function("println", &["format", "args"], |cx, args| print(cx, args, "\n"))
+        .named_raw_function("eprint", &["format", "args"], |cx, args| eprint(cx, args, ""))
+        .named_raw_function("eprintln", &["format", "args"], |cx, args| eprint(cx, args, "\n"));
+    registry
+        .module("std::io::c")
+        .named_function("red", &["text"], |s: String| format!("\x1b[31m{s}\x1b[0m"))
+        .named_function("green", &["text"], |s: String| format!("\x1b[32m{s}\x1b[0m"))
+        .named_function("yellow", &["text"], |s: String| format!("\x1b[33m{s}\x1b[0m"))
+        .named_function("blue", &["text"], |s: String| format!("\x1b[34m{s}\x1b[0m"))
+        .named_function("magenta", &["text"], |s: String| format!("\x1b[35m{s}\x1b[0m"))
+        .named_function("cyan", &["text"], |s: String| format!("\x1b[36m{s}\x1b[0m"))
+        .named_function("bold", &["text"], |s: String| format!("\x1b[1m{s}\x1b[0m"))
+        .named_function("dim", &["text"], |s: String| format!("\x1b[2m{s}\x1b[0m"));
 }
 
 /// `print(format, args...)`: each `{}` in `format` is replaced by the next

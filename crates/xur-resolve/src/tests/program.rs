@@ -118,6 +118,7 @@ impl crate::NativeProvider for LazyNatives {
             functions: vec![crate::NativeFnDecl {
                 name: "f".to_owned(),
                 id: crate::NativeFnId(0),
+                param_names: Vec::new(),
             }],
             ..Default::default()
         }

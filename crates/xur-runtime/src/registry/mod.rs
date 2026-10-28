@@ -101,12 +101,14 @@ pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> 
 pub struct Signature {
     pub params: Vec<&'static Shape>,
     pub ret: &'static Shape,
+    pub param_names: Vec<String>,
 }
 
 pub struct NativeFn {
     pub name: String,
     /// `None` for raw functions, which take any arguments.
     pub signature: Option<Signature>,
+    pub param_names: Vec<String>,
     call: Box<CallFn>,
 }
 
@@ -468,9 +470,10 @@ impl Registry {
         &self,
         name: &str,
         signature: Option<Signature>,
+        param_names: Vec<String>,
         call: Box<CallFn>,
     ) -> NativeFnDecl {
-        self.write().add_fn(name, signature, call)
+        self.write().add_fn(name, signature, param_names, call)
     }
 
     fn with_inner<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
@@ -566,17 +569,20 @@ impl Inner {
         &mut self,
         name: &str,
         signature: Option<Signature>,
+        param_names: Vec<String>,
         call: Box<CallFn>,
     ) -> NativeFnDecl {
         let id = NativeFnId(self.fns.len() as u32);
         self.fns.push(Arc::new(NativeFn {
             name: name.to_owned(),
             signature,
+            param_names: param_names.clone(),
             call,
         }));
         NativeFnDecl {
             name: name.to_owned(),
             id,
+            param_names,
         }
     }
 }

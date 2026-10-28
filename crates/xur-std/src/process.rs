@@ -24,7 +24,7 @@ pub struct Process(Mutex<Child>);
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::process", |module| {
         module
-            .raw_function("spawn", |cx, args| {
+            .named_raw_function("spawn", &["program", "args"], |cx, args| {
                 let [Value::Str(program), Value::List(args_list)] = args else {
                     return Err(RuntimeError::new(
                         "`spawn` takes a program path and a list of arguments",
