@@ -26,7 +26,7 @@ fn stub_main() {
 
     egui::run(|ctx| {
         for line in tracing::drain() {
-            log_lines = log_lines + [line];
+            log_lines.push(line);
         }
 
         let f1 = ctx.key("f1");

@@ -28,7 +28,7 @@ fn all_examples() -> [str] {
         let dir = path::join("example", folder);
         let files = fs::read_dir(dir).unwrap();
         for file in files.filter(|e| e.ends_with(".xur")) {
-            examples = examples + [path::join(folder, file)];
+            examples.push(path::join(folder, file));
         }
     }
     examples
@@ -88,7 +88,7 @@ fn test_all() {
 
     for _ in examples {
         let r = rx.recv().unwrap();
-        results = results + [r];
+        results.push(r);
         match r {
             ExampleResult::Passed(_) => total_passed = total_passed + 1,
             ExampleResult::Failed(_, _) => total_failed = total_failed + 1,
@@ -114,7 +114,7 @@ fn test_all() {
             ExampleResult::Passed(_) => counts["pass"] = counts["pass"] + 1,
             ExampleResult::Failed(_, err) => {
                 counts["fail"] = counts["fail"] + 1;
-                failures = failures + [std::fmt::format("  {} {}: {}", c::red("FAIL"), fmt_name(name), err)];
+                failures.push(std::fmt::format("  {} {}: {}", c::red("FAIL"), fmt_name(name), err));
             }
             ExampleResult::Skipped(_, _) => counts["skip"] = counts["skip"] + 1,
         }
@@ -138,14 +138,14 @@ fn test_all() {
         let pass_str = if p > 0 { c::green(p.to_string()) } else { c::dim("0") };
         let fail_str = if f > 0 { c::red(f.to_string()) } else { c::dim("0") };
         let skip_str = if s > 0 { c::yellow(s.to_string()) } else { c::dim("0") };
-        rows = rows + [[c::bold(folder), pass_str, fail_str, skip_str]];
+        rows.push([c::bold(folder), pass_str, fail_str, skip_str]);
     }
-    rows = rows + [[
+    rows.push([
         c::bold("total"),
         c::green(total_passed.to_string()),
         if total_failed > 0 { c::red(total_failed.to_string()) } else { c::dim("0") },
         if total_skipped > 0 { c::yellow(total_skipped.to_string()) } else { c::dim("0") },
-    ]];
+    ]);
 
     let summary = cli::table(
         ["", c::green("Pass"), c::red("Fail"), c::yellow("Skip")],
