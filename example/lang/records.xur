@@ -23,12 +23,12 @@ fn main() -> Result<()> {
         None    => io::println("missing not found"),
     }
 
-    // set_field returns a new record (records are immutable).
+    // set_field returns a new record; the original is unchanged.
     let r2 = r.set_field("lang", "rust");
     io::println("after set_field: {}", r2);
     io::println("original unchanged: {}", r);
 
-    // set_field replaces an existing field.
+    // existing fields get the new value in the copy.
     let r3 = r.set_field("version", 2);
     io::println("after replace: {}", r3);
 

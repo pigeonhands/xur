@@ -1,5 +1,6 @@
 #!/usr/bin/env -S cargo run --
 use std::io;
+use std::io::c;
 use std::fs;
 use std::cli;
 use std::path;
@@ -11,6 +12,7 @@ fn run_example(p: str) -> Result<()> {
     let main = module.get_method("main", fn() -> Result<()>)?;
     main()
 }
+
 
 fn all_examples() -> [str] {
     // Categories skipped: interactive input, network listeners,
@@ -41,15 +43,30 @@ enum ExampleResult {
 fn fmt_name(name: str) -> str {
     let parts = name.split("/");
     if parts.len() == 2 {
-        io::dim(parts[0] + "/") + io::bold(parts[1])
+        c::dim(parts[0] + "/") + c::bold(parts[1])
     } else {
-        io::bold(name)
+        c::bold(name)
     }
 }
 
 fn folder_of(name: str) -> str {
     let parts = name.split("/");
     if parts.len() >= 2 { parts[0] } else { "" }
+}
+
+fn try_run(example: str) -> ExampleResult {
+    let module = match std::try_import(example) {
+        Ok(m) => m,
+        Err(e) => return ExampleResult::Skipped(example, e.to_string()),
+    };
+    let main = match module.get_method("main", fn() -> Result<()>) {
+        Ok(f) => f,
+        Err(_) => return ExampleResult::Skipped(example, "no main() -> Result<()>"),
+    };
+    match main() {
+        Ok(_) => ExampleResult::Passed(example),
+        Err(e) => ExampleResult::Failed(example, e.to_string()),
+    }
 }
 
 fn test_all() {
@@ -60,24 +77,7 @@ fn test_all() {
     for example in examples {
         let tx = tx;
         thread::spawn(|| {
-            match std::try_import(example) {
-                Err(e) => {
-                    tx.send(ExampleResult::Skipped(example, e.to_string())).unwrap();
-                }
-                Ok(module) => {
-                    match module.get_method("main", fn() -> Result<()>) {
-                        Err(_) => {
-                            tx.send(ExampleResult::Skipped(example, "no main() -> Result<()>")).unwrap();
-                        }
-                        Ok(main) => {
-                            match main() {
-                                Ok(_) => tx.send(ExampleResult::Passed(example)).unwrap(),
-                                Err(e) => tx.send(ExampleResult::Failed(example, e.to_string())).unwrap(),
-                            }
-                        }
-                    }
-                }
-            }
+            tx.send(try_run(example)).unwrap();
         });
     }
 
@@ -114,7 +114,7 @@ fn test_all() {
             ExampleResult::Passed(_) => counts["pass"] = counts["pass"] + 1,
             ExampleResult::Failed(_, err) => {
                 counts["fail"] = counts["fail"] + 1;
-                failures = failures + [std::fmt::format("  {} {}: {}", io::red("FAIL"), fmt_name(name), err)];
+                failures = failures + [std::fmt::format("  {} {}: {}", c::red("FAIL"), fmt_name(name), err)];
             }
             ExampleResult::Skipped(_, _) => counts["skip"] = counts["skip"] + 1,
         }
@@ -135,20 +135,20 @@ fn test_all() {
         let p = counts["pass"];
         let f = counts["fail"];
         let s = counts["skip"];
-        let pass_str = if p > 0 { io::green(p.to_string()) } else { io::dim("0") };
-        let fail_str = if f > 0 { io::red(f.to_string()) } else { io::dim("0") };
-        let skip_str = if s > 0 { io::yellow(s.to_string()) } else { io::dim("0") };
-        rows = rows + [[io::bold(folder), pass_str, fail_str, skip_str]];
+        let pass_str = if p > 0 { c::green(p.to_string()) } else { c::dim("0") };
+        let fail_str = if f > 0 { c::red(f.to_string()) } else { c::dim("0") };
+        let skip_str = if s > 0 { c::yellow(s.to_string()) } else { c::dim("0") };
+        rows = rows + [[c::bold(folder), pass_str, fail_str, skip_str]];
     }
     rows = rows + [[
-        io::bold("total"),
-        io::green(total_passed.to_string()),
-        if total_failed > 0 { io::red(total_failed.to_string()) } else { io::dim("0") },
-        if total_skipped > 0 { io::yellow(total_skipped.to_string()) } else { io::dim("0") },
+        c::bold("total"),
+        c::green(total_passed.to_string()),
+        if total_failed > 0 { c::red(total_failed.to_string()) } else { c::dim("0") },
+        if total_skipped > 0 { c::yellow(total_skipped.to_string()) } else { c::dim("0") },
     ]];
 
     let summary = cli::table(
-        ["", io::green("Pass"), io::red("Fail"), io::yellow("Skip")],
+        ["", c::green("Pass"), c::red("Fail"), c::yellow("Skip")],
         rows,
     );
     io::println("{}", summary);
