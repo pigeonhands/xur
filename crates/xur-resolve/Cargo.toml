@@ -15,3 +15,6 @@ xur-ast.workspace = true
 xur-errors.workspace = true
 xur-parser.workspace = true
 xur-span.workspace = true
+
+[dev-dependencies]
+xur-std.workspace = true

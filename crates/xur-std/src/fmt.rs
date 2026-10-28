@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn format_errors() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let print = fn_id(&registry, "std::io::print");
         let error = |cx: &mut TestCx<'_>, args: &[Value]| cx.call(print, args).unwrap_err().message;
         assert_eq!(

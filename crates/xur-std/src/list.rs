@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn push_changes_the_list_in_place() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let xs = Value::list(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
         let alias = xs.clone();
         call(&mut cx, "push", &[xs, Value::Int(4)]).unwrap();
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn pop_and_get_return_options() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let lang = cx.lang;
         let xs = Value::list(vec![Value::Int(1)]);
         assert_eq!(
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn insert_remove_and_bounds() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let xs = Value::list(vec![Value::Int(1), Value::Int(3)]);
         call(
             &mut cx,
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn extend_with_itself_and_join() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let xs = Value::list(vec![Value::Int(1), Value::str("a")]);
         call(&mut cx, "extend", &[xs.clone(), xs.clone()]).unwrap();
         assert_eq!(

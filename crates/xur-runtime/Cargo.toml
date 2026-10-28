@@ -21,3 +21,6 @@ xur-resolve.workspace = true
 xur-span.workspace = true
 facet.workspace = true
 dashmap.workspace = true
+
+[dev-dependencies]
+xur-std.workspace = true

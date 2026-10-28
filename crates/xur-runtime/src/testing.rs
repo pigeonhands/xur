@@ -19,12 +19,13 @@ pub struct TestCx<'r> {
 }
 
 impl<'r> TestCx<'r> {
-    pub fn new(registry: &'r Registry) -> Self {
+    pub fn new(registry: &'r Registry, prelude: &str) -> Self {
         let loader = MemoryFileLoader::new([("main.xur", "")]);
         let (program, _) = Program::load(
             Path::new("main.xur"),
             Box::new(loader),
             Box::new(Vec::new()),
+            Some(prelude),
         )
         .unwrap();
         Self {

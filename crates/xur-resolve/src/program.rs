@@ -27,17 +27,25 @@ impl Program {
     /// Loads and resolves the program rooted at `root`, with the native
     /// modules of `natives` (such as `std`) available by name.
     ///
+    /// When `prelude` is `Some`, its source is loaded as module 0 and its
+    /// public items are in scope everywhere. Pass `xur_std::PRELUDE` for
+    /// the standard prelude, or your own source to replace it.
+    ///
     /// Fails only if `root` itself cannot be read; everything else wrong
     /// with the program is returned as diagnostics.
     pub fn load(
         root: &Path,
         file_loader: Box<dyn FileLoader>,
         natives: Box<dyn NativeProvider>,
+        prelude: Option<&str>,
     ) -> io::Result<(Self, Vec<Diag>)> {
         let src = file_loader.read_file(root)?;
         let mut loader = Loader::new(file_loader);
         let mut diags = Vec::new();
-        let mut krate = Crate::with_prelude(&mut loader, &mut diags);
+        let mut krate = match prelude {
+            Some(prelude_src) => Crate::with_prelude(&mut loader, &mut diags, prelude_src),
+            None => Crate::without_prelude(),
+        };
         let root = loader.add_tree(&mut krate, normalize(root), src, &mut diags);
         debug_assert_eq!(root, krate.root);
 

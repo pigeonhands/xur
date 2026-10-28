@@ -16,7 +16,7 @@ use crate::diagnostics;
 pub fn load_program(path: &Path) -> Result<(Program, Arc<Registry>, Vec<Diag>)> {
     let registry = Arc::new(xur_std::registry());
     let natives = Box::new(Arc::clone(&registry));
-    let (program, diags) = Program::load(path, Box::new(RealFileLoader), natives)
+    let (program, diags) = Program::load(path, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
         .with_context(|| format!("failed to read `{}`", path.display()))?;
     Ok((program, registry, diags))
 }

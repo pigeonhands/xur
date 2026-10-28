@@ -22,7 +22,7 @@ pub(crate) struct Resolved {
 pub(crate) fn resolve_files(files: &[(&str, &str)]) -> Resolved {
     let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
     let (program, diags) =
-        Program::load(Path::new(files[0].0), loader, Box::new(natives())).expect("root exists");
+        Program::load(Path::new(files[0].0), loader, Box::new(natives()), Some(xur_std::PRELUDE)).expect("root exists");
     let errors = diags.into_iter().map(|d| d.message).collect();
     Resolved { program, errors }
 }

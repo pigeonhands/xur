@@ -440,6 +440,7 @@ mod tests {
             Path::new("main.xur"),
             Box::new(loader),
             Box::new(Vec::new()),
+            Some(xur_std::PRELUDE),
         )
         .unwrap();
         let registry = Registry::new();

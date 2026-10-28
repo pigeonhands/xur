@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn type_name_uses_the_type_argument() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         cx.type_args = vec![TypeRef::named("ZeroPacked")];
         assert_eq!(
             cx.call(fn_id(&registry, "std::any::type_name"), &[]),

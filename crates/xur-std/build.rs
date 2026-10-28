@@ -19,5 +19,5 @@ fn main() {
     }
 
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("prelude.rs");
-    fs::write(out, format!("const PRELUDE: &str = {:?};\n", content)).unwrap();
+    fs::write(out, format!("pub const PRELUDE: &str = {:?};\n", content)).unwrap();
 }

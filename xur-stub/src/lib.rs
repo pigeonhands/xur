@@ -110,7 +110,8 @@ fn compile_script(path: &Path) -> Result<Vm, String> {
     let registry = make_registry();
     let natives = Box::new(Arc::clone(&registry));
     let (program, diags) =
-        Program::load(path, Box::new(RealFileLoader), natives).map_err(|e| e.to_string())?;
+        Program::load(path, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
+            .map_err(|e| e.to_string())?;
 
     if !diags.is_empty() {
         for d in &diags {

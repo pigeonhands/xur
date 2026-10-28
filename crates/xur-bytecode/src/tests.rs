@@ -9,7 +9,7 @@ use crate::{ItemIndex, display_function, lower};
 fn listing(src: &str, name: &str) -> String {
     let loader = MemoryFileLoader::new([("main.xur", src)]);
     let natives = Box::new(xur_std::registry());
-    let (program, diags) = Program::load(Path::new("main.xur"), Box::new(loader), natives).unwrap();
+    let (program, diags) = Program::load(Path::new("main.xur"), Box::new(loader), natives, Some(xur_std::PRELUDE)).unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
     let resolutions = program.resolutions();
     let root = resolutions.module_defs[program.krate.root.0];

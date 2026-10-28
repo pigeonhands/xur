@@ -31,6 +31,7 @@ fn run_files(files: &[(&str, &str)]) -> Result<String, String> {
         Path::new(files[0].0),
         Box::new(loader),
         Box::new(Arc::clone(&registry)),
+        Some(xur_std::PRELUDE),
     )
     .unwrap();
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
@@ -383,6 +384,7 @@ fn the_echo_server_example_compiles() {
         Path::new("example/net/echo_server.xur"),
         Box::new(loader),
         Box::new(registry),
+        Some(xur_std::PRELUDE),
     )
     .unwrap();
     assert!(diags.is_empty(), "{diags:#?}");
@@ -1060,6 +1062,7 @@ fn run_for_error(src: &str, tracing: bool) -> crate::RuntimeError {
         Path::new("main.xur"),
         Box::new(MemoryFileLoader::new([("main.xur", src)])),
         Box::new(Arc::clone(&registry)),
+        Some(xur_std::PRELUDE),
     )
     .unwrap();
     assert!(diags.is_empty(), "{diags:?}");

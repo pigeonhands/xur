@@ -70,7 +70,7 @@ impl Backend {
         let registry = Arc::new(xur_std::registry());
         let natives = Box::new(Arc::clone(&registry));
 
-        match Program::load(&root, loader, natives) {
+        match Program::load(&root, loader, natives, Some(xur_std::PRELUDE)) {
             Ok((program, diags)) => {
                 let grouped = group_diagnostics(&program.krate.source_map, &diags);
                 let mut new_uris = HashSet::new();

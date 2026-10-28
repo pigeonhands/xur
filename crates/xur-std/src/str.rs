@@ -55,7 +55,7 @@ mod tests {
 
     fn call(name: &str, args: &[Value]) -> Value {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let id = registry
             .builtin_method(BuiltinType::Str, name)
             .expect("method exists");
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn parsing_returns_results() {
         let registry = registry();
-        let lang = TestCx::new(&registry).lang;
+        let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("parse_int", &[Value::str(" 42 ")]),
             Value::adt(lang.ok, vec![Value::Int(42)])

@@ -31,6 +31,8 @@ mod xur;
 
 pub use xur::{set_argv, set_invoked_by};
 
+include!(concat!(env!("OUT_DIR"), "/prelude.rs"));
+
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 /// A registry holding only `std`.

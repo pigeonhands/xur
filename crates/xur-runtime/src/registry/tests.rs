@@ -43,7 +43,7 @@ fn decls_describe_the_module_tree() {
 #[test]
 fn typed_functions_convert_arguments_and_results() {
     let registry = registry();
-    let mut cx = TestCx::new(&registry);
+    let mut cx = TestCx::new(&registry, xur_std::PRELUDE);
     let double = fn_id(&registry, "geo::shapes::double");
     assert_eq!(cx.call(double, &[Value::Int(21)]), Ok(Value::Int(42)));
     let describe = fn_id(&registry, "geo::shapes::describe");
@@ -73,7 +73,7 @@ fn new_point(cx: &mut TestCx<'_>, x: f64, y: f64) -> Value {
 #[test]
 fn registered_types_are_native_objects() {
     let registry = registry();
-    let mut cx = TestCx::new(&registry);
+    let mut cx = TestCx::new(&registry, xur_std::PRELUDE);
     let point = new_point(&mut cx, 3.0, 4.0);
     let Value::Native(object) = &point else {
         panic!("expected a native object, found {point:?}");
@@ -88,7 +88,7 @@ fn registered_types_are_native_objects() {
 #[test]
 fn mutating_methods_change_the_object_in_place() {
     let registry = registry();
-    let mut cx = TestCx::new(&registry);
+    let mut cx = TestCx::new(&registry, xur_std::PRELUDE);
     let point = new_point(&mut cx, 1.0, 2.0);
     let alias = point.clone();
     let scale = fn_id(&registry, "geo::Point::scale");
@@ -102,7 +102,7 @@ fn mutating_methods_change_the_object_in_place() {
 #[test]
 fn native_fields_display_and_equality() {
     let registry = registry();
-    let mut cx = TestCx::new(&registry);
+    let mut cx = TestCx::new(&registry, xur_std::PRELUDE);
     let (Value::Native(a), Value::Native(b)) =
         (new_point(&mut cx, 1.0, 2.0), new_point(&mut cx, 1.0, 2.0))
     else {
@@ -117,7 +117,7 @@ fn native_fields_display_and_equality() {
 #[test]
 fn bad_calls_are_runtime_errors() {
     let registry = registry();
-    let mut cx = TestCx::new(&registry);
+    let mut cx = TestCx::new(&registry, xur_std::PRELUDE);
     let double = fn_id(&registry, "geo::shapes::double");
     assert_eq!(
         cx.call(double, &[]).unwrap_err().message,

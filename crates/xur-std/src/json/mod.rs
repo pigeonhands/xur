@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn parse_object() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let result = call_parse(&mut cx, r#"{"name": "Alice", "age": 30}"#);
         let value = unwrap_ok(&cx, &result);
 
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn parse_nested_object() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let result = call_parse(
             &mut cx,
             r#"{"user": {"name": "Bob"}, "scores": [10, 20]}"#,
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn parse_null_becomes_none() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let result = call_parse(&mut cx, r#"{"x": null}"#);
         let value = unwrap_ok(&cx, &result);
         let x = field(&value, "x");
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn parse_array() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let result = call_parse(&mut cx, r#"[1, "two", true]"#);
         let value = unwrap_ok(&cx, &result);
         let Value::List(items) = &value else {
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn parse_scalars() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
 
         let r = call_parse(&mut cx, "42");
         assert_eq!(unwrap_ok(&cx, &r), Value::Int(42));
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn parse_invalid_json_returns_err() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let result = call_parse(&mut cx, "not json");
         let msg = unwrap_err(&cx, &result);
         assert!(msg.contains("expected"), "error was: {msg}");
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn stringify_object() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let record = Value::Record(
             Record::new(vec![
                 (Symbol::intern("a"), Value::Int(1)),
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn stringify_list() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let list = Value::list(vec![Value::Int(1), Value::Bool(false)]);
         let result = call_stringify(&mut cx, list);
         let json = unwrap_ok(&cx, &result);
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let reg = registry();
-        let mut cx = TestCx::new(&reg);
+        let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let input = r#"{"name":"Alice","tags":["a","b"],"score":99}"#;
         let r = call_parse(&mut cx, input);
         let parsed = unwrap_ok(&cx, &r);

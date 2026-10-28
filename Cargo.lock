@@ -2143,6 +2143,7 @@ dependencies = [
  "xur-errors",
  "xur-parser",
  "xur-span",
+ "xur-std",
 ]
 
 [[package]]
@@ -2155,6 +2156,7 @@ dependencies = [
  "xur-errors",
  "xur-resolve",
  "xur-span",
+ "xur-std",
 ]
 
 [[package]]

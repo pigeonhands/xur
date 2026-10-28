@@ -19,8 +19,6 @@ use xur_errors::Diag;
 use xur_parser::parse_file;
 use xur_span::{FileLoader, SourceMap, Span, Symbol};
 
-include!(concat!(env!("OUT_DIR"), "/prelude.rs"));
-
 /// Index of a module in [`Crate::modules`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ModuleIdx(pub usize);
@@ -37,21 +35,34 @@ pub struct Crate {
 
 impl Crate {
     /// A crate containing only the prelude, ready for its root module to be
-    /// added next.
-    pub(crate) fn with_prelude(loader: &mut Loader, diags: &mut Vec<Diag>) -> Self {
+    /// added next. The prelude source is provided by the caller (typically
+    /// from `xur_std::PRELUDE`).
+    pub(crate) fn with_prelude(
+        loader: &mut Loader,
+        diags: &mut Vec<Diag>,
+        prelude: &str,
+    ) -> Self {
         let mut krate = Self {
             source_map: SourceMap::new(),
             modules: Vec::new(),
             prelude: ModuleIdx(0),
             root: ModuleIdx(1),
         };
-        // The angle brackets keep the prelude's path from clashing with a
-        // real file.
         let path = PathBuf::from("<prelude>");
-        let prelude = loader.add_tree(&mut krate, path, PRELUDE.to_owned(), diags);
-        debug_assert_eq!(prelude, krate.prelude);
-        krate.modules[prelude.0].name = Symbol::intern("prelude");
+        let idx = loader.add_tree(&mut krate, path, prelude.to_owned(), diags);
+        debug_assert_eq!(idx, krate.prelude);
+        krate.modules[idx.0].name = Symbol::intern("prelude");
         krate
+    }
+
+    /// A crate with no prelude — the root module will be module 0.
+    pub(crate) fn without_prelude() -> Self {
+        Self {
+            source_map: SourceMap::new(),
+            modules: Vec::new(),
+            prelude: ModuleIdx(0),
+            root: ModuleIdx(0),
+        }
     }
 
     pub fn module(&self, idx: ModuleIdx) -> &LoadedModule {
@@ -283,6 +294,7 @@ mod tests {
             Path::new(files[0].0),
             loader,
             Box::new(crate::tests::natives()),
+            Some(xur_std::PRELUDE),
         )
         .unwrap();
         (

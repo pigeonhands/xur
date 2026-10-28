@@ -30,7 +30,7 @@ pub fn run_source(path: PathBuf, src: String, tracing: bool) -> Result<()> {
     let natives = Box::new(Arc::clone(&registry));
     let name = path.display().to_string();
     let loader = Box::new(MemoryFileLoader::new([(name.as_str(), src.as_str())]));
-    let (program, diags) = Program::load(&path, loader, natives)
+    let (program, diags) = Program::load(&path, loader, natives, Some(xur_std::PRELUDE))
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     run_program(program, registry, &name, diags, tracing)
 }

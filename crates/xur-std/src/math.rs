@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn math_functions_are_ordinary_rust_functions() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let sqrt = fn_id(&registry, "std::math::sqrt");
         assert_eq!(cx.call(sqrt, &[Value::Float(9.0)]), Ok(Value::Float(3.0)));
         let max = fn_id(&registry, "std::math::max");

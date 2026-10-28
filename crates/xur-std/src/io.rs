@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn println_formats_its_arguments() {
         let registry = registry();
-        let mut cx = TestCx::new(&registry);
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let println = fn_id(&registry, "std::io::println");
         let args = [
             Value::str("{} + {} = {{{}}}"),
