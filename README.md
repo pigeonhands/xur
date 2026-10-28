@@ -161,7 +161,7 @@ let parsed = std::mem::from_bytes::<Header>(data);
 Layouts can also be constructed at runtime from field specifications:
 
 ```rust
-let entry = std::reflect::Layout::new("Entry").field("id", "u16").bytes("name", 8).packed();
+let entry = std::reflect::Layout::new("Entry").field("id", u16).bytes("name", 8).packed();
 ```
 
 ### Threads, channels and sockets
@@ -253,6 +253,40 @@ There are complete programs in [`example/`](example):
 | [`module/`](example/module) | dynamic imports and module introspection |
 | [`stub/game_inspector.xur`](example/stub/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
 | [`stub/egui_overlay.xur`](example/stub/egui_overlay.xur) | egui overlay injected into a running process |
+
+## In-process injection with xur-stub
+
+[`xur-stub`](xur-stub) is a shared library (`cdylib`) that embeds the
+Xur VM. Load it into a running process with `LD_PRELOAD` and it compiles
+and runs `.xur` scripts inside the target, with full access to the
+process's memory and modules.
+
+```sh
+cargo build --release -p xur-stub
+
+# Point at a script directory or a single file:
+XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so ./target_program
+
+# Or via Steam launch options for a Unity game:
+# XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so %command%
+```
+
+Scripts can define `fn ctor()` for work that must run before the host's
+`main` (e.g. installing hooks), and `fn main()` or `fn stub_main()` for
+the payload. The stub adds extra modules for game engines:
+
+| Module | Feature flag | Contents |
+| ------ | ------------ | -------- |
+| `std::stub::re::unity` | `il2cpp-unity` | Unity Il2Cpp type trees, method hooks, egui overlays |
+| `std::stub::re::unity::time` | `il2cpp-unity` | `scale`, `set_scale`, `delta`, `frame_count` |
+| `std::stub::re::unity::egui` | `egui` | egui rendering inside a Unity game |
+| `std::stub::re::il2cpp_runtime` | `il2cpp-runtime` | Il2Cpp runtime reflection |
+| `std::stub::re::godot` | `godot` | Godot engine reflection |
+| `std::stub::tracing` | (always) | structured logging via `tracing` |
+
+See [`example/stub/game_inspector.xur`](example/stub/game_inspector.xur)
+for a complete example that enumerates a Unity game's Il2Cpp types and
+generates proxy assemblies.
 
 ## Extending Xur with Rust
 

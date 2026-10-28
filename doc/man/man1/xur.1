@@ -1,10 +1,12 @@
-.TH XUR 1 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.TH XUR 1 "2026-10-28" "xur 0.1.1" "Xur Manual"
 .SH NAME
 xur \- run and inspect Xur programs
 .SH SYNOPSIS
 .B xur run
 .RB [ \-\-no\-trace ]
-.I file
+.RI [ file ]
+.RB [ \-\- ]
+.RI [ args... ]
 .br
 .B xur debug tokens
 .I file
@@ -22,7 +24,9 @@ xur \- run and inspect Xur programs
 .SH DESCRIPTION
 .B xur
 is the command-line interface for the Xur programming language, a
-dynamically-checked, expression-oriented language with Rust-like syntax.
+dynamically-checked scripting language for security research \(em PoC
+development, binary analysis, process inspection, and reverse
+engineering \(em with Rust-like syntax.
 Programs are compiled to bytecode and run on Xur's virtual machine.
 .PP
 A program's entry point is a
@@ -37,10 +41,25 @@ returns an
 prints the error message and exits with a non-zero status.
 .SH COMMANDS
 .TP
-.B run \fIfile\fR
+.B run \fR[\fIfile\fR] [\fB\-\-\fR] [\fIargs...\fR]
 Compile and execute the program rooted at
 .IR file .
+.I file
+may be a
+.B .xur
+file, a directory (runs
+.B main.xur
+inside it), or
+.B \-
+for stdin.
+When omitted, defaults to
+.B main.xur
+in the current directory.
 Imports are resolved relative to the file's directory.
+Trailing arguments after
+.B \-\-
+(or after the file) are available to the program via
+.BR std::argv() .
 .RS
 .TP
 .B \-\-no\-trace
@@ -66,7 +85,7 @@ Print the compiled bytecode of every function in the program.
 .B lsp
 Start the language server, communicating over stdio.
 Provides diagnostics, go-to-definition, hover, find-references,
-completions, and parameter-name inlay hints.
+completions, type inlay hints, and parameter-name inlay hints.
 Editors launch this as a subprocess;
 see the Neovim and VS Code examples below.
 .SH EXAMPLES
