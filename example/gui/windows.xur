@@ -1,0 +1,38 @@
+// Multiple OS-level windows sharing state.
+//
+//     xur run example/gui/windows.xur
+
+use std::gui;
+use std::fmt;
+
+fn main() {
+    let count = 0;
+    let name = "";
+    let log = [];
+
+    gui::run("Windows", |ui| {
+        ui.dialog("Controls", |w| {
+            name = w.text_edit(name);
+            if w.button("Add to log") {
+                if name != "" {
+                    log.push(name);
+                    name = "";
+                }
+            }
+            w.separator();
+            if w.button("Click me") {
+                count = count + 1;
+            }
+            w.label(fmt::format("{} click(s)", count));
+        });
+
+        ui.dialog("Log", |w| {
+            if log.len() == 0 {
+                w.small("Nothing yet.");
+            }
+            for entry in log {
+                w.label(entry);
+            }
+        });
+    });
+}

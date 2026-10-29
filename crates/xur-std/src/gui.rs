@@ -371,27 +371,16 @@ fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_>) {
                 "`window` takes (title: str, body: fn(ui))",
             ));
         };
-        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
-            return Err(RuntimeError::new("body must be a function"));
-        }
-        let body = body.clone();
-        let title = title.clone();
-        let cx_ptr = cx as *mut dyn xur_runtime::Context;
-        with_ui(this, |ui| {
-            let ctx = ui.ctx().clone();
-            egui::Window::new(title.as_ref())
-                .default_width(400.0)
-                .show(&ctx, |inner_ui| {
-                    let cx = unsafe { &mut *cx_ptr };
-                    let inner =
-                        into_value(cx, GuiUi::from_ui(inner_ui)).expect("GuiUi registered");
-                    if let Err(e) = cx.call(&body, &[inner]) {
-                        inner_ui
-                            .colored_label(egui::Color32::RED, format!("error: {}", e.message));
-                    }
-                });
-            Ok(Value::Unit)
-        })
+        show_viewport(cx, this, title, body, None)
+    });
+
+    ty.raw_function("dialog", |cx, args| {
+        let [this, Value::Str(title), body] = args else {
+            return Err(RuntimeError::new(
+                "`dialog` takes (title: str, body: fn(ui))",
+            ));
+        };
+        show_viewport(cx, this, title, body, Some(egui::X11WindowType::Dialog))
     });
 
     ty.raw_function("panel_left", |cx, args| {
@@ -430,6 +419,39 @@ fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_>) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn show_viewport(
+    cx: &mut dyn xur_runtime::Context,
+    this: &Value,
+    title: &std::sync::Arc<str>,
+    body: &Value,
+    window_type: Option<egui::X11WindowType>,
+) -> Result<Value, RuntimeError> {
+    if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+        return Err(RuntimeError::new("body must be a function"));
+    }
+    let body = body.clone();
+    let title = title.clone();
+    let cx_ptr = cx as *mut dyn xur_runtime::Context;
+    with_ui(this, |ui| {
+        let ctx = ui.ctx().clone();
+        let id = egui::ViewportId::from_hash_of(&*title);
+        let mut vp = egui::ViewportBuilder::default()
+            .with_title(title.as_ref())
+            .with_inner_size([400.0, 300.0]);
+        if let Some(wt) = window_type {
+            vp = vp.with_window_type(wt);
+        }
+        ctx.show_viewport_immediate(id, vp, |inner_ui, _class| {
+            let cx = unsafe { &mut *cx_ptr };
+            let inner = into_value(cx, GuiUi::from_ui(inner_ui)).expect("GuiUi registered");
+            if let Err(e) = cx.call(&body, &[inner]) {
+                inner_ui.colored_label(egui::Color32::RED, format!("error: {}", e.message));
+            }
+        });
+        Ok(Value::Unit)
+    })
+}
 
 fn with_ui(
     val: &Value,
