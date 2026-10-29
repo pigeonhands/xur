@@ -47,7 +47,7 @@ use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
 use crate::{AdtInfo, BuiltinType, RunResult, RuntimeError, TypeRef, Value};
 
-pub use builder::{BuiltinBuilder, ModuleBuilder, Returns, TypeBuilder, XurType};
+pub use builder::{BuiltinBuilder, ModuleBuilder, ReturnHint, Returns, TypeBuilder, XurType};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 
 use hooks::TypeHooks;
@@ -112,7 +112,7 @@ pub struct NativeFn {
     /// `None` for raw functions, which take any arguments.
     pub signature: Option<Signature>,
     /// Return type for raw functions that lack a full signature.
-    pub return_hint: Option<&'static Shape>,
+    pub return_hint: Option<ReturnHint>,
     pub param_names: Vec<String>,
     call: Box<CallFn>,
 }
@@ -331,9 +331,6 @@ impl Registry {
             "u64" => "u64".into(),
             "usize" => "usize".into(),
             "()" => "()".into(),
-            "ShapePtr" => "*u8".into(),
-            "ShapeList" => "list".into(),
-            "ShapeMap" => "map".into(),
             "Vec<u8>" | "alloc::vec::Vec<u8>" => "bytes".into(),
             _ if name.starts_with("Vec<") || name == "Vec" => "list".into(),
             _ => {
@@ -342,20 +339,41 @@ impl Registry {
         }
     }
 
-    /// The return-type Shape of a native function.
+    /// The return-type Shape of a native function (from its typed signature
+    /// or a [`ReturnHint::Shape`] hint). Returns `None` for raw functions
+    /// with no hint or an [`XurType`] hint.
     pub fn native_return_shape(&self, id: NativeFnId) -> Option<&'static Shape> {
         let f = self.function(id);
-        f.signature.as_ref().map(|s| s.ret).or(f.return_hint)
+        if let Some(sig) = &f.signature {
+            return Some(sig.ret);
+        }
+        match f.return_hint {
+            Some(ReturnHint::Shape(s)) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The xur type name of a native function's return type, if known.
+    pub fn native_return_name(&self, id: NativeFnId) -> Option<String> {
+        let f = self.function(id);
+        if let Some(sig) = &f.signature {
+            return Some(self.shape_xur_name(sig.ret));
+        }
+        match f.return_hint {
+            Some(ReturnHint::Shape(s)) => Some(self.shape_xur_name(s)),
+            Some(ReturnHint::Xur(xur)) => Some(xur.xur_name()),
+            None => None,
+        }
     }
 
     /// Sets the return-type hint on a raw function registered without a
     /// full signature, for LSP inlay hints.
-    pub(super) fn set_return_hint(&self, id: NativeFnId, ret: &'static Shape) {
+    pub(super) fn set_return_hint(&self, id: NativeFnId, hint: ReturnHint) {
         let mut inner = self.write();
         let slot = &mut inner.fns[id.0 as usize];
         Arc::get_mut(slot)
             .expect("return hint set during registration")
-            .return_hint = Some(ret);
+            .return_hint = Some(hint);
     }
 
     /// Extract the xur name of the `index`th type parameter from a generic

@@ -25,25 +25,30 @@ impl<T: Facet<'static>> Returns for T {
 /// `_xur` builder methods to annotate return types for the LSP.
 #[derive(Clone, Copy)]
 pub enum XurType {
-    Ptr,
+    /// Pointer to `inner`, displayed as `*inner` (e.g. `*u8`, `*i32`).
+    Ptr(&'static str),
     List,
     Map,
     Unit,
 }
 
-#[derive(Facet)] struct ShapePtr;
-#[derive(Facet)] struct ShapeList;
-#[derive(Facet)] struct ShapeMap;
-
 impl XurType {
-    pub fn shape(self) -> &'static Shape {
+    pub fn xur_name(self) -> String {
         match self {
-            Self::Ptr => ShapePtr::SHAPE,
-            Self::List => ShapeList::SHAPE,
-            Self::Map => ShapeMap::SHAPE,
-            Self::Unit => <()>::SHAPE,
+            Self::Ptr(inner) => format!("*{inner}"),
+            Self::List => "list".into(),
+            Self::Map => "map".into(),
+            Self::Unit => "()".into(),
         }
     }
+}
+
+/// A return-type hint stored on a raw function: either a Facet [`Shape`]
+/// (introspectable for generics) or an [`XurType`] name.
+#[derive(Clone, Copy)]
+pub enum ReturnHint {
+    Shape(&'static Shape),
+    Xur(XurType),
 }
 
 /// Adds items to one module of a [`Registry`].
@@ -111,7 +116,7 @@ impl ModuleBuilder<'_> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(R::RET))
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(ReturnHint::Shape(R::RET)))
     }
 
     /// Like [`raw_function_returns`](Self::raw_function_returns) for
@@ -122,7 +127,7 @@ impl ModuleBuilder<'_> {
         ret: XurType,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(ret.shape()))
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(ReturnHint::Xur(ret)))
     }
 
     /// Like [`raw_function`](Self::raw_function), with explicit parameter
@@ -146,7 +151,7 @@ impl ModuleBuilder<'_> {
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let names = params.iter().map(|s| s.to_string()).collect();
-        self.add_module_fn(name, None, names, Box::new(f), Some(R::RET))
+        self.add_module_fn(name, None, names, Box::new(f), Some(ReturnHint::Shape(R::RET)))
     }
 
     /// Like [`named_raw_function_returns`](Self::named_raw_function_returns)
@@ -159,7 +164,7 @@ impl ModuleBuilder<'_> {
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let names = params.iter().map(|s| s.to_string()).collect();
-        self.add_module_fn(name, None, names, Box::new(f), Some(ret.shape()))
+        self.add_module_fn(name, None, names, Box::new(f), Some(ReturnHint::Xur(ret)))
     }
 
     fn add_module_fn(
@@ -168,11 +173,11 @@ impl ModuleBuilder<'_> {
         signature: Option<Signature>,
         names: Vec<String>,
         call: Box<CallFn>,
-        return_hint: Option<&'static Shape>,
+        return_hint: Option<ReturnHint>,
     ) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, names, call);
-        if let Some(shape) = return_hint {
-            self.registry.set_return_hint(decl.id, shape);
+        if let Some(hint) = return_hint {
+            self.registry.set_return_hint(decl.id, hint);
         }
         let module = self.module;
         self.registry
@@ -316,7 +321,7 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(R::RET))
+        self.add(name, None, Box::new(f), Some(ReturnHint::Shape(R::RET)))
     }
 
     /// Like [`raw_function_returns`](Self::raw_function_returns) for
@@ -327,7 +332,7 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         ret: XurType,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(ret.shape()))
+        self.add(name, None, Box::new(f), Some(ReturnHint::Xur(ret)))
     }
 
     /// Registers a method taking `&self`: `value.name(args)` in Xur.
@@ -352,11 +357,11 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         name: &str,
         signature: Option<Signature>,
         call: Box<CallFn>,
-        return_hint: Option<&'static Shape>,
+        return_hint: Option<ReturnHint>,
     ) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, Vec::new(), call);
-        if let Some(shape) = return_hint {
-            self.registry.set_return_hint(decl.id, shape);
+        if let Some(hint) = return_hint {
+            self.registry.set_return_hint(decl.id, hint);
         }
         let ty = self.ty;
         self.registry
@@ -400,7 +405,7 @@ impl<'r> BuiltinBuilder<'r> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(R::RET))
+        self.add(name, None, Box::new(f), Some(ReturnHint::Shape(R::RET)))
     }
 
     /// Like [`raw_function_returns`](Self::raw_function_returns) for
@@ -411,7 +416,7 @@ impl<'r> BuiltinBuilder<'r> {
         ret: XurType,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(ret.shape()))
+        self.add(name, None, Box::new(f), Some(ReturnHint::Xur(ret)))
     }
 
     fn add(
@@ -419,11 +424,11 @@ impl<'r> BuiltinBuilder<'r> {
         name: &str,
         signature: Option<Signature>,
         call: Box<CallFn>,
-        return_hint: Option<&'static Shape>,
+        return_hint: Option<ReturnHint>,
     ) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, Vec::new(), call);
-        if let Some(shape) = return_hint {
-            self.registry.set_return_hint(decl.id, shape);
+        if let Some(hint) = return_hint {
+            self.registry.set_return_hint(decl.id, hint);
         }
         let key = (self.ty, name.to_owned());
         self.registry
