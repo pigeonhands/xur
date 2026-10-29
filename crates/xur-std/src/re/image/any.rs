@@ -26,8 +26,8 @@ fn format(image: &AnyImage<'_>) -> &'static str {
 
 pub(super) fn register(re: &mut ModuleBuilder<'_>) {
     re.ty_borrowing::<AnyImage<'static>>("AnyImage")
-        .raw_function("load", |cx, args| open_bytes(cx, args, AnyImage::load)).returns::<AnyImage<'static>>()
-        .raw_function("open", |cx, args| open_path(cx, args, AnyImage::load)).returns::<AnyImage<'static>>()
+        .raw_function_returns::<AnyImage<'static>>("load", |cx, args| open_bytes(cx, args, AnyImage::load))
+        .raw_function_returns::<AnyImage<'static>>("open", |cx, args| open_path(cx, args, AnyImage::load))
         .method("format", |i: &AnyImage<'static>| format(i).to_owned())
         .method("is_64", |i: &AnyImage<'static>| i.is_64())
         .method("pointer_size", |i: &AnyImage<'static>| i.pointer_size())

@@ -12,18 +12,18 @@ type List = Arc<Mutex<Vec<Value>>>;
 pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::List)
-        .raw_function("len", |_, args| {
+        .raw_function_returns::<i64>("len", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Int(lock(list).len() as i64))
-        }).returns::<i64>()
-        .raw_function("is_empty", |_, args| {
+        })
+        .raw_function_returns::<bool>("is_empty", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(lock(list).is_empty()))
-        }).returns::<bool>()
+        })
         .raw_function("push", |_, args| {
             let (list, [item]) = receiver(args)? else {
                 return arity(1);
@@ -78,12 +78,12 @@ pub(crate) fn register(registry: &Registry) {
             let index = position(int(index)?, items.len(), items.len())?;
             Ok(items.remove(index))
         })
-        .raw_function("contains", |_, args| {
+        .raw_function_returns::<bool>("contains", |_, args| {
             let (list, [item]) = receiver(args)? else {
                 return arity(1);
             };
             Ok(Value::Bool(lock(list).contains(item)))
-        }).returns::<bool>()
+        })
         .raw_function("clear", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
@@ -139,14 +139,14 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(Value::list(result))
         })
-        .raw_function("join", |cx, args| {
+        .raw_function_returns::<String>("join", |cx, args| {
             let (list, [Value::Str(separator)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`join` takes a separator string"));
             };
             let items = lock(list).clone();
             let parts: Vec<_> = items.iter().map(|item| cx.display(item)).collect();
             Ok(Value::str(&parts.join(separator)))
-        }).returns::<String>();
+        });
 }
 
 /// Splits a method call's arguments into the list and the rest.

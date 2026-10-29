@@ -70,7 +70,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
         .method("pop", |e: &DotnetEmitter| { emit!(e).pop(); })
         .method("dup", |e: &DotnetEmitter| { emit!(e).dup(); })
         .method("ldnull", |e: &DotnetEmitter| { emit!(e).ldnull(); })
-        .raw_function("finish", |cx, args| {
+        .raw_function_returns::<DotnetMethodBody>("finish", |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`finish` takes no arguments"));
             };
@@ -87,5 +87,5 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
                 })
                 .ok_or_else(|| RuntimeError::new("expected an Emitter"))??;
             into_value(cx, DotnetMethodBody(body))
-        }).returns::<DotnetMethodBody>();
+        });
 }

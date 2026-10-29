@@ -40,7 +40,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
 
     // --- constructors ---
 
-    rt.raw_function("coreclr", |cx, args| {
+    rt.raw_function_returns::<DotnetRuntime>("coreclr", |cx, args| {
         if !args.is_empty() {
             return Err(RuntimeError::new("`coreclr` takes no arguments"));
         }
@@ -51,7 +51,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    }).returns::<DotnetRuntime>();
+    });
 
     // --- Runtime methods ---
 

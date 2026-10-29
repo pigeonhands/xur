@@ -124,7 +124,7 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
             .map_err(error_text)
     })
     .function("current_pid", Process::current_pid)
-    .raw_function("open", |cx, args| open(cx, args)).returns::<Handle>()
+    .raw_function_returns::<Handle>("open", |cx, args| open(cx, args))
     .function("open_current", || {
         ProcessHandle::open_current()
             .map(wrap_handle)
@@ -141,7 +141,7 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
                 .map(|path| path.display().to_string())
                 .map_err(error_text)
         })
-        .raw_function("open", |cx, args| open_process(cx, args)).returns::<Handle>();
+        .raw_function_returns::<Handle>("open", |cx, args| open_process(cx, args));
 
     proc.ty::<Handle>("Handle")
         .method("pid", |h: &Handle| h.0.pid())

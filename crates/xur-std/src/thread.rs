@@ -16,13 +16,13 @@ pub struct JoinHandle(Arc<Mutex<Option<thread::JoinHandle<RunResult<Value>>>>>);
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::thread", |module| {
         module
-            .named_raw_function("spawn", &["f"], |cx, args| {
+            .named_raw_function_returns::<JoinHandle>("spawn", &["f"], |cx, args| {
                 let [f] = args else {
                     return Err(RuntimeError::new("`spawn` takes a function or closure"));
                 };
                 let handle = cx.spawn(f.clone())?;
                 into_value(cx, JoinHandle(Arc::new(Mutex::new(Some(handle)))))
-            }).returns::<JoinHandle>()
+            })
             .named_function("sleep", &["millis"], |millis: u64| {
                 thread::sleep(Duration::from_millis(millis))
             })

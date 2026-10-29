@@ -42,8 +42,8 @@ pub(super) fn register(registry: &Registry, pe: &mut ModuleBuilder<'_>) {
     // pewter's own `PEFile`, holding the bytes it borrows. Its fields are
     // read through facet; only the computed tables are methods.
     pe.ty::<PEFile<'static>>("PEFile")
-        .raw_function("parse", |cx, args| open_bytes(cx, args, PEFile::parse)).returns::<PEFile<'static>>()
-        .raw_function("open", |cx, args| open_path(cx, args, PEFile::parse)).returns::<PEFile<'static>>()
+        .raw_function_returns::<PEFile<'static>>("parse", |cx, args| open_bytes(cx, args, PEFile::parse))
+        .raw_function_returns::<PEFile<'static>>("open", |cx, args| open_path(cx, args, PEFile::parse))
         .method("section_names", |f: &PEFile<'static>| {
             f.sections.0.0.iter().map(section_name).collect::<Vec<_>>()
         })

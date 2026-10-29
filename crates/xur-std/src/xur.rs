@@ -28,11 +28,11 @@ pub fn set_argv(script: Option<String>, args: Vec<String>) {
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::xur")
-        .named_raw_function("invoked_by", &[], |_cx, args| {
+        .named_raw_function_returns::<String>("invoked_by", &[], |_cx, args| {
             if !args.is_empty() {
                 return Err(RuntimeError::new("`invoked_by` takes no arguments"));
             }
             let name = INVOKED_BY.get().map_or("unknown", |s| s.as_str());
             Ok(Value::str(name))
-        }).returns::<String>();
+        });
 }

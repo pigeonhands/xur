@@ -25,18 +25,18 @@ pub(crate) fn register(registry: &Registry) {
 
     let mut methods = registry.builtin(BuiltinType::Bytes);
     methods
-        .raw_function("len", |_, args| {
+        .raw_function_returns::<i64>("len", |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Int(lock(bytes).len() as i64))
-        }).returns::<i64>()
-        .raw_function("is_empty", |_, args| {
+        })
+        .raw_function_returns::<bool>("is_empty", |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(lock(bytes).is_empty()))
-        }).returns::<bool>()
+        })
         .raw_function("push", |_, args| {
             let (bytes, [byte]) = receiver(args)? else {
                 return arity(1);
@@ -62,14 +62,14 @@ pub(crate) fn register(registry: &Registry) {
             let found = find(&lock(bytes), &needle).map(|at| Value::Int(at as i64));
             Ok(option(cx, found))
         })
-        .raw_function("starts_with", |_, args| {
+        .raw_function_returns::<bool>("starts_with", |_, args| {
             let (bytes, [Value::Bytes(prefix)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`starts_with` takes bytes"));
             };
             let prefix = lock(prefix).clone();
             Ok(Value::Bool(lock(bytes).starts_with(&prefix)))
-        }).returns::<bool>()
-        .raw_function("to_hex", |_, args| {
+        })
+        .raw_function_returns::<String>("to_hex", |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };
@@ -78,7 +78,7 @@ pub(crate) fn register(registry: &Registry) {
                 .map(|byte| format!("{byte:02x}"))
                 .collect();
             Ok(Value::str(&hex))
-        }).returns::<String>()
+        })
         .raw_function("decode", |cx, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);

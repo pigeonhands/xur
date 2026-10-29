@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use facet::{Facet, Shape};
-use xur_resolve::{NativeFnId, NativeTypeId};
+use xur_resolve::NativeTypeId;
 
 use super::hooks::TypeHooks;
 use super::into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
@@ -13,12 +13,11 @@ use xur_resolve::{NativeVariantDecl, NativeVariantKind};
 pub struct ModuleBuilder<'r> {
     registry: &'r Registry,
     pub(super) module: usize,
-    last_fn: Option<NativeFnId>,
 }
 
 impl<'r> ModuleBuilder<'r> {
     pub(super) fn new(registry: &'r Registry, module: usize) -> Self {
-        Self { registry, module, last_fn: None }
+        Self { registry, module }
     }
 
     /// The registry being filled in.
@@ -42,12 +41,7 @@ impl ModuleBuilder<'_> {
     /// types implement [`Facet`].
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
-        let decl = self.registry.add_fn(name, Some(signature), Vec::new(), call);
-        self.last_fn = Some(decl.id);
-        let module = self.module;
-        self.registry
-            .with_inner(|inner| inner.modules[module].functions.push(decl));
-        self
+        self.add_module_fn(name, Some(signature), Vec::new(), call, None)
     }
 
     /// Like [`function`](Self::function), with explicit parameter names for
@@ -60,12 +54,7 @@ impl ModuleBuilder<'_> {
     ) -> &mut Self {
         let (signature, call) = f.into_native();
         let names = params.iter().map(|s| s.to_string()).collect();
-        let decl = self.registry.add_fn(name, Some(signature), names, call);
-        self.last_fn = Some(decl.id);
-        let module = self.module;
-        self.registry
-            .with_inner(|inner| inner.modules[module].functions.push(decl));
-        self
+        self.add_module_fn(name, Some(signature), names, call, None)
     }
 
     /// Registers a function that works on Xur values directly and can use
@@ -75,12 +64,17 @@ impl ModuleBuilder<'_> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        let decl = self.registry.add_fn(name, None, Vec::new(), Box::new(f));
-        self.last_fn = Some(decl.id);
-        let module = self.module;
-        self.registry
-            .with_inner(|inner| inner.modules[module].functions.push(decl));
-        self
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), None)
+    }
+
+    /// Like [`raw_function`](Self::raw_function), declaring the return type
+    /// for LSP inlay hints.
+    pub fn raw_function_returns<R: Facet<'static>>(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(R::SHAPE))
     }
 
     /// Like [`raw_function`](Self::raw_function), with explicit parameter
@@ -92,20 +86,36 @@ impl ModuleBuilder<'_> {
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let names = params.iter().map(|s| s.to_string()).collect();
-        let decl = self.registry.add_fn(name, None, names, Box::new(f));
-        self.last_fn = Some(decl.id);
+        self.add_module_fn(name, None, names, Box::new(f), None)
+    }
+
+    /// Like [`named_raw_function`](Self::named_raw_function), declaring the
+    /// return type for LSP inlay hints.
+    pub fn named_raw_function_returns<R: Facet<'static>>(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        let names = params.iter().map(|s| s.to_string()).collect();
+        self.add_module_fn(name, None, names, Box::new(f), Some(R::SHAPE))
+    }
+
+    fn add_module_fn(
+        &mut self,
+        name: &str,
+        signature: Option<Signature>,
+        names: Vec<String>,
+        call: Box<CallFn>,
+        return_hint: Option<&'static Shape>,
+    ) -> &mut Self {
+        let decl = self.registry.add_fn(name, signature, names, call);
+        if let Some(shape) = return_hint {
+            self.registry.set_return_hint(decl.id, shape);
+        }
         let module = self.module;
         self.registry
             .with_inner(|inner| inner.modules[module].functions.push(decl));
-        self
-    }
-
-    /// Declares the return type of the last registered function for LSP
-    /// inlay hints. Useful for raw functions that lack a typed signature.
-    pub fn returns<T: Facet<'static>>(&mut self) -> &mut Self {
-        if let Some(id) = self.last_fn {
-            self.registry.set_return_hint(id, T::SHAPE);
-        }
         self
     }
 
@@ -179,7 +189,6 @@ impl ModuleBuilder<'_> {
         TypeBuilder {
             registry: self.registry,
             ty: id,
-            last_fn: None,
             _ty: PhantomData,
         }
     }
@@ -208,7 +217,6 @@ impl ModuleBuilder<'_> {
         TypeBuilder {
             registry: self.registry,
             ty: id,
-            last_fn: None,
             _ty: PhantomData,
         }
     }
@@ -218,7 +226,6 @@ impl ModuleBuilder<'_> {
 pub struct TypeBuilder<'r, T> {
     registry: &'r Registry,
     ty: NativeTypeId,
-    last_fn: Option<NativeFnId>,
     _ty: PhantomData<T>,
 }
 
@@ -227,7 +234,7 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
     /// parameter is `T` it can also be called as a method, on a copy.
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
-        self.add(name, Some(signature), call)
+        self.add(name, Some(signature), call, None)
     }
 
     /// Registers a function working on Xur values directly, with the
@@ -238,27 +245,23 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        let decl = self.registry.add_fn(name, None, Vec::new(), Box::new(f));
-        self.last_fn = Some(decl.id);
-        let ty = self.ty;
-        self.registry
-            .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
-        self
+        self.add(name, None, Box::new(f), None)
     }
 
-    /// Declares the return type of the last registered function for LSP
-    /// inlay hints. Useful for raw functions that lack a typed signature.
-    pub fn returns<R: Facet<'static>>(&mut self) -> &mut Self {
-        if let Some(id) = self.last_fn {
-            self.registry.set_return_hint(id, R::SHAPE);
-        }
-        self
+    /// Like [`raw_function`](Self::raw_function), declaring the return type
+    /// for LSP inlay hints.
+    pub fn raw_function_returns<R: Facet<'static>>(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add(name, None, Box::new(f), Some(R::SHAPE))
     }
 
     /// Registers a method taking `&self`: `value.name(args)` in Xur.
     pub fn method<Marker>(&mut self, name: &str, f: impl IntoNativeMethod<T, Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
-        self.add(name, Some(signature), call)
+        self.add(name, Some(signature), call, None)
     }
 
     /// Registers a method taking `&mut self`, which changes the object in
@@ -269,12 +272,20 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
         f: impl IntoNativeMethodMut<T, Marker>,
     ) -> &mut Self {
         let (signature, call) = f.into_native();
-        self.add(name, Some(signature), call)
+        self.add(name, Some(signature), call, None)
     }
 
-    fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
+    fn add(
+        &mut self,
+        name: &str,
+        signature: Option<Signature>,
+        call: Box<CallFn>,
+        return_hint: Option<&'static Shape>,
+    ) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, Vec::new(), call);
-        self.last_fn = Some(decl.id);
+        if let Some(shape) = return_hint {
+            self.registry.set_return_hint(decl.id, shape);
+        }
         let ty = self.ty;
         self.registry
             .with_inner(|inner| inner.types[ty.0 as usize].functions.push(decl));
@@ -286,19 +297,18 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
 pub struct BuiltinBuilder<'r> {
     registry: &'r Registry,
     ty: BuiltinType,
-    last_fn: Option<NativeFnId>,
 }
 
 impl<'r> BuiltinBuilder<'r> {
     pub(super) fn new(registry: &'r Registry, ty: BuiltinType) -> Self {
-        Self { registry, ty, last_fn: None }
+        Self { registry, ty }
     }
 
     /// Registers a method as a Rust function taking the receiver, converted,
     /// first: `|s: String| s.to_uppercase()` for `"a".to_upper()`.
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
         let (signature, call) = f.into_native();
-        self.add(name, Some(signature), call)
+        self.add(name, Some(signature), call, None)
     }
 
     /// Registers a method working on Xur values directly, with the receiver
@@ -308,19 +318,30 @@ impl<'r> BuiltinBuilder<'r> {
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f))
+        self.add(name, None, Box::new(f), None)
     }
 
-    pub fn returns<T: Facet<'static>>(&mut self) -> &mut Self {
-        if let Some(id) = self.last_fn {
-            self.registry.set_return_hint(id, T::SHAPE);
-        }
-        self
+    /// Like [`raw_function`](Self::raw_function), declaring the return type
+    /// for LSP inlay hints.
+    pub fn raw_function_returns<R: Facet<'static>>(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add(name, None, Box::new(f), Some(R::SHAPE))
     }
 
-    fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
+    fn add(
+        &mut self,
+        name: &str,
+        signature: Option<Signature>,
+        call: Box<CallFn>,
+        return_hint: Option<&'static Shape>,
+    ) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, Vec::new(), call);
-        self.last_fn = Some(decl.id);
+        if let Some(shape) = return_hint {
+            self.registry.set_return_hint(decl.id, shape);
+        }
         let key = (self.ty, name.to_owned());
         self.registry
             .with_inner(|inner| inner.builtin_methods.insert(key, decl.id));

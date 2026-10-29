@@ -21,7 +21,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
         DotnetTypeSig(TypeSig::sz_array(elem.0))
     });
 
-    sig.raw_function("method_static", |cx, args| {
+    sig.raw_function_returns::<DotnetMethodSig>("method_static", |cx, args| {
         let [Value::Native(ret), Value::List(params)] = args else {
             return Err(RuntimeError::new(
                 "`method_static` takes (ret_type, [param_types...])",
@@ -35,9 +35,9 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
             cx,
             DotnetMethodSig(MethodSig::new_static(ret_sig, param_sigs)),
         )
-    }).returns::<DotnetMethodSig>();
+    });
 
-    sig.raw_function("method_instance", |cx, args| {
+    sig.raw_function_returns::<DotnetMethodSig>("method_instance", |cx, args| {
         let [Value::Native(ret), Value::List(params)] = args else {
             return Err(RuntimeError::new(
                 "`method_instance` takes (ret_type, [param_types...])",
@@ -51,7 +51,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
             cx,
             DotnetMethodSig(MethodSig::new_instance(ret_sig, param_sigs)),
         )
-    }).returns::<DotnetMethodSig>();
+    });
 }
 
 fn extract_type_sigs(

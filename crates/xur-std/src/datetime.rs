@@ -13,7 +13,7 @@ pub(crate) fn register(registry: &Registry) {
                     .map(|dt| DateTime(dt.fixed_offset()))
                     .ok_or_else(|| "invalid timestamp".to_string())
             })
-            .raw_function("parse", dt_parse).returns::<DateTime>();
+            .raw_function_returns::<DateTime>("parse", dt_parse);
 
         module
             .ty::<DateTime>("DateTime")
@@ -45,8 +45,8 @@ pub(crate) fn register(registry: &Registry) {
             .method("add_weeks", |d: &DateTime, n: i64| {
                 DateTime(d.0 + chrono::TimeDelta::weeks(n))
             })
-            .raw_function("add_months", dt_add_months).returns::<DateTime>()
-            .raw_function("add_years", dt_add_years).returns::<DateTime>();
+            .raw_function_returns::<DateTime>("add_months", dt_add_months)
+            .raw_function_returns::<DateTime>("add_years", dt_add_years);
     });
 }
 

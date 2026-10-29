@@ -190,7 +190,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
     // --- module creation / loading ---
 
     dotnet
-        .raw_function("new", |cx, args| {
+        .raw_function_returns::<DotnetModule>("new", |cx, args| {
             let (name, kind) = match args {
                 [Value::Str(name)] => (name.as_ref(), ModuleKind::Dll),
                 [Value::Str(name), Value::Str(kind)] => {
@@ -211,8 +211,8 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             let module = hao::Module::new(name, kind, TargetRuntime::NetCore(9));
             let v = into_value(cx, DotnetModule(Arc::new(Mutex::new(module))))?;
             Ok(v)
-        }).returns::<DotnetModule>()
-        .raw_function("open", |cx, args| {
+        })
+        .raw_function_returns::<DotnetModule>("open", |cx, args| {
             let [Value::Str(path)] = args else {
                 return Err(RuntimeError::new("`open` takes a path string"));
             };
@@ -223,8 +223,8 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 }
                 Err(e) => Ok(result(cx, Err(error_text(e)))),
             }
-        }).returns::<DotnetModule>()
-        .raw_function("parse", |cx, args| {
+        })
+        .raw_function_returns::<DotnetModule>("parse", |cx, args| {
             let [Value::Bytes(bytes)] = args else {
                 return Err(RuntimeError::new("`parse` takes bytes"));
             };
@@ -236,7 +236,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 }
                 Err(e) => Ok(result(cx, Err(error_text(e)))),
             }
-        }).returns::<DotnetModule>();
+        });
 
     // --- read-only module methods ---
 
@@ -328,7 +328,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             .ok_or_else(|| RuntimeError::new("expected a `Module`"))?;
             Ok(Value::Unit)
         })
-        .raw_function("import_method", |cx, args| {
+        .raw_function_returns::<DotnetToken>("import_method", |cx, args| {
             let [
                 this,
                 Value::Str(assembly),
@@ -365,8 +365,8 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 }
                 Err(e) => Ok(result(cx, Err(e))),
             }
-        }).returns::<DotnetToken>()
-        .raw_function("corlib_type", |cx, args| {
+        })
+        .raw_function_returns::<DotnetTypeRef>("corlib_type", |cx, args| {
             let [this, Value::Str(full_name)] = args else {
                 return Err(RuntimeError::new("`corlib_type` takes a full type name"));
             };
@@ -388,7 +388,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 }
                 Err(e) => Ok(result(cx, Err(e))),
             }
-        }).returns::<DotnetTypeRef>()
+        })
         .raw_function("add_type", |_cx, args| {
             let [this, Value::Native(typedef)] = args else {
                 return Err(RuntimeError::new("`add_type` takes a TypeDef"));
@@ -424,7 +424,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
 
     // --- type/method construction ---
 
-    dotnet.raw_function("static_class", |cx, args| {
+    dotnet.raw_function_returns::<DotnetTypeDef>("static_class", |cx, args| {
         let [
             Value::Native(module),
             Value::Str(namespace),
@@ -447,9 +447,9 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         let td = TypeDef::new_static_class(namespace.as_ref(), name.as_ref(), base);
         let entry = Entry::new(td);
         into_value(cx, DotnetTypeDef(entry))
-    }).returns::<DotnetTypeDef>();
+    });
 
-    dotnet.raw_function("public_static_method", |cx, args| {
+    dotnet.raw_function_returns::<DotnetMethodEntry>("public_static_method", |cx, args| {
         let [
             Value::Str(name),
             Value::Native(sig),
@@ -468,9 +468,9 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             .ok_or_else(|| RuntimeError::new("expected a MethodBody"))?;
         let method = Method::public_static(name.as_ref(), method_sig).with_body(body);
         into_value(cx, DotnetMethodEntry(Entry::new(method)))
-    }).returns::<DotnetMethodEntry>();
+    });
 
-    dotnet.raw_function("add_method", |cx, args| {
+    dotnet.raw_function_returns::<DotnetMethodEntry>("add_method", |cx, args| {
         let [Value::Native(typedef), Value::Native(method)] = args else {
             return Err(RuntimeError::new("`add_method` takes (typedef, method)"));
         };
@@ -483,7 +483,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         let m_inner = m_entry.get().clone();
         let result_entry = TypeDef::add_method(&td_entry, m_inner);
         into_value(cx, DotnetMethodEntry(result_entry))
-    }).returns::<DotnetMethodEntry>();
+    });
 
     emitter::register(dotnet);
     sig::register(dotnet);

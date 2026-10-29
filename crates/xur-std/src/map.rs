@@ -12,18 +12,18 @@ type Map = Arc<DashMap<MapKey, Value>>;
 pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::Map)
-        .raw_function("len", |_, args| {
+        .raw_function_returns::<i64>("len", |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Int(map.len() as i64))
-        }).returns::<i64>()
-        .raw_function("is_empty", |_, args| {
+        })
+        .raw_function_returns::<bool>("is_empty", |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(map.is_empty()))
-        }).returns::<bool>()
+        })
         .raw_function("get", |cx, args| {
             let (map, [key]) = receiver(args)? else {
                 return arity(1);
@@ -31,12 +31,12 @@ pub(crate) fn register(registry: &Registry) {
             let k = MapKey(key.clone());
             Ok(option(cx, map.get(&k).map(|v| v.value().clone())))
         })
-        .raw_function("contains_key", |_, args| {
+        .raw_function_returns::<bool>("contains_key", |_, args| {
             let (map, [key]) = receiver(args)? else {
                 return arity(1);
             };
             Ok(Value::Bool(map.contains_key(&MapKey(key.clone()))))
-        }).returns::<bool>()
+        })
         .raw_function("insert", |_, args| {
             let (map, [key, value]) = receiver(args)? else {
                 return arity(2);

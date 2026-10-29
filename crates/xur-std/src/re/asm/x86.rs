@@ -51,10 +51,10 @@ pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
     let mut x86 = asm.submodule("x86");
 
     x86.raw_function("decode", decode)
-        .raw_function("encode", encode).returns::<Vec<u8>>()
-        .raw_function("format", format_insn).returns::<String>()
-        .raw_function("insn", create_insn).returns::<Insn>()
-        .raw_function("mem", create_mem).returns::<MemOp>();
+        .raw_function_returns::<Vec<u8>>("encode", encode)
+        .raw_function_returns::<String>("format", format_insn)
+        .raw_function_returns::<Insn>("insn", create_insn)
+        .raw_function_returns::<MemOp>("mem", create_mem);
 
     register_insn(&mut x86);
     register_enums(&mut x86);
@@ -232,7 +232,7 @@ fn register_insn(x86: &mut ModuleBuilder<'_>) {
             format!("{:?}", insn.0.segment_prefix())
         })
         // ── formatting ──
-        .raw_function("format", |cx, args| {
+        .raw_function_returns::<String>("format", |cx, args| {
             let (this, syntax) = match args {
                 [this] => (this, None),
                 [this, Value::Str(s)] => (this, Some(s.clone())),
@@ -246,7 +246,7 @@ fn register_insn(x86: &mut ModuleBuilder<'_>) {
             let _ = cx;
             let text = format_with(syntax.as_deref().unwrap_or("masm"), &insn.0)?;
             Ok(Value::str(&text))
-        }).returns::<String>();
+        });
 }
 
 // ── instruction construction ────────────────────────────────────────

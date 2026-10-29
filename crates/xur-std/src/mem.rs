@@ -14,14 +14,14 @@ pub(crate) fn register(registry: &Registry) {
             ("Write", 2),
             ("Execute", 4),
         ])
-        .named_raw_function("size_of", &[], |cx, args| {
+        .named_raw_function_returns::<i64>("size_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "size_of")?;
             Ok(Value::Int(layout.byte_size() as i64))
-        }).returns::<i64>()
-        .named_raw_function("align_of", &[], |cx, args| {
+        })
+        .named_raw_function_returns::<i64>("align_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "align_of")?;
             Ok(Value::Int(layout.alignment() as i64))
-        }).returns::<i64>()
+        })
         .named_raw_function("from_bytes", &["data"], |cx, args| {
             let [Value::Bytes(data)] = args else {
                 return Err(RuntimeError::new(
@@ -31,26 +31,26 @@ pub(crate) fn register(registry: &Registry) {
             let layout = type_arg_layout(cx, &[], "from_bytes")?;
             layout.read(&lock(data), 0)
         })
-        .named_raw_function("size_of_val", &["value"], |cx, args| {
+        .named_raw_function_returns::<i64>("size_of_val", &["value"], |cx, args| {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`size_of_val` takes a struct"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
-        }).returns::<i64>()
-        .named_raw_function("to_bytes", &["value"], struct_to_bytes).returns::<Vec<u8>>()
+        })
+        .named_raw_function_returns::<Vec<u8>>("to_bytes", &["value"], struct_to_bytes)
         .named_raw_function("alloc_page", &["size"], alloc_page)
         .named_raw_function("protect", &["addr", "size", "mode"], protect_page)
         .named_raw_function("write_bytes", &["addr", "data"], write_bytes)
         .named_raw_function("free_page", &["addr", "size"], free_page);
     registry
         .builtin(BuiltinType::Struct)
-        .raw_function("to_bytes", struct_to_bytes).returns::<Vec<u8>>()
-        .raw_function("byte_size", |cx, args| {
+        .raw_function_returns::<Vec<u8>>("to_bytes", struct_to_bytes)
+        .raw_function_returns::<i64>("byte_size", |cx, args| {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`byte_size` takes no arguments"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
-        }).returns::<i64>();
+        });
 }
 
 /// `mem::alloc_page(size)` → `*u8`: allocates `size` bytes of read-write memory.

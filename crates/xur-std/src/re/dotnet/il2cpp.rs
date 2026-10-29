@@ -145,7 +145,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
 
     // --- open ---
 
-    il2cpp.raw_function("open", |cx, args| {
+    il2cpp.raw_function_returns::<Il2CppGame>("open", |cx, args| {
         let [Value::Str(path)] = args else {
             return Err(RuntimeError::new("`open` takes a path string"));
         };
@@ -156,9 +156,9 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    }).returns::<Il2CppGame>();
+    });
 
-    il2cpp.raw_function("from_files", |cx, args| {
+    il2cpp.raw_function_returns::<Il2CppGame>("from_files", |cx, args| {
         let [Value::Str(metadata), Value::Str(binary)] = args else {
             return Err(RuntimeError::new(
                 "`from_files` takes (metadata_path, binary_path)",
@@ -171,7 +171,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    }).returns::<Il2CppGame>();
+    });
 
     // --- Game methods ---
 
@@ -195,7 +195,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))??;
             Ok(Value::list(list))
         })
-        .raw_function("find_type", |cx, args| {
+        .raw_function_returns::<Il2CppTypeView>("find_type", |cx, args| {
             let [this, Value::Str(name)] = args else {
                 return Err(RuntimeError::new("`find_type` takes a type name string"));
             };
@@ -216,7 +216,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 )
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))??;
             Ok(res)
-        }).returns::<Il2CppTypeView>()
+        })
         .method("image_names", |g: &Il2CppGame| -> Vec<String> {
             g.0.image_names().map(|s| s.to_owned()).collect()
         })

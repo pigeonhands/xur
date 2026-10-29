@@ -25,24 +25,24 @@ use crate::option;
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::reflect", |module| {
         module
-            .named_raw_function("type_name", &["value"], |cx, args| {
+            .named_raw_function_returns::<String>("type_name", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("type_name", "value");
                 };
                 Ok(Value::str(&type_name(cx, value)))
-            }).returns::<String>()
+            })
             .named_raw_function("fields", &["value"], |cx, args| {
                 let [value] = args else {
                     return arity("fields", "value");
                 };
                 Ok(names(fields(cx, value)))
             })
-            .named_raw_function("has_field", &["value", "name"], |cx, args| {
+            .named_raw_function_returns::<bool>("has_field", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("has_field", "value, name");
                 };
                 Ok(Value::Bool(fields(cx, value).iter().any(|f| f == &**name)))
-            }).returns::<bool>()
+            })
             .named_raw_function("get", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("get", "value, name");
@@ -77,12 +77,12 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 Ok(names(cx.methods(value)))
             })
-            .named_raw_function("has_method", &["value", "name"], |cx, args| {
+            .named_raw_function_returns::<bool>("has_method", &["value", "name"], |cx, args| {
                 let [value, Value::Str(name)] = args else {
                     return arity("has_method", "value, name");
                 };
                 Ok(Value::Bool(cx.methods(value).iter().any(|m| m == &**name)))
-            }).returns::<bool>()
+            })
             .named_raw_function("call", &["value", "name", "args"], |cx, args| {
                 let [receiver, Value::Str(name), Value::List(call_args)] = args else {
                     return arity("call", "value, name, [args]");

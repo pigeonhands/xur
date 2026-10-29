@@ -265,47 +265,47 @@ pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::log", |module| {
         // subscriber() — returns a new SubscriberBuilder with defaults.
         module.ty::<SubscriberBuilder>("SubscriberBuilder")
-            .raw_function("with_max_level", |_cx, args| {
+            .raw_function_returns::<SubscriberBuilder>("with_max_level", |_cx, args| {
                 let level = str_arg(args, 1, "with_max_level")?;
                 parse_level(&level)?;
                 with_config(args, |c| c.max_level = level.to_string())
-            }).returns::<SubscriberBuilder>()
-            .raw_function("with_target", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("with_target", |_cx, args| {
                 let b = bool_arg(args, 1, "with_target")?;
                 with_config(args, |c| c.with_target = b)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("with_file", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("with_file", |_cx, args| {
                 let b = bool_arg(args, 1, "with_file")?;
                 with_config(args, |c| c.with_file = b)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("with_line_number", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("with_line_number", |_cx, args| {
                 let b = bool_arg(args, 1, "with_line_number")?;
                 with_config(args, |c| c.with_line_number = b)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("with_ansi", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("with_ansi", |_cx, args| {
                 let b = bool_arg(args, 1, "with_ansi")?;
                 with_config(args, |c| c.with_ansi = b)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("json", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("json", |_cx, args| {
                 with_config(args, |c| c.format = Format::Json)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("pretty", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("pretty", |_cx, args| {
                 with_config(args, |c| c.format = Format::Pretty)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("compact", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("compact", |_cx, args| {
                 with_config(args, |c| c.format = Format::Compact)
-            }).returns::<SubscriberBuilder>()
-            .raw_function("with_filter", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("with_filter", |_cx, args| {
                 let filter = str_arg(args, 1, "with_filter")?;
                 with_config(args, |c| c.filter = Some(filter.to_string()))
-            }).returns::<SubscriberBuilder>()
-            .raw_function("to_file", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("to_file", |_cx, args| {
                 let path = str_arg(args, 1, "to_file")?;
                 with_config(args, |c| c.output = Output::File(path.to_string()))
-            }).returns::<SubscriberBuilder>()
-            .raw_function("to_stderr", |_cx, args| {
+            })
+            .raw_function_returns::<SubscriberBuilder>("to_stderr", |_cx, args| {
                 with_config(args, |c| c.output = Output::Stderr)
-            }).returns::<SubscriberBuilder>()
+            })
             .raw_function("init", |_cx, args| {
                 let builder = builder_arg(args)?;
                 init_subscriber(&builder.0)?;

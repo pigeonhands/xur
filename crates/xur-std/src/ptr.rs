@@ -14,28 +14,28 @@ pub(crate) fn register(registry: &Registry) {
         });
     registry
         .builtin(BuiltinType::Ptr)
-        .raw_function("to_int", |_cx, args| {
+        .raw_function_returns::<i64>("to_int", |_cx, args| {
             let [Value::Ptr(addr)] = args else {
                 return Err(RuntimeError::new("`to_int` takes a pointer"));
             };
             Ok(Value::Int(*addr as i64))
-        }).returns::<i64>()
-        .raw_function("is_null", |_cx, args| {
+        })
+        .raw_function_returns::<bool>("is_null", |_cx, args| {
             let [Value::Ptr(addr)] = args else {
                 return Err(RuntimeError::new("`is_null` takes a pointer"));
             };
             Ok(Value::Bool(*addr == 0))
-        }).returns::<bool>()
+        })
         .raw_function("offset", |_cx, args| {
             let [Value::Ptr(addr), Value::Int(n)] = args else {
                 return Err(RuntimeError::new("`offset` takes an integer"));
             };
             Ok(Value::Ptr(addr.wrapping_add(*n as u64)))
         })
-        .raw_function("to_hex", |_cx, args| -> RunResult<Value> {
+        .raw_function_returns::<String>("to_hex", |_cx, args| -> RunResult<Value> {
             let [Value::Ptr(addr)] = args else {
                 return Err(RuntimeError::new("`to_hex` takes a pointer"));
             };
             Ok(Value::str(&format!("0x{addr:x}")))
-        }).returns::<String>();
+        });
 }

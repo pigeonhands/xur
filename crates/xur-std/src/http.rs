@@ -11,24 +11,24 @@ use crate::{error_text, result};
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::http", |module| {
         module
-            .raw_function("get", http_get).returns::<Response>()
-            .raw_function("post", http_post).returns::<Response>()
-            .raw_function("put", http_put).returns::<Response>()
-            .raw_function("patch", http_patch).returns::<Response>()
-            .raw_function("delete", http_delete).returns::<Response>()
-            .raw_function("head", http_head).returns::<Response>()
-            .raw_function("request", http_request).returns::<RequestBuilder>();
+            .raw_function_returns::<Response>("get", http_get)
+            .raw_function_returns::<Response>("post", http_post)
+            .raw_function_returns::<Response>("put", http_put)
+            .raw_function_returns::<Response>("patch", http_patch)
+            .raw_function_returns::<Response>("delete", http_delete)
+            .raw_function_returns::<Response>("head", http_head)
+            .raw_function_returns::<RequestBuilder>("request", http_request);
 
         module
             .ty::<RequestBuilder>("RequestBuilder")
-            .raw_function("header", rb_header).returns::<RequestBuilder>()
-            .raw_function("bearer_auth", rb_bearer_auth).returns::<RequestBuilder>()
-            .raw_function("basic_auth", rb_basic_auth).returns::<RequestBuilder>()
-            .raw_function("body", rb_body).returns::<RequestBuilder>()
-            .raw_function("json_body", rb_json_body).returns::<RequestBuilder>()
-            .raw_function("timeout", rb_timeout).returns::<RequestBuilder>()
-            .raw_function("query", rb_query).returns::<RequestBuilder>()
-            .raw_function("send", rb_send).returns::<Response>();
+            .raw_function_returns::<RequestBuilder>("header", rb_header)
+            .raw_function_returns::<RequestBuilder>("bearer_auth", rb_bearer_auth)
+            .raw_function_returns::<RequestBuilder>("basic_auth", rb_basic_auth)
+            .raw_function_returns::<RequestBuilder>("body", rb_body)
+            .raw_function_returns::<RequestBuilder>("json_body", rb_json_body)
+            .raw_function_returns::<RequestBuilder>("timeout", rb_timeout)
+            .raw_function_returns::<RequestBuilder>("query", rb_query)
+            .raw_function_returns::<Response>("send", rb_send);
 
         module
             .ty::<Response>("Response")
@@ -38,7 +38,7 @@ pub(crate) fn register(registry: &Registry) {
             .method("text", |r: &Response| {
                 String::from_utf8_lossy(&r.body).into_owned()
             })
-            .raw_function("bytes", resp_bytes).returns::<Vec<u8>>()
+            .raw_function_returns::<Vec<u8>>("bytes", resp_bytes)
             .raw_function("json", resp_json)
             .raw_function("header", resp_header)
             .raw_function("headers", resp_headers);

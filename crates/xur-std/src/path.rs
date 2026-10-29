@@ -9,7 +9,7 @@ use crate::error_text;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::path")
-        .named_raw_function("join", &["parts"], |_cx, args| {
+        .named_raw_function_returns::<String>("join", &["parts"], |_cx, args| {
             if args.is_empty() {
                 return Ok(xur_runtime::Value::str(""));
             }
@@ -26,7 +26,7 @@ pub(crate) fn register(registry: &Registry) {
                 }
             }
             Ok(xur_runtime::Value::str(&path.to_string_lossy()))
-        }).returns::<String>()
+        })
         .named_function("parent", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .parent()

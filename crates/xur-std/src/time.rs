@@ -9,7 +9,7 @@ pub(crate) fn register(registry: &Registry) {
         module
             .function("now", || Instant(time::Instant::now()))
             .raw_function("sleep", time_sleep)
-            .raw_function("from_secs", dur_from_secs).returns::<Duration>()
+            .raw_function_returns::<Duration>("from_secs", dur_from_secs)
             .named_function("from_millis", &["ms"], |ms: i64| {
                 Duration(time::Duration::from_millis(ms as u64))
             });

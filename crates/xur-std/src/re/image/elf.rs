@@ -13,8 +13,8 @@ use crate::re::native::{open_bytes, open_path};
 
 pub(super) fn register(elf: &mut ModuleBuilder<'_>) {
     elf.ty::<ElfFile<'static>>("ElfFile")
-        .raw_function("parse", |cx, args| open_bytes(cx, args, ElfFile::parse)).returns::<ElfFile<'static>>()
-        .raw_function("open", |cx, args| open_path(cx, args, ElfFile::parse)).returns::<ElfFile<'static>>()
+        .raw_function_returns::<ElfFile<'static>>("parse", |cx, args| open_bytes(cx, args, ElfFile::parse))
+        .raw_function_returns::<ElfFile<'static>>("open", |cx, args| open_path(cx, args, ElfFile::parse))
         .method("is_64", |f: &ElfFile<'static>| f.is_64())
         .method("section_names", |f: &ElfFile<'static>| {
             f.sections
