@@ -40,9 +40,9 @@ pub(crate) fn register(registry: &Registry) {
         })
         .named_raw_function_returns::<Vec<u8>>("to_bytes", &["value"], struct_to_bytes)
         .named_raw_function_returns_xur("alloc_page", &["size"], XurType::ptr::<u8>(), alloc_page)
-        .named_raw_function("protect", &["addr", "size", "mode"], protect_page)
-        .named_raw_function("write_bytes", &["addr", "data"], write_bytes)
-        .named_raw_function("free_page", &["addr", "size"], free_page);
+        .named_raw_function_returns_xur("protect", &["addr", "size", "mode"], XurType::UNIT, protect_page)
+        .named_raw_function_returns_xur("write_bytes", &["addr", "data"], XurType::UNIT, write_bytes)
+        .named_raw_function_returns_xur("free_page", &["addr", "size"], XurType::UNIT, free_page);
     registry
         .builtin(BuiltinType::Struct)
         .raw_function_returns::<Vec<u8>>("to_bytes", struct_to_bytes)

@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use facet::Facet;
 use xur_runtime::{Context, NativeObject, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 use crate::fmt;
 
@@ -306,7 +307,7 @@ pub(crate) fn register(registry: &Registry) {
             .raw_function_returns::<SubscriberBuilder>("to_stderr", |_cx, args| {
                 with_config(args, |c| c.output = Output::Stderr)
             })
-            .raw_function("init", |_cx, args| {
+            .raw_function_returns_xur("init", XurType::UNIT, |_cx, args| {
                 let builder = builder_arg(args)?;
                 init_subscriber(&builder.0)?;
                 Ok(Value::Unit)
@@ -318,27 +319,27 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // Log functions: trace, debug, info, warn, error.
-        module.raw_function("trace", |cx, args| {
+        module.raw_function_returns_xur("trace", XurType::UNIT, |cx, args| {
             let msg = log_message(cx, args)?;
             tracing::trace!("{}", msg);
             Ok(Value::Unit)
         });
-        module.raw_function("debug", |cx, args| {
+        module.raw_function_returns_xur("debug", XurType::UNIT, |cx, args| {
             let msg = log_message(cx, args)?;
             tracing::debug!("{}", msg);
             Ok(Value::Unit)
         });
-        module.raw_function("info", |cx, args| {
+        module.raw_function_returns_xur("info", XurType::UNIT, |cx, args| {
             let msg = log_message(cx, args)?;
             tracing::info!("{}", msg);
             Ok(Value::Unit)
         });
-        module.raw_function("warn", |cx, args| {
+        module.raw_function_returns_xur("warn", XurType::UNIT, |cx, args| {
             let msg = log_message(cx, args)?;
             tracing::warn!("{}", msg);
             Ok(Value::Unit)
         });
-        module.raw_function("error", |cx, args| {
+        module.raw_function_returns_xur("error", XurType::UNIT, |cx, args| {
             let msg = log_message(cx, args)?;
             tracing::error!("{}", msg);
             Ok(Value::Unit)

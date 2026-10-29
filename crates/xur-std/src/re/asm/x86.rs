@@ -15,7 +15,7 @@ use iced_x86::{
     IntelFormatter, MasmFormatter, MemoryOperand, NasmFormatter, Register as IcedRegister,
 };
 use xur_runtime::convert::into_value;
-use xur_runtime::registry::ModuleBuilder;
+use xur_runtime::registry::{ModuleBuilder, XurType};
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 use crate::error_text;
@@ -50,7 +50,7 @@ impl std::fmt::Display for Insn {
 pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
     let mut x86 = asm.submodule("x86");
 
-    x86.raw_function("decode", decode)
+    x86.raw_function_returns_xur("decode", XurType::LIST, decode)
         .raw_function_returns::<Vec<u8>>("encode", encode)
         .raw_function_returns::<String>("format", format_insn)
         .raw_function_returns::<Insn>("insn", create_insn)

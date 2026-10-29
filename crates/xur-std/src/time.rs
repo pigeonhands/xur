@@ -3,12 +3,13 @@ use std::time;
 use facet::Facet;
 use xur_runtime::convert::into_value;
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::time", |module| {
         module
             .function("now", || Instant(time::Instant::now()))
-            .raw_function("sleep", time_sleep)
+            .raw_function_returns_xur("sleep", XurType::UNIT, time_sleep)
             .raw_function_returns::<Duration>("from_secs", dur_from_secs)
             .named_function("from_millis", &["ms"], |ms: i64| {
                 Duration(time::Duration::from_millis(ms as u64))

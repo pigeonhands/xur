@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use xur_runtime::{BuiltinType, Record, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 use xur_span::Symbol;
 
 use crate::option;
@@ -71,7 +72,7 @@ pub(crate) fn register(registry: &Registry) {
                 ..Record::clone(record)
             })))
         })
-        .raw_function("fields", |_, args| {
+        .raw_function_returns_xur("fields", XurType::LIST, |_, args| {
             let (record, []) = receiver(args)? else {
                 return Err(RuntimeError::new("`fields` takes no arguments"));
             };

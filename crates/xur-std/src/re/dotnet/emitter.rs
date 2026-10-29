@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use xur_runtime::convert::into_value;
-use xur_runtime::registry::ModuleBuilder;
+use xur_runtime::registry::{ModuleBuilder, XurType};
 use xur_runtime::{RuntimeError, Value};
 
 use super::{DotnetEmitter, DotnetMethodBody, DotnetToken};
@@ -20,7 +20,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
 
     il.ty::<DotnetEmitter>("Emitter")
         .method("ldstr", |e: &DotnetEmitter, s: String| { emit!(e).ldstr(&s); })
-        .raw_function("call", |_cx, args| {
+        .raw_function_returns_xur("call", XurType::UNIT, |_cx, args| {
             let [this, Value::Native(token)] = args else {
                 return Err(RuntimeError::new("`call` takes a Token"));
             };
@@ -34,7 +34,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected an Emitter"))?;
             Ok(Value::Unit)
         })
-        .raw_function("callvirt", |_cx, args| {
+        .raw_function_returns_xur("callvirt", XurType::UNIT, |_cx, args| {
             let [this, Value::Native(token)] = args else {
                 return Err(RuntimeError::new("`callvirt` takes a Token"));
             };
@@ -48,7 +48,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected an Emitter"))?;
             Ok(Value::Unit)
         })
-        .raw_function("newobj", |_cx, args| {
+        .raw_function_returns_xur("newobj", XurType::UNIT, |_cx, args| {
             let [this, Value::Native(token)] = args else {
                 return Err(RuntimeError::new("`newobj` takes a Token"));
             };

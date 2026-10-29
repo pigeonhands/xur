@@ -1,6 +1,7 @@
 //! `std::reflect::func`: inspecting function signatures at runtime.
 
 use xur_runtime::{RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
     let mut func = module.submodule("func");
@@ -18,7 +19,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .ok_or_else(|| RuntimeError::new("`reflect::func::params` expects a function"))?;
         Ok(Value::Int(info.param_count as i64))
     })
-    .named_raw_function("param_names", &["f"], |cx, args| {
+    .named_raw_function_returns_xur("param_names", &["f"], XurType::LIST, |cx, args| {
         let [value] = args else { return arity("param_names", "f") };
         let info = cx
             .fn_info(value)
@@ -33,7 +34,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .collect();
         Ok(Value::list(names))
     })
-    .named_raw_function("param_types", &["f"], |cx, args| {
+    .named_raw_function_returns_xur("param_types", &["f"], XurType::LIST, |cx, args| {
         let [value] = args else { return arity("param_types", "f") };
         let info = cx
             .fn_info(value)

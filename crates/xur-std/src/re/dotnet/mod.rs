@@ -34,7 +34,7 @@ use hao::dotnet::md::streams::tables_stream::{
 use hao::dotnet::module::{ModuleKind, TargetRuntime};
 use hao::dotnet::signature::{MethodSig, SignatureFlags, TypeSig};
 use xur_runtime::convert::{into_value, reflect_error, to_value};
-use xur_runtime::registry::ModuleBuilder;
+use xur_runtime::registry::{ModuleBuilder, XurType};
 use xur_runtime::{Registry, RuntimeError, Value};
 
 use crate::{error_text, result};
@@ -311,7 +311,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 Err(e) => Ok(result(cx, Err(e))),
             }
         })
-        .raw_function("add_assembly_ref", |_cx, args| {
+        .raw_function_returns_xur("add_assembly_ref", XurType::UNIT, |_cx, args| {
             let [this, Value::Str(name)] = args else {
                 return Err(RuntimeError::new(
                     "`add_assembly_ref` takes an assembly name",
@@ -389,7 +389,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 Err(e) => Ok(result(cx, Err(e))),
             }
         })
-        .raw_function("add_type", |_cx, args| {
+        .raw_function_returns_xur("add_type", XurType::UNIT, |_cx, args| {
             let [this, Value::Native(typedef)] = args else {
                 return Err(RuntimeError::new("`add_type` takes a TypeDef"));
             };
@@ -405,7 +405,7 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             .ok_or_else(|| RuntimeError::new("expected a `Module`"))?;
             Ok(Value::Unit)
         })
-        .raw_function("set_entry_point", |_cx, args| {
+        .raw_function_returns_xur("set_entry_point", XurType::UNIT, |_cx, args| {
             let [this, Value::Native(method)] = args else {
                 return Err(RuntimeError::new("`set_entry_point` takes a Method"));
             };

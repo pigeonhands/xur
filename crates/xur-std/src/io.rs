@@ -3,16 +3,17 @@
 use std::io::Write;
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 use crate::fmt::format;
 
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::io")
-        .named_raw_function("print", &["format", "args"], |cx, args| print(cx, args, ""))
-        .named_raw_function("println", &["format", "args"], |cx, args| print(cx, args, "\n"))
-        .named_raw_function("eprint", &["format", "args"], |cx, args| eprint(cx, args, ""))
-        .named_raw_function("eprintln", &["format", "args"], |cx, args| eprint(cx, args, "\n"));
+        .named_raw_function_returns_xur("print", &["format", "args"], XurType::UNIT, |cx, args| print(cx, args, ""))
+        .named_raw_function_returns_xur("println", &["format", "args"], XurType::UNIT, |cx, args| print(cx, args, "\n"))
+        .named_raw_function_returns_xur("eprint", &["format", "args"], XurType::UNIT, |cx, args| eprint(cx, args, ""))
+        .named_raw_function_returns_xur("eprintln", &["format", "args"], XurType::UNIT, |cx, args| eprint(cx, args, "\n"));
     registry
         .module("std::io::c")
         .named_function("red", &["text"], |s: String| format!("\x1b[31m{s}\x1b[0m"))

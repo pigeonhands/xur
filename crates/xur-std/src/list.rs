@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::registry::XurType;
 
 use crate::option;
 
@@ -24,7 +25,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(Value::Bool(lock(list).is_empty()))
         })
-        .raw_function("push", |_, args| {
+        .raw_function_returns_xur("push", XurType::UNIT, |_, args| {
             let (list, [item]) = receiver(args)? else {
                 return arity(1);
             };
@@ -61,7 +62,7 @@ pub(crate) fn register(registry: &Registry) {
             let item = lock(list).last().cloned();
             Ok(option(cx, item))
         })
-        .raw_function("insert", |_, args| {
+        .raw_function_returns_xur("insert", XurType::UNIT, |_, args| {
             let (list, [index, item]) = receiver(args)? else {
                 return arity(2);
             };
@@ -84,21 +85,21 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(Value::Bool(lock(list).contains(item)))
         })
-        .raw_function("clear", |_, args| {
+        .raw_function_returns_xur("clear", XurType::UNIT, |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
             lock(list).clear();
             Ok(Value::Unit)
         })
-        .raw_function("reverse", |_, args| {
+        .raw_function_returns_xur("reverse", XurType::UNIT, |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
             lock(list).reverse();
             Ok(Value::Unit)
         })
-        .raw_function("extend", |_, args| {
+        .raw_function_returns_xur("extend", XurType::UNIT, |_, args| {
             let (list, [Value::List(other)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`extend` takes a list"));
             };
@@ -113,7 +114,7 @@ pub(crate) fn register(registry: &Registry) {
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>()
         })
-        .raw_function("map", |cx, args| {
+        .raw_function_returns_xur("map", XurType::LIST, |cx, args| {
             let (list, [f]) = receiver(args)? else {
                 return arity(1);
             };
@@ -124,7 +125,7 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(Value::list(result))
         })
-        .raw_function("filter", |cx, args| {
+        .raw_function_returns_xur("filter", XurType::LIST, |cx, args| {
             let (list, [f]) = receiver(args)? else {
                 return arity(1);
             };

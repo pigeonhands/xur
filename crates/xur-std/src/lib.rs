@@ -40,6 +40,7 @@ pub use xur::{set_argv, set_invoked_by};
 include!(concat!(env!("OUT_DIR"), "/prelude.rs"));
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 /// A registry holding only `std`.
 pub fn registry() -> Registry {
@@ -54,8 +55,8 @@ pub fn register(registry: &Registry) {
         .module("std")
         .named_raw_function("import", &["path"], import)
         .named_raw_function("try_import", &["path"], try_import)
-        .named_raw_function("panic", &["format", "args"], panic)
-        .named_raw_function("argv", &[], argv);
+        .named_raw_function_returns_xur("panic", &["format", "args"], XurType::UNIT, panic)
+        .named_raw_function_returns_xur("argv", &[], XurType::list::<String>(), argv);
     registry
         .module("std::fmt")
         .named_raw_function_returns::<String>("format", &["template", "args"], format);

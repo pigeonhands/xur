@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use xur_runtime::{BuiltinType, MapKey, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 use crate::option;
 
@@ -37,7 +38,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(Value::Bool(map.contains_key(&MapKey(key.clone()))))
         })
-        .raw_function("insert", |_, args| {
+        .raw_function_returns_xur("insert", XurType::UNIT, |_, args| {
             let (map, [key, value]) = receiver(args)? else {
                 return arity(2);
             };
@@ -51,21 +52,21 @@ pub(crate) fn register(registry: &Registry) {
             let removed = map.remove(&MapKey(key.clone())).map(|(_, v)| v);
             Ok(option(cx, removed))
         })
-        .raw_function("keys", |_, args| {
+        .raw_function_returns_xur("keys", XurType::LIST, |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
             let keys: Vec<Value> = map.iter().map(|entry| entry.key().0.clone()).collect();
             Ok(Value::list(keys))
         })
-        .raw_function("values", |_, args| {
+        .raw_function_returns_xur("values", XurType::LIST, |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
             let values: Vec<Value> = map.iter().map(|entry| entry.value().clone()).collect();
             Ok(Value::list(values))
         })
-        .raw_function("entries", |_, args| {
+        .raw_function_returns_xur("entries", XurType::LIST, |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
@@ -75,7 +76,7 @@ pub(crate) fn register(registry: &Registry) {
                 .collect();
             Ok(Value::list(entries))
         })
-        .raw_function("clear", |_, args| {
+        .raw_function_returns_xur("clear", XurType::UNIT, |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };

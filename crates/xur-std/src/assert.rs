@@ -1,15 +1,16 @@
 //! `std::assert`: test assertions.
 
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::assert")
-        .named_raw_function("is_eq", &["left", "right"], |cx, args| is_eq(cx, args))
-        .named_raw_function("is_ne", &["left", "right"], |cx, args| is_ne(cx, args))
-        .named_raw_function("is_true", &["value"], |_, args| is_true(args))
-        .named_raw_function("is_false", &["value"], |_, args| is_false(args))
-        .named_raw_function("fail", &["message"], |cx, args| fail(cx, args));
+        .named_raw_function_returns_xur("is_eq", &["left", "right"], XurType::UNIT, |cx, args| is_eq(cx, args))
+        .named_raw_function_returns_xur("is_ne", &["left", "right"], XurType::UNIT, |cx, args| is_ne(cx, args))
+        .named_raw_function_returns_xur("is_true", &["value"], XurType::UNIT, |_, args| is_true(args))
+        .named_raw_function_returns_xur("is_false", &["value"], XurType::UNIT, |_, args| is_false(args))
+        .named_raw_function_returns_xur("fail", &["message"], XurType::UNIT, |cx, args| fail(cx, args));
 }
 
 fn is_eq(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {

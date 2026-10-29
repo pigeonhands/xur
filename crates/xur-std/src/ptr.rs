@@ -1,12 +1,13 @@
 //! `std::ptr`: raw pointer construction and arithmetic.
 
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::registry::XurType;
 
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::ptr")
-        .raw_function("null", |_cx, _args| Ok(Value::Ptr(0)))
-        .named_raw_function("from_int", &["addr"], |_cx, args| {
+        .raw_function_returns_xur("null", XurType::PTR, |_cx, _args| Ok(Value::Ptr(0)))
+        .named_raw_function_returns_xur("from_int", &["addr"], XurType::PTR, |_cx, args| {
             let [Value::Int(addr)] = args else {
                 return Err(RuntimeError::new("`from_int` takes an integer"));
             };
@@ -26,7 +27,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(Value::Bool(*addr == 0))
         })
-        .raw_function("offset", |_cx, args| {
+        .raw_function_returns_xur("offset", XurType::PTR, |_cx, args| {
             let [Value::Ptr(addr), Value::Int(n)] = args else {
                 return Err(RuntimeError::new("`offset` takes an integer"));
             };

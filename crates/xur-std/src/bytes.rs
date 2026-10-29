@@ -7,6 +7,7 @@
 use std::sync::{Arc, Mutex};
 
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::registry::XurType;
 
 use crate::option;
 
@@ -37,7 +38,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(Value::Bool(lock(bytes).is_empty()))
         })
-        .raw_function("push", |_, args| {
+        .raw_function_returns_xur("push", XurType::UNIT, |_, args| {
             let (bytes, [byte]) = receiver(args)? else {
                 return arity(1);
             };
@@ -45,7 +46,7 @@ pub(crate) fn register(registry: &Registry) {
             lock(bytes).push(byte);
             Ok(Value::Unit)
         })
-        .raw_function("extend", |_, args| {
+        .raw_function_returns_xur("extend", XurType::UNIT, |_, args| {
             let (bytes, [Value::Bytes(other)]) = receiver(args)? else {
                 return Err(RuntimeError::new("`extend` takes bytes"));
             };
@@ -89,7 +90,7 @@ pub(crate) fn register(registry: &Registry) {
                 Err(error) => Value::adt(lang.err, vec![Value::str(&error.to_string())]),
             })
         })
-        .raw_function("to_list", |_, args| {
+        .raw_function_returns_xur("to_list", XurType::LIST, |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use facet::Facet;
 use xur_runtime::convert::into_value;
 use xur_runtime::{NativeObject, Record, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::registry::XurType;
 use xur_span::Symbol;
 
 use crate::{error_text, option, result};
@@ -359,7 +360,7 @@ pub(crate) fn register(registry: &Registry) {
                 .map_err(|e| RuntimeError::new(error_text(e)))?;
                 Ok(option(cx, free.map(|s| Value::str(&s))))
             })
-            .raw_function("remaining", |_cx, args| {
+            .raw_function_returns_xur("remaining", XurType::list::<String>(), |_cx, args| {
                 let [Value::Native(object)] = args else {
                     return Err(RuntimeError::new("`remaining` takes no arguments"));
                 };
@@ -398,7 +399,7 @@ pub(crate) fn register(registry: &Registry) {
             .named_raw_function_returns::<String>("prompt", &["message"], |_cx, args| prompt_text(args))
             .named_raw_function_returns::<bool>("confirm", &["message"], |_cx, args| prompt_confirm(args))
             .named_raw_function_returns::<String>("select", &["message", "options"], |_cx, args| prompt_select(args))
-            .named_raw_function("multi_select", &["message", "options"], |_cx, args| prompt_multi_select(args))
+            .named_raw_function_returns_xur("multi_select", &["message", "options"], XurType::list::<String>(), |_cx, args| prompt_multi_select(args))
             .named_raw_function_returns::<String>("password", &["message"], |_cx, args| prompt_password(args))
             .named_raw_function_returns::<String>("editor", &["message"], |_cx, args| prompt_editor(args));
     });
