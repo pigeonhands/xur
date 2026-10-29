@@ -1956,9 +1956,9 @@ dependencies = [
 
 [[package]]
 name = "hao"
-version = "0.0.7"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9480e5517de881225aa6ab0303004bb0942db12540257b8d6c0eba6a8936fa"
+checksum = "78a84b4d6465062d784b8f37c36a2ec1aa8ac094b46621689b85311cc41ea15e"
 dependencies = [
  "bitflags 2.13.2",
  "facet",
@@ -1970,9 +1970,9 @@ dependencies = [
 
 [[package]]
 name = "hao-godot"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b4fe3905a885bb2bfc815adfb454dd4eee778030e6b78b08aafd8c68a98ea0b"
+checksum = "5cc28e9fa82254f04600670ea7161a3fb7d5340bd3bff98dc5d7f60ec6d36531"
 dependencies = [
  "hao-runtime",
  "tracing",
@@ -1981,9 +1981,9 @@ dependencies = [
 
 [[package]]
 name = "hao-il2cpp"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0eba6e8e421443733ab1621bf79bee83c516847750b401fcda37ab6c261b631b"
+checksum = "85e4e28b59caf7e946f68b90d2c1237f1c43a11c58a26f5117d2e71513a59566"
 dependencies = [
  "facet",
  "hao",
@@ -1993,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "hao-il2cpp-runtime"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eb0e556b90ac8f3140ed275086caba16f54048a5a1e82c4367cde585d5ca3f6"
+checksum = "139d6348200ba2decb7c2986cc9190cca16687e7f0cefc981eed4795602937f0"
 dependencies = [
  "facet",
  "hooking",
@@ -2007,9 +2007,9 @@ dependencies = [
 
 [[package]]
 name = "hao-il2cpp-unity"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f075237520dbe502c44029a9a5621ec0d6884a9797f4dfb0aa183d886892fc91"
+checksum = "65b68c7076ea9f7d4456cc00d222ffffdd629a48803ae6614be9765e08d7b143"
 dependencies = [
  "egui 0.29.1",
  "facet",
@@ -2019,9 +2019,9 @@ dependencies = [
 
 [[package]]
 name = "hao-runtime"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9679a9f2a81f25821b7e8b90e22595526adaac4ea7aa4944db2c258afc3712d9"
+checksum = "df8ede1cb850734b3905b0c97049ded51e7923ed8ea88b5fba35ce137c8cd3bc"
 dependencies = [
  "facet",
  "hao",
@@ -5647,6 +5647,7 @@ dependencies = [
  "hao-godot",
  "hao-il2cpp-runtime",
  "hao-il2cpp-unity",
+ "hooking",
  "tracing",
  "tracing-subscriber",
  "xur-resolve",

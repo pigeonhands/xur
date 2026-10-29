@@ -33,12 +33,13 @@ facet = { version = "=0.50.0-rc.7", features = ["reflect"] }
 pewter = { version = "0.0.10", features = ["reflect"] }
 procodile = { version = "0.3.1", default-features = false, features = ["reflect", "inject"] }
 bitflags = "2.13"
-hao = { version = "0.0.7", features = ["reflect"] }
-hao-il2cpp = { version = "0.0.3", features = ["reflect"] }
-hao-runtime = { version = "0.0.3", features = ["reflect"] }
-hao-il2cpp-runtime = { version = "0.0.3", features = ["reflect"] }
-hao-il2cpp-unity = { version = "0.0.4", features = ["reflect"] }
-hao-godot = { version = "0.0.3", features = ["reflect"] }
+hao = { version = "0.0.9", features = ["reflect"] }
+hao-il2cpp = { version = "0.0.4", features = ["reflect"] }
+hao-runtime = { version = "0.0.4", features = ["reflect"] }
+hao-il2cpp-runtime = { version = "0.0.4", features = ["reflect"] }
+hao-il2cpp-unity = { version = "0.0.5", features = ["reflect"] }
+hao-godot = { version = "0.0.4", features = ["reflect"] }
+hooking = "0.6"
 iced-x86 = "1.21"
 ureq = "3.0"
 regex = "1.13"
