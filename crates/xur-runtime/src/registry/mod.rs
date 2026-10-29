@@ -369,8 +369,14 @@ impl Registry {
     fn xur_type_name(&self, ty: XurType) -> String {
         match ty {
             XurType::Ptr(inner) => format!("*{}", self.shape_xur_name(inner)),
-            XurType::List => "list".into(),
-            XurType::Map => "map".into(),
+            XurType::List(None) => "list".into(),
+            XurType::List(Some(elem)) => format!("list<{}>", self.shape_xur_name(elem)),
+            XurType::Map(None, None) => "map".into(),
+            XurType::Map(Some(k), Some(v)) => {
+                format!("map<{}, {}>", self.shape_xur_name(k), self.shape_xur_name(v))
+            }
+            XurType::Map(Some(k), None) => format!("map<{}, _>", self.shape_xur_name(k)),
+            XurType::Map(None, Some(v)) => format!("map<_, {}>", self.shape_xur_name(v)),
             XurType::Unit => "()".into(),
         }
     }

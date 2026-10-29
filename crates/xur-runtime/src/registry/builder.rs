@@ -27,8 +27,10 @@ impl<T: Facet<'static>> Returns for T {
 pub enum XurType {
     /// Pointer to the given type, displayed as `*inner`.
     Ptr(&'static Shape),
-    List,
-    Map,
+    /// List with optional element type, displayed as `list` or `list<T>`.
+    List(Option<&'static Shape>),
+    /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
+    Map(Option<&'static Shape>, Option<&'static Shape>),
     Unit,
 }
 
