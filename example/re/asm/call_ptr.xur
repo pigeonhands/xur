@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     let page_size = 4096;
     let page: *fn() = mem::alloc_page(page_size);
     mem::write_bytes(page, code);
-    mem::protect(page, page_size, "rx");
+    mem::protect(page, page_size, mem::Protection::Read | mem::Protection::Execute);
 
     io::println("page at {}", page.to_hex());
 
