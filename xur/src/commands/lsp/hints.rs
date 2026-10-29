@@ -149,12 +149,7 @@ impl InferredTy {
             }
             XurType::Ptr(None) => Self::Ptr(Box::new(Self::Infer)),
             XurType::List(Some(ElemHint::Shape(s))) => {
-                let elem = Self::from_shape(s, registry, resolutions);
-                if matches!(elem, Self::Prim(PrimTy::U8)) {
-                    Self::Prim(PrimTy::Bytes)
-                } else {
-                    Self::List(Some(Box::new(elem)))
-                }
+                Self::List(Some(Box::new(Self::from_shape(s, registry, resolutions))))
             }
             XurType::List(Some(ElemHint::Name(n))) => {
                 Self::List(Some(Box::new(Self::from_name(n))))
