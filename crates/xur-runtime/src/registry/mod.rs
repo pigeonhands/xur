@@ -47,7 +47,7 @@ use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
 use crate::{AdtInfo, BuiltinType, RunResult, RuntimeError, TypeRef, Value};
 
-pub use builder::{BuiltinBuilder, ModuleBuilder, TypeBuilder};
+pub use builder::{BuiltinBuilder, ModuleBuilder, Returns, TypeBuilder, XurType};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 
 use hooks::TypeHooks;
@@ -331,6 +331,9 @@ impl Registry {
             "u64" => "u64".into(),
             "usize" => "usize".into(),
             "()" => "()".into(),
+            "ShapePtr" => "*u8".into(),
+            "ShapeList" => "list".into(),
+            "ShapeMap" => "map".into(),
             "Vec<u8>" | "alloc::vec::Vec<u8>" => "bytes".into(),
             _ if name.starts_with("Vec<") || name == "Vec" => "list".into(),
             _ => {

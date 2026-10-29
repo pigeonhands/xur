@@ -9,6 +9,43 @@ use super::{CallFn, Context, NativeType, Registry, Signature};
 use crate::{BuiltinType, RunResult, Value};
 use xur_resolve::{NativeVariantDecl, NativeVariantKind};
 
+/// A type whose static [`Shape`] can serve as a return-type hint for the LSP.
+///
+/// Blanket-implemented for every [`Facet`] type. Implement manually for
+/// xur-only runtime types that have no Rust equivalent (see [`XurPtr`]).
+pub trait Returns {
+    const RET: &'static Shape;
+}
+
+impl<T: Facet<'static>> Returns for T {
+    const RET: &'static Shape = T::SHAPE;
+}
+
+/// Runtime-only xur types that have no Facet equivalent. Use with the
+/// `_xur` builder methods to annotate return types for the LSP.
+#[derive(Clone, Copy)]
+pub enum XurType {
+    Ptr,
+    List,
+    Map,
+    Unit,
+}
+
+#[derive(Facet)] struct ShapePtr;
+#[derive(Facet)] struct ShapeList;
+#[derive(Facet)] struct ShapeMap;
+
+impl XurType {
+    pub fn shape(self) -> &'static Shape {
+        match self {
+            Self::Ptr => ShapePtr::SHAPE,
+            Self::List => ShapeList::SHAPE,
+            Self::Map => ShapeMap::SHAPE,
+            Self::Unit => <()>::SHAPE,
+        }
+    }
+}
+
 /// Adds items to one module of a [`Registry`].
 pub struct ModuleBuilder<'r> {
     registry: &'r Registry,
@@ -69,12 +106,23 @@ impl ModuleBuilder<'_> {
 
     /// Like [`raw_function`](Self::raw_function), declaring the return type
     /// for LSP inlay hints.
-    pub fn raw_function_returns<R: Facet<'static>>(
+    pub fn raw_function_returns<R: Returns>(
         &mut self,
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(R::SHAPE))
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(R::RET))
+    }
+
+    /// Like [`raw_function_returns`](Self::raw_function_returns) for
+    /// xur-internal types that have no Facet equivalent.
+    pub fn raw_function_returns_xur(
+        &mut self,
+        name: &str,
+        ret: XurType,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add_module_fn(name, None, Vec::new(), Box::new(f), Some(ret.shape()))
     }
 
     /// Like [`raw_function`](Self::raw_function), with explicit parameter
@@ -91,14 +139,27 @@ impl ModuleBuilder<'_> {
 
     /// Like [`named_raw_function`](Self::named_raw_function), declaring the
     /// return type for LSP inlay hints.
-    pub fn named_raw_function_returns<R: Facet<'static>>(
+    pub fn named_raw_function_returns<R: Returns>(
         &mut self,
         name: &str,
         params: &[&str],
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
         let names = params.iter().map(|s| s.to_string()).collect();
-        self.add_module_fn(name, None, names, Box::new(f), Some(R::SHAPE))
+        self.add_module_fn(name, None, names, Box::new(f), Some(R::RET))
+    }
+
+    /// Like [`named_raw_function_returns`](Self::named_raw_function_returns)
+    /// for xur-internal types that have no Facet equivalent.
+    pub fn named_raw_function_returns_xur(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        ret: XurType,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        let names = params.iter().map(|s| s.to_string()).collect();
+        self.add_module_fn(name, None, names, Box::new(f), Some(ret.shape()))
     }
 
     fn add_module_fn(
@@ -250,12 +311,23 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
 
     /// Like [`raw_function`](Self::raw_function), declaring the return type
     /// for LSP inlay hints.
-    pub fn raw_function_returns<R: Facet<'static>>(
+    pub fn raw_function_returns<R: Returns>(
         &mut self,
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(R::SHAPE))
+        self.add(name, None, Box::new(f), Some(R::RET))
+    }
+
+    /// Like [`raw_function_returns`](Self::raw_function_returns) for
+    /// xur-internal types that have no Facet equivalent.
+    pub fn raw_function_returns_xur(
+        &mut self,
+        name: &str,
+        ret: XurType,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add(name, None, Box::new(f), Some(ret.shape()))
     }
 
     /// Registers a method taking `&self`: `value.name(args)` in Xur.
@@ -323,12 +395,23 @@ impl<'r> BuiltinBuilder<'r> {
 
     /// Like [`raw_function`](Self::raw_function), declaring the return type
     /// for LSP inlay hints.
-    pub fn raw_function_returns<R: Facet<'static>>(
+    pub fn raw_function_returns<R: Returns>(
         &mut self,
         name: &str,
         f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.add(name, None, Box::new(f), Some(R::SHAPE))
+        self.add(name, None, Box::new(f), Some(R::RET))
+    }
+
+    /// Like [`raw_function_returns`](Self::raw_function_returns) for
+    /// xur-internal types that have no Facet equivalent.
+    pub fn raw_function_returns_xur(
+        &mut self,
+        name: &str,
+        ret: XurType,
+        f: impl Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.add(name, None, Box::new(f), Some(ret.shape()))
     }
 
     fn add(
