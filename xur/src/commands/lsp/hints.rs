@@ -599,6 +599,18 @@ pub fn infer_expr_type(
             }
         },
         ExprKind::Unary(_, inner) => infer_expr_type(inner, resolutions, items, registry, local_types),
+        ExprKind::Index(collection, index) => {
+            let col_ty = infer_expr_type(collection, resolutions, items, registry, local_types)?;
+            if matches!(index.kind, ExprKind::Range(..)) {
+                return Some(col_ty);
+            }
+            match col_ty {
+                InferredTy::List(Some(inner)) => Some(*inner),
+                InferredTy::Prim(PrimTy::Str) => Some(InferredTy::Prim(PrimTy::Str)),
+                InferredTy::Prim(PrimTy::Bytes) => Some(InferredTy::Prim(PrimTy::I64)),
+                _ => None,
+            }
+        }
         ExprKind::Path(path) => {
             let res = resolutions.res.get(&path.id)?;
             match res {
