@@ -90,7 +90,7 @@ pub(crate) fn register(registry: &Registry) {
                 Err(error) => Value::adt(lang.err, vec![Value::str(&error.to_string())]),
             })
         })
-        .raw_function_returns_xur("to_list", XurType::list::<u8>(), |_, args| {
+        .raw_function_returns_xur("to_list", XurType::list::<i64>(), |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };

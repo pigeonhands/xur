@@ -149,7 +149,12 @@ impl InferredTy {
             }
             XurType::Ptr(None) => Self::Ptr(Box::new(Self::Infer)),
             XurType::List(Some(ElemHint::Shape(s))) => {
-                Self::List(Some(Box::new(Self::from_shape(s, registry, resolutions))))
+                let elem = Self::from_shape(s, registry, resolutions);
+                if matches!(elem, Self::Prim(PrimTy::U8)) {
+                    Self::Prim(PrimTy::Bytes)
+                } else {
+                    Self::List(Some(Box::new(elem)))
+                }
             }
             XurType::List(Some(ElemHint::Name(n))) => {
                 Self::List(Some(Box::new(Self::from_name(n))))
@@ -170,10 +175,11 @@ impl InferredTy {
             }
         }
         if let Ok(list) = shape.def.into_list() {
-            if std::ptr::eq(list.t(), <u8 as facet::Facet>::SHAPE) {
+            let elem = Self::from_shape(list.t(), registry, resolutions);
+            if matches!(elem, Self::Prim(PrimTy::U8)) {
                 return Self::Prim(PrimTy::Bytes);
             }
-            return Self::List(Some(Box::new(Self::from_shape(list.t(), registry, resolutions))));
+            return Self::List(Some(Box::new(elem)));
         }
         Self::from_rust_shape(shape)
     }
