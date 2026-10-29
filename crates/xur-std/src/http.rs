@@ -11,24 +11,24 @@ use crate::{error_text, result};
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::http", |module| {
         module
-            .raw_function("get", http_get)
-            .raw_function("post", http_post)
-            .raw_function("put", http_put)
-            .raw_function("patch", http_patch)
-            .raw_function("delete", http_delete)
-            .raw_function("head", http_head)
-            .raw_function("request", http_request);
+            .raw_function("get", http_get).returns::<Response>()
+            .raw_function("post", http_post).returns::<Response>()
+            .raw_function("put", http_put).returns::<Response>()
+            .raw_function("patch", http_patch).returns::<Response>()
+            .raw_function("delete", http_delete).returns::<Response>()
+            .raw_function("head", http_head).returns::<Response>()
+            .raw_function("request", http_request).returns::<RequestBuilder>();
 
         module
             .ty::<RequestBuilder>("RequestBuilder")
-            .raw_function("header", rb_header)
-            .raw_function("bearer_auth", rb_bearer_auth)
-            .raw_function("basic_auth", rb_basic_auth)
-            .raw_function("body", rb_body)
-            .raw_function("json_body", rb_json_body)
-            .raw_function("timeout", rb_timeout)
-            .raw_function("query", rb_query)
-            .raw_function("send", rb_send);
+            .raw_function("header", rb_header).returns::<RequestBuilder>()
+            .raw_function("bearer_auth", rb_bearer_auth).returns::<RequestBuilder>()
+            .raw_function("basic_auth", rb_basic_auth).returns::<RequestBuilder>()
+            .raw_function("body", rb_body).returns::<RequestBuilder>()
+            .raw_function("json_body", rb_json_body).returns::<RequestBuilder>()
+            .raw_function("timeout", rb_timeout).returns::<RequestBuilder>()
+            .raw_function("query", rb_query).returns::<RequestBuilder>()
+            .raw_function("send", rb_send).returns::<Response>();
 
         module
             .ty::<Response>("Response")

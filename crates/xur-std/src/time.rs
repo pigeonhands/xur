@@ -7,14 +7,16 @@ use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::time", |module| {
         module
-            .raw_function("now", instant_now)
+            .function("now", || Instant(time::Instant::now()))
             .raw_function("sleep", time_sleep)
-            .raw_function("from_secs", dur_from_secs)
-            .raw_function("from_millis", dur_from_millis);
+            .raw_function("from_secs", dur_from_secs).returns::<Duration>()
+            .named_function("from_millis", &["ms"], |ms: i64| {
+                Duration(time::Duration::from_millis(ms as u64))
+            });
 
         module
             .ty::<Instant>("Instant")
-            .raw_function("elapsed", instant_elapsed);
+            .method("elapsed", |i: &Instant| Duration(i.0.elapsed()));
 
         module
             .ty::<Duration>("Duration")
@@ -38,25 +40,6 @@ impl std::fmt::Display for Instant {
     }
 }
 
-fn instant_now(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    if !args.is_empty() {
-        return Err(RuntimeError::new("`now` takes no arguments"));
-    }
-    into_value(cx, Instant(time::Instant::now()))
-}
-
-fn instant_elapsed(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this] = args else {
-        return Err(RuntimeError::new("`elapsed` takes no arguments"));
-    };
-    let elapsed = match this {
-        Value::Native(obj) => obj
-            .with(|i: &Instant| i.0.elapsed())
-            .ok_or_else(|| RuntimeError::new("expected an Instant"))?,
-        _ => return Err(RuntimeError::new("expected an Instant")),
-    };
-    into_value(cx, Duration(elapsed))
-}
 
 // ── Duration ───────────────────────────────────────────────────────
 
@@ -88,12 +71,6 @@ fn dur_from_secs(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     into_value(cx, Duration(secs))
 }
 
-fn dur_from_millis(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`from_millis` takes an integer"));
-    };
-    into_value(cx, Duration(time::Duration::from_millis(*n as u64)))
-}
 
 fn time_sleep(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     match args {

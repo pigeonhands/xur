@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
 use facet::Facet;
-use xur_runtime::convert::into_value;
 use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 
 use crate::option;
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::regex", |module| {
-        module.raw_function("new", regex_new);
+        module.named_function("new", &["pattern"], |pattern: String| {
+            regex::Regex::new(&pattern)
+                .map(|re| Regex(Arc::new(re)))
+                .map_err(|e| format!("invalid regex: {e}"))
+        });
 
         module
             .ty::<Regex>("Regex")
@@ -41,14 +44,6 @@ fn with_re<R>(value: &Value, f: impl FnOnce(&regex::Regex) -> R) -> RunResult<R>
     }
 }
 
-fn regex_new(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Str(pattern)] = args else {
-        return Err(RuntimeError::new("`new` takes a pattern string"));
-    };
-    let re = regex::Regex::new(pattern)
-        .map_err(|e| RuntimeError::new(format!("invalid regex: {e}")))?;
-    into_value(cx, Regex(Arc::new(re)))
-}
 
 fn regex_is_match(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [this, Value::Str(text)] = args else {

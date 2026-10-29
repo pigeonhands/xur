@@ -226,8 +226,9 @@ pub fn infer_expr_type(
 
 fn native_return_type(id: NativeFnId, registry: &Registry) -> Option<String> {
     let native_fn = registry.function(id);
-    let sig = native_fn.signature.as_ref()?;
-    Some(registry.shape_xur_name(sig.ret))
+    let ret = native_fn.signature.as_ref().map(|s| s.ret)
+        .or(native_fn.return_hint)?;
+    Some(registry.shape_xur_name(ret))
 }
 
 /// Walk the receiver expression to find a native function call's return Shape.

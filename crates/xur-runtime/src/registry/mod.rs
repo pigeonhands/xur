@@ -111,6 +111,8 @@ pub struct NativeFn {
     pub name: String,
     /// `None` for raw functions, which take any arguments.
     pub signature: Option<Signature>,
+    /// Return type for raw functions that lack a full signature.
+    pub return_hint: Option<&'static Shape>,
     pub param_names: Vec<String>,
     call: Box<CallFn>,
 }
@@ -337,9 +339,20 @@ impl Registry {
         }
     }
 
-    /// The return-type Shape of a native function, if it has a signature.
+    /// The return-type Shape of a native function.
     pub fn native_return_shape(&self, id: NativeFnId) -> Option<&'static Shape> {
-        self.function(id).signature.as_ref().map(|s| s.ret)
+        let f = self.function(id);
+        f.signature.as_ref().map(|s| s.ret).or(f.return_hint)
+    }
+
+    /// Sets the return-type hint on a raw function registered without a
+    /// full signature, for LSP inlay hints.
+    pub(super) fn set_return_hint(&self, id: NativeFnId, ret: &'static Shape) {
+        let mut inner = self.write();
+        let slot = &mut inner.fns[id.0 as usize];
+        Arc::get_mut(slot)
+            .expect("return hint set during registration")
+            .return_hint = Some(ret);
     }
 
     /// Extract the xur name of the `index`th type parameter from a generic
@@ -642,6 +655,7 @@ impl Inner {
         self.fns.push(Arc::new(NativeFn {
             name: name.to_owned(),
             signature,
+            return_hint: None,
             param_names: param_names.clone(),
             call,
         }));

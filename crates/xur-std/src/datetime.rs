@@ -6,10 +6,14 @@ use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::datetime", |module| {
         module
-            .raw_function("now", dt_now)
-            .raw_function("utc_now", dt_utc_now)
-            .raw_function("from_timestamp", dt_from_timestamp)
-            .raw_function("parse", dt_parse);
+            .function("now", || DateTime(chrono::Local::now().fixed_offset()))
+            .function("utc_now", || DateTime(chrono::Utc::now().fixed_offset()))
+            .named_function("from_timestamp", &["secs"], |ts: i64| {
+                chrono::DateTime::from_timestamp(ts, 0)
+                    .map(|dt| DateTime(dt.fixed_offset()))
+                    .ok_or_else(|| "invalid timestamp".to_string())
+            })
+            .raw_function("parse", dt_parse).returns::<DateTime>();
 
         module
             .ty::<DateTime>("DateTime")
@@ -23,14 +27,26 @@ pub(crate) fn register(registry: &Registry) {
             .method("timestamp_millis", |d: &DateTime| d.0.timestamp_millis())
             .method("weekday", |d: &DateTime| d.0.format("%A").to_string())
             .method("iso", |d: &DateTime| d.0.to_rfc3339())
-            .raw_function("format", dt_format)
-            .raw_function("add_days", dt_add_days)
-            .raw_function("add_hours", dt_add_hours)
-            .raw_function("add_minutes", dt_add_minutes)
-            .raw_function("add_seconds", dt_add_seconds)
-            .raw_function("add_weeks", dt_add_weeks)
-            .raw_function("add_months", dt_add_months)
-            .raw_function("add_years", dt_add_years);
+            .method("format", |d: &DateTime, fmt: String| {
+                d.0.format(&fmt).to_string()
+            })
+            .method("add_days", |d: &DateTime, n: i64| {
+                DateTime(d.0 + chrono::TimeDelta::days(n))
+            })
+            .method("add_hours", |d: &DateTime, n: i64| {
+                DateTime(d.0 + chrono::TimeDelta::hours(n))
+            })
+            .method("add_minutes", |d: &DateTime, n: i64| {
+                DateTime(d.0 + chrono::TimeDelta::minutes(n))
+            })
+            .method("add_seconds", |d: &DateTime, n: i64| {
+                DateTime(d.0 + chrono::TimeDelta::seconds(n))
+            })
+            .method("add_weeks", |d: &DateTime, n: i64| {
+                DateTime(d.0 + chrono::TimeDelta::weeks(n))
+            })
+            .raw_function("add_months", dt_add_months).returns::<DateTime>()
+            .raw_function("add_years", dt_add_years).returns::<DateTime>();
     });
 }
 
@@ -42,32 +58,6 @@ impl std::fmt::Display for DateTime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.to_rfc3339())
     }
-}
-
-fn dt_now(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    if !args.is_empty() {
-        return Err(RuntimeError::new("`now` takes no arguments"));
-    }
-    let now = chrono::Local::now().fixed_offset();
-    into_value(cx, DateTime(now))
-}
-
-fn dt_utc_now(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    if !args.is_empty() {
-        return Err(RuntimeError::new("`utc_now` takes no arguments"));
-    }
-    let now = chrono::Utc::now().fixed_offset();
-    into_value(cx, DateTime(now))
-}
-
-fn dt_from_timestamp(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Int(ts)] = args else {
-        return Err(RuntimeError::new("`from_timestamp` takes a unix timestamp"));
-    };
-    let dt = chrono::DateTime::from_timestamp(*ts, 0)
-        .ok_or_else(|| RuntimeError::new("invalid timestamp"))?
-        .fixed_offset();
-    into_value(cx, DateTime(dt))
 }
 
 fn dt_parse(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
@@ -94,64 +84,17 @@ fn dt_parse(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     Ok(crate::result(cx, Ok(value)))
 }
 
-fn with_dt(value: &Value, f: impl FnOnce(&DateTime) -> DateTime) -> RunResult<DateTime> {
-    match value {
-        Value::Native(obj) => obj
-            .with(f)
-            .ok_or_else(|| RuntimeError::new("expected a DateTime")),
-        _ => Err(RuntimeError::new("expected a DateTime")),
-    }
-}
-
-fn dt_add_days(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`add_days` takes an integer"));
-    };
-    let dt = with_dt(this, |d| DateTime(d.0 + chrono::TimeDelta::days(*n)))?;
-    into_value(cx, dt)
-}
-
-fn dt_add_hours(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`add_hours` takes an integer"));
-    };
-    let dt = with_dt(this, |d| DateTime(d.0 + chrono::TimeDelta::hours(*n)))?;
-    into_value(cx, dt)
-}
-
-fn dt_add_minutes(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`add_minutes` takes an integer"));
-    };
-    let dt = with_dt(this, |d| DateTime(d.0 + chrono::TimeDelta::minutes(*n)))?;
-    into_value(cx, dt)
-}
-
-fn dt_add_seconds(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`add_seconds` takes an integer"));
-    };
-    let dt = with_dt(this, |d| DateTime(d.0 + chrono::TimeDelta::seconds(*n)))?;
-    into_value(cx, dt)
-}
-
-fn dt_add_weeks(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Int(n)] = args else {
-        return Err(RuntimeError::new("`add_weeks` takes an integer"));
-    };
-    let dt = with_dt(this, |d| DateTime(d.0 + chrono::TimeDelta::weeks(*n)))?;
-    into_value(cx, dt)
-}
-
 fn dt_add_months(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [this, Value::Int(n)] = args else {
         return Err(RuntimeError::new("`add_months` takes an integer"));
     };
-    let dt = if *n >= 0 {
-        with_dt(this, |d| DateTime(d.0 + chrono::Months::new(*n as u32)))?
-    } else {
-        with_dt(this, |d| DateTime(d.0 - chrono::Months::new((-*n) as u32)))?
-    };
+    let dt = with_dt(this, |d| {
+        if *n >= 0 {
+            DateTime(d.0 + chrono::Months::new(*n as u32))
+        } else {
+            DateTime(d.0 - chrono::Months::new((-*n) as u32))
+        }
+    })?;
     into_value(cx, dt)
 }
 
@@ -160,23 +103,21 @@ fn dt_add_years(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         return Err(RuntimeError::new("`add_years` takes an integer"));
     };
     let months = *n * 12;
-    let dt = if months >= 0 {
-        with_dt(this, |d| DateTime(d.0 + chrono::Months::new(months as u32)))?
-    } else {
-        with_dt(this, |d| DateTime(d.0 - chrono::Months::new((-months) as u32)))?
-    };
+    let dt = with_dt(this, |d| {
+        if months >= 0 {
+            DateTime(d.0 + chrono::Months::new(months as u32))
+        } else {
+            DateTime(d.0 - chrono::Months::new((-months) as u32))
+        }
+    })?;
     into_value(cx, dt)
 }
 
-fn dt_format(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Str(fmt)] = args else {
-        return Err(RuntimeError::new("`format` takes a format string"));
-    };
-    let formatted = match this {
+fn with_dt(value: &Value, f: impl FnOnce(&DateTime) -> DateTime) -> RunResult<DateTime> {
+    match value {
         Value::Native(obj) => obj
-            .with(|d: &DateTime| d.0.format(fmt).to_string())
-            .ok_or_else(|| RuntimeError::new("expected a DateTime"))?,
-        _ => return Err(RuntimeError::new("expected a DateTime")),
-    };
-    Ok(Value::str(&formatted))
+            .with(f)
+            .ok_or_else(|| RuntimeError::new("expected a DateTime")),
+        _ => Err(RuntimeError::new("expected a DateTime")),
+    }
 }

@@ -10,8 +10,8 @@ provides Perl-compatible regular expressions backed by the Rust
 crate.
 .SH FUNCTIONS
 .TP
-.B regex::new(pattern) -> Regex
-Compile a regex pattern. Raises an error on invalid syntax.
+.B regex::new(pattern) -> Result<Regex, str>
+Compile a regex pattern. Returns Err on invalid syntax.
 .SH REGEX METHODS
 .TP
 .B is_match(text) -> bool
@@ -45,16 +45,17 @@ Split the text around all matches.
 use std::regex;
 use std::io;
 
-fn main() {
-    let re = regex::new(r"\\d+");
+fn main() -> Result<()> {
+    let re = regex::new("\\\\d+")?;
     io::println("{}", re.find_all("a1 b22 c333"));
     // => ["1", "22", "333"]
 
-    let email = regex::new(r"(\\w+)@(\\w+\\.\\w+)");
+    let email = regex::new("(\\\\w+)@(\\\\w+\\\\.\\\\w+)")?;
     match email.captures("user@example.com") {
         Some(caps) => io::println("{} at {}", caps[1], caps[2]),
         None => io::println("no match"),
     }
+    Ok(())
 }
 .fi
 .SH SEE ALSO

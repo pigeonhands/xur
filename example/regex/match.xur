@@ -7,8 +7,8 @@
 use std::regex;
 use std::io;
 
-fn main() {
-    let re = regex::new("\\d+");
+fn main() -> Result<()> {
+    let re = regex::new("\\d+")?;
 
     io::println("is_match('abc123'): {}", re.is_match("abc123"));
     io::println("is_match('abc'):    {}", re.is_match("abc"));
@@ -24,7 +24,7 @@ fn main() {
     io::println("all matches: {}", all);
 
     // captures with groups
-    let email_re = regex::new("(\\w+)@(\\w+)\\.(\\w+)");
+    let email_re = regex::new("(\\w+)@(\\w+)\\.(\\w+)")?;
     match email_re.captures("user@example.com") {
         Some(caps) => {
             io::println("full:   {}", caps[0]);
@@ -36,10 +36,12 @@ fn main() {
     }
 
     // replace
-    let censored = regex::new("\\b\\w{4}\\b");
+    let censored = regex::new("\\b\\w{4}\\b")?;
     io::println("replace: {}", censored.replace_all("the quick brown fox", "****"));
 
     // split
-    let csv = regex::new(",\\s*");
+    let csv = regex::new(",\\s*")?;
     io::println("split: {}", csv.split("one, two,three ,  four"));
+
+    Ok(())
 }

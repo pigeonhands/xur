@@ -53,8 +53,8 @@ pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
     x86.raw_function("decode", decode)
         .raw_function("encode", encode)
         .raw_function("format", format_insn)
-        .raw_function("insn", create_insn)
-        .raw_function("mem", create_mem);
+        .raw_function("insn", create_insn).returns::<Insn>()
+        .raw_function("mem", create_mem).returns::<MemOp>();
 
     register_insn(&mut x86);
     register_enums(&mut x86);
