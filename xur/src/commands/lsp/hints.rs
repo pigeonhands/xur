@@ -681,6 +681,9 @@ pub fn infer_iter_element_type(
                 if let InferredTy::List(Some(inner)) = ty {
                     return Some(*inner);
                 }
+                if matches!(ty, InferredTy::Prim(PrimTy::Bytes)) {
+                    return Some(InferredTy::Prim(PrimTy::U8));
+                }
             }
             None
         }
