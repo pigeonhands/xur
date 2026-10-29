@@ -50,7 +50,7 @@ impl std::fmt::Display for Insn {
 pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
     let mut x86 = asm.submodule("x86");
 
-    x86.raw_function_returns_xur("decode", XurType::LIST, decode)
+    x86.raw_function_returns_xur("decode", XurType::list::<Insn>(), decode)
         .raw_function_returns::<Vec<u8>>("encode", encode)
         .raw_function_returns::<String>("format", format_insn)
         .raw_function_returns::<Insn>("insn", create_insn)
