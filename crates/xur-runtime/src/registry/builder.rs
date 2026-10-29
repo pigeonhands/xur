@@ -29,6 +29,8 @@ pub enum ElemHint {
     Shape(&'static Shape),
     /// A type name for primitives that have no Facet representation (e.g. `type`).
     Name(&'static str),
+    /// The nth type parameter of the receiver (e.g. element type of a list).
+    Param(u8),
 }
 
 /// `_xur` builder methods to annotate return types for the LSP.
@@ -40,10 +42,8 @@ pub enum XurType {
     List(Option<ElemHint>),
     /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
     Map(Option<&'static Shape>, Option<&'static Shape>),
-    /// `Result<T, E>` — the Ok and Err inner types.
-    Result(ElemHint, ElemHint),
-    /// `Option<T>` — the Some inner type.
-    Option(ElemHint),
+    /// A named type with generic type parameters, e.g. `Result<module, str>`.
+    Named(&'static str, &'static [ElemHint]),
     Record,
     Module,
     Unit,

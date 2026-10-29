@@ -154,9 +154,9 @@ impl InferredTy {
             XurType::List(Some(ElemHint::Name(n))) => {
                 Self::List(Some(Box::new(Self::from_name(n))))
             }
-            XurType::List(None) => Self::List(None),
+            XurType::List(Some(ElemHint::Param(_))) | XurType::List(None) => Self::List(None),
             XurType::Map(_, _) => Self::Map,
-            XurType::Result(_, _) | XurType::Option(_) => Self::Infer,
+            XurType::Named(_, _) => Self::Infer,
             XurType::Record => Self::Record,
             XurType::Module => Self::Module,
         }
@@ -534,10 +534,10 @@ pub fn infer_expr_type(
         ExprKind::MethodCall(mc) => {
             let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
             let method = mc.seg.ident.name.as_str();
-            if let Some(ty) = resolve_and_return(
-                &receiver_ty, method, resolutions, registry,
-            ) {
-                return Some(ty);
+            if let Some(id) = resolve_method(&receiver_ty, method, resolutions, registry) {
+                if let Some(ty) = InferredTy::from_registry(id, registry, resolutions) {
+                    return Some(resolve_params(ty, &receiver_ty));
+                }
             }
             if let Some(def) = receiver_ty.def_id() {
                 if let Some(ty) = user_method_return_type(
@@ -710,24 +710,22 @@ pub fn infer_match_arm_type(
     let id = resolve_callee_id(scrutinee, resolutions, items, registry, local_types)?;
     let hint = registry.function(id).return_hint?;
     use xur_runtime::registry::{ElemHint, ReturnHint, XurType};
-    if let ReturnHint::Xur(xur) = hint {
-        match xur {
-            XurType::Result(ok, err) => {
-                let ty = if variant_def == lang.ok { ok } else if variant_def == lang.err { err } else { return None };
-                return Some(match ty {
+    if let ReturnHint::Xur(XurType::Named(_, params)) = hint {
+        let index = if variant_def == lang.ok || variant_def == lang.some {
+            Some(0)
+        } else if variant_def == lang.err {
+            Some(1)
+        } else {
+            None
+        };
+        if let Some(i) = index {
+            if let Some(&hint) = params.get(i) {
+                return Some(match hint {
                     ElemHint::Shape(s) => InferredTy::from_shape(s, registry, resolutions),
                     ElemHint::Name(n) => InferredTy::from_name(n),
+                    ElemHint::Param(_) => InferredTy::Infer,
                 });
             }
-            XurType::Option(inner) => {
-                if variant_def == lang.some {
-                    return Some(match inner {
-                        ElemHint::Shape(s) => InferredTy::from_shape(s, registry, resolutions),
-                        ElemHint::Name(n) => InferredTy::from_name(n),
-                    });
-                }
-            }
-            _ => {}
         }
     }
     None
@@ -912,6 +910,21 @@ fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<us
     Some(idx - start)
 }
 
+/// Substitute `ElemHint::Param(n)` in a return type with the nth type parameter
+/// of the receiver. For a `List(Some(elem))` receiver, param 0 is `elem`.
+fn resolve_params(ret: InferredTy, receiver: &InferredTy) -> InferredTy {
+    match ret {
+        InferredTy::List(None) => {
+            if let InferredTy::List(Some(inner)) = receiver {
+                InferredTy::List(Some(inner.clone()))
+            } else {
+                ret
+            }
+        }
+        _ => ret,
+    }
+}
+
 fn resolve_method(
     ty: &InferredTy,
     method: &str,
@@ -935,15 +948,6 @@ fn resolve_method(
     None
 }
 
-fn resolve_and_return(
-    ty: &InferredTy,
-    method: &str,
-    resolutions: &Resolutions,
-    registry: &Registry,
-) -> Option<InferredTy> {
-    let id = resolve_method(ty, method, resolutions, registry)?;
-    InferredTy::from_registry(id, registry, resolutions)
-}
 
 pub fn method_signature(
     receiver_ty: Option<&str>,

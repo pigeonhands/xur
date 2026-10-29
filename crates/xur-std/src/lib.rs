@@ -57,7 +57,7 @@ pub fn register(registry: &Registry) {
         .named_raw_function_returns_xur(
             "try_import",
             &["path"],
-            XurType::Result(ElemHint::Name("module"), ElemHint::Name("str")),
+            XurType::Named("Result", &[ElemHint::Name("module"), ElemHint::Name("str")]),
             try_import,
         )
         .named_raw_function_returns_xur("panic", &["format", "args"], XurType::UNIT, panic)

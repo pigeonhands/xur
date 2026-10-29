@@ -184,7 +184,7 @@ fn main() -> Result<()> {
 
     let dir: str = path::join("example", folder);
     let files = fs::read_dir(dir)?;
-    let examples: [str] = files.filter(|e| e.ends_with(".xur"));
+    let examples = files.filter(|e| e.ends_with(".xur"));
 
     let file = cli::select("Pick an example:", examples);
 

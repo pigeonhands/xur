@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
-use xur_runtime::registry::XurType;
+use xur_runtime::registry::{ElemHint, XurType};
 
 use crate::option;
 
@@ -125,7 +125,7 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(Value::list(result))
         })
-        .raw_function_returns_xur("filter", XurType::LIST, |cx, args| {
+        .raw_function_returns_xur("filter", XurType::List(Some(ElemHint::Param(0))), |cx, args| {
             let (list, [f]) = receiver(args)? else {
                 return arity(1);
             };

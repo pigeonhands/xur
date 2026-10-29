@@ -371,22 +371,17 @@ impl Registry {
             XurType::Ptr(Some(inner)) => format!("*{}", self.shape_xur_name(inner)),
             XurType::Ptr(None) => "ptr".into(),
             XurType::List(None) => "list".into(),
-            XurType::List(Some(ElemHint::Shape(s))) => format!("list<{}>", self.shape_xur_name(s)),
-            XurType::List(Some(ElemHint::Name(n))) => format!("list<{n}>"),
+            XurType::List(Some(hint)) => format!("list<{}>", self.elem_hint_name(hint)),
             XurType::Map(None, None) => "map".into(),
             XurType::Map(Some(k), Some(v)) => {
                 format!("map<{}, {}>", self.shape_xur_name(k), self.shape_xur_name(v))
             }
             XurType::Map(Some(k), None) => format!("map<{}, _>", self.shape_xur_name(k)),
             XurType::Map(None, Some(v)) => format!("map<_, {}>", self.shape_xur_name(v)),
-            XurType::Result(ok, err) => {
-                let ok = match ok { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
-                let err = match err { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
-                format!("Result<{ok}, {err}>")
-            }
-            XurType::Option(inner) => {
-                let inner = match inner { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
-                format!("Option<{inner}>")
+            XurType::Named(name, params) if params.is_empty() => (*name).into(),
+            XurType::Named(name, params) => {
+                let args: Vec<_> = params.iter().map(|h| self.elem_hint_name(*h)).collect();
+                format!("{name}<{}>", args.join(", "))
             }
             XurType::Record => "record".into(),
             XurType::Module => "module".into(),
@@ -395,6 +390,14 @@ impl Registry {
     }
 
     /// Sets the return-type hint on a raw function registered without a
+    fn elem_hint_name(&self, hint: ElemHint) -> String {
+        match hint {
+            ElemHint::Shape(s) => self.shape_xur_name(s),
+            ElemHint::Name(n) => n.into(),
+            ElemHint::Param(n) => format!("T{n}"),
+        }
+    }
+
     /// full signature, for LSP inlay hints.
     pub(super) fn set_return_hint(&self, id: NativeFnId, hint: ReturnHint) {
         let mut inner = self.write();
