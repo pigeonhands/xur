@@ -205,6 +205,10 @@ pub fn infer_expr_type(
                         let parent = resolutions.defs.get(*def).parent?;
                         Some(resolutions.defs.get(parent).name.to_string())
                     }
+                    Res::Local(node_id) => {
+                        let ty = local_types.get(node_id)?;
+                        fn_return_type(ty)
+                    }
                     _ => None,
                 }
             } else {
@@ -314,6 +318,17 @@ pub fn infer_expr_type(
             }
         }
         _ => None,
+    }
+}
+
+fn fn_return_type(ty: &str) -> Option<String> {
+    let s = ty.strip_prefix('*').unwrap_or(ty);
+    if !s.starts_with("fn(") {
+        return None;
+    }
+    match s.rsplit_once(" -> ") {
+        Some((_, ret)) => Some(ret.to_string()),
+        None => Some("()".into()),
     }
 }
 
