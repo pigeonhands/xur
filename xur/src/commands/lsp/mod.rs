@@ -19,7 +19,8 @@ use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
-    CallCollector, LetCollector, MatchCollector, build_param_name_map, infer_expr_type,
+    CallCollector, ForLoopCollector, LetCollector, MatchCollector, build_param_name_map,
+    infer_expr_type, infer_iter_element_type,
     method_at_offset, method_signature,
 };
 use util::*;
@@ -415,9 +416,11 @@ impl LanguageServer for Backend {
             let mut call_collector = CallCollector(Vec::new());
             let mut let_collector = LetCollector(Vec::new());
             let mut match_collector = MatchCollector(Vec::new());
+            let mut for_collector = ForLoopCollector(Vec::new());
             call_collector.visit_module(module.ast);
             let_collector.visit_module(module.ast);
             match_collector.visit_module(module.ast);
+            for_collector.visit_module(module.ast);
 
             for (callee_id, args) in call_collector.0 {
                 let Some(&res) = resolutions.res.get(&callee_id) else {
@@ -488,6 +491,25 @@ impl LanguageServer for Backend {
                         label: InlayHintLabel::String(format!(": {ty}")),
                         kind: Some(InlayHintKind::TYPE),
                         padding_left: Some(true),
+                        padding_right: None,
+                        text_edits: None,
+                        tooltip: None,
+                        data: None,
+                    });
+                }
+            }
+
+            for (pat_end, iter) in &for_collector.0 {
+                if !in_file(Span { start: *pat_end, end: *pat_end }) {
+                    continue;
+                }
+                if let Some(ty) = infer_iter_element_type(iter, resolutions, &state.items, &state.registry) {
+                    let pos = file.line_col(*pat_end);
+                    hints.push(InlayHint {
+                        position: Position::new(pos.line - 1, pos.col - 1),
+                        label: InlayHintLabel::String(format!(": {ty}")),
+                        kind: Some(InlayHintKind::TYPE),
+                        padding_left: None,
                         padding_right: None,
                         text_edits: None,
                         tooltip: None,

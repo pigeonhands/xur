@@ -45,6 +45,17 @@ impl<'ast> Visitor<'ast> for MatchCollector<'ast> {
     }
 }
 
+pub struct ForLoopCollector<'a>(pub Vec<(usize, &'a Expr)>);
+
+impl<'ast> Visitor<'ast> for ForLoopCollector<'ast> {
+    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
+        if let ExprKind::ForLoop { pat, iter, .. } = &expr.kind {
+            self.0.push((pat.span.end, iter));
+        }
+        visit::walk_expr(self, expr);
+    }
+}
+
 /// Info about a method call at a cursor position.
 pub struct MethodAt {
     pub method_name: String,
@@ -156,7 +167,13 @@ pub fn infer_expr_type(
                         }
                     }
                     Res::Def(DefKind::NativeFn(id), _) => {
-                        native_return_type(*id, registry)
+                        if let Some(ty) = native_return_type(*id, registry) {
+                            return Some(ty);
+                        }
+                        path.segments.last()
+                            .and_then(|seg| seg.args.as_ref())
+                            .and_then(|args| args.args.first())
+                            .map(|ty| type_name(resolutions, ty))
                     }
                     Res::Def(DefKind::Struct | DefKind::NativeType(_), def) => {
                         Some(resolutions.defs.get(*def).name.to_string())
@@ -228,6 +245,27 @@ pub fn infer_expr_type(
                     _ => t,
                 })
         }
+        ExprKind::Cast(_, ty) => Some(type_name(resolutions, ty)),
+        ExprKind::Closure(closure) => {
+            let params: Vec<_> = closure.decl.inputs.iter()
+                .map(|p| type_name(resolutions, &p.ty))
+                .collect();
+            let ret = match &closure.decl.output {
+                FnRetTy::Ty(ty) => type_name(resolutions, ty),
+                FnRetTy::Default(_) => {
+                    infer_expr_type(&closure.body, resolutions, items, registry)
+                        .unwrap_or_else(|| "_".into())
+                }
+            };
+            if params.iter().all(|p| p == "_") && ret == "_" {
+                return None;
+            }
+            if ret == "()" {
+                Some(format!("fn({})", params.join(", ")))
+            } else {
+                Some(format!("fn({}) -> {}", params.join(", "), ret))
+            }
+        }
         ExprKind::Path(_) => None,
         _ => None,
     }
@@ -276,6 +314,28 @@ fn native_call_return_shape(
             None
         }
         _ => None,
+    }
+}
+
+pub fn infer_iter_element_type(
+    iter: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+) -> Option<String> {
+    match &iter.kind {
+        ExprKind::Range(..) => Some("i64".into()),
+        ExprKind::List(elems) => {
+            elems.first().and_then(|e| infer_expr_type(e, resolutions, items, registry))
+        }
+        _ => {
+            if let Some(shape) = native_call_return_shape(iter, resolutions, registry) {
+                if let Ok(list) = shape.def.into_list() {
+                    return Some(registry.shape_xur_name(list.t()));
+                }
+            }
+            None
+        }
     }
 }
 
