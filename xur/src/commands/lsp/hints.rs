@@ -4,21 +4,20 @@ use std::fmt;
 use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, NodeId, PatKind, Ty, TyKind};
 use xur_ast::visit::{self, Visitor};
 use xur_bytecode::{ItemIndex, ItemRef};
-use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
+use xur_resolve::{DefId, DefKind, NativeFnId, NativeTypeId, PrimTy, Program, Res, Resolutions};
 use xur_runtime::{BuiltinType, Registry};
 use xur_span::{Ident, Span, Symbol};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum InferredTy {
+    Def(DefId),
+    Prim(PrimTy),
+    /// Registry bridge: a native type name with no DefId (from facet shapes).
     Named(String),
+    Infer,
     Unit,
-    Bool,
-    Int,
-    Float,
-    Str,
-    Bytes,
     Ptr(Box<InferredTy>),
-    List,
+    List(Option<Box<InferredTy>>),
     Map,
     Tuple(Vec<InferredTy>),
     Fn { params: Vec<InferredTy>, ret: Box<InferredTy> },
@@ -29,17 +28,30 @@ pub enum InferredTy {
 impl InferredTy {
     fn builtin(&self) -> Option<BuiltinType> {
         Some(match self {
-            Self::Bool => BuiltinType::Bool,
-            Self::Int => BuiltinType::Int,
-            Self::Float => BuiltinType::Float,
-            Self::Str => BuiltinType::Str,
-            Self::List => BuiltinType::List,
+            Self::Prim(p) => match p {
+                PrimTy::Bool => BuiltinType::Bool,
+                PrimTy::Str => BuiltinType::Str,
+                PrimTy::Bytes => BuiltinType::Bytes,
+                PrimTy::I8 | PrimTy::I16 | PrimTy::I32 | PrimTy::I64 | PrimTy::Isize
+                | PrimTy::U8 | PrimTy::U16 | PrimTy::U32 | PrimTy::U64 | PrimTy::Usize => {
+                    BuiltinType::Int
+                }
+                PrimTy::F32 | PrimTy::F64 => BuiltinType::Float,
+                PrimTy::Type => return None,
+            },
+            Self::List(_) => BuiltinType::List,
             Self::Map => BuiltinType::Map,
-            Self::Bytes => BuiltinType::Bytes,
             Self::Record => BuiltinType::Record,
             Self::Ptr(_) => BuiltinType::Ptr,
             _ => return None,
         })
+    }
+
+    fn def_id(&self) -> Option<DefId> {
+        match self {
+            Self::Def(id) => Some(*id),
+            _ => None,
+        }
     }
 
     fn call_return(&self) -> Option<InferredTy> {
@@ -63,25 +75,23 @@ impl InferredTy {
         }
     }
 
+    fn from_prim(prim: PrimTy) -> Self {
+        if prim == PrimTy::Type {
+            Self::Infer
+        } else {
+            Self::Prim(prim)
+        }
+    }
+
     pub fn from_ast(ty: &Ty, resolutions: &Resolutions) -> Self {
         match &ty.kind {
             TyKind::Path(path) => {
-                let name = xur_bytecode::type_name(resolutions, ty);
-                match name.as_str() {
-                    "bool" => Self::Bool,
-                    "i64" | "u8" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "u16" => Self::Int,
-                    "f64" | "f32" => Self::Float,
-                    "str" => Self::Str,
-                    "bytes" => Self::Bytes,
-                    "()" => Self::Unit,
-                    _ => {
-                        if let Some(res) = resolutions.res.get(&path.id) {
-                            if let Res::Def(DefKind::Mod, _) = res {
-                                return Self::Module;
-                            }
-                        }
-                        Self::Named(name)
-                    }
+                let res = resolutions.res.get(&path.id);
+                match res {
+                    Some(Res::PrimTy(prim)) => Self::from_prim(*prim),
+                    Some(Res::Def(DefKind::Mod, _)) => Self::Module,
+                    Some(Res::Def(_, def)) => Self::Def(*def),
+                    _ => Self::Infer,
                 }
             }
             TyKind::Tuple(elems) => {
@@ -92,7 +102,7 @@ impl InferredTy {
                 }
             }
             TyKind::Paren(inner) => Self::from_ast(inner, resolutions),
-            TyKind::List(_) => Self::List,
+            TyKind::List(inner) => Self::List(Some(Box::new(Self::from_ast(inner, resolutions)))),
             TyKind::Record => Self::Record,
             TyKind::Ptr(inner) => Self::Ptr(Box::new(Self::from_ast(inner, resolutions))),
             TyKind::Fn { params, ret } => Self::Fn {
@@ -101,32 +111,102 @@ impl InferredTy {
                     .map(|t| Self::from_ast(t, resolutions))
                     .unwrap_or(Self::Unit)),
             },
-            TyKind::Infer => Self::Named("_".into()),
-            _ => Self::Named("_".into()),
+            TyKind::Infer => Self::Infer,
+            _ => Self::Infer,
         }
     }
 
-    fn from_registry(id: NativeFnId, registry: &Registry) -> Option<Self> {
-        let name = registry.native_return_name(id)?;
-        Some(Self::from_name(&name))
+    fn from_registry(
+        id: NativeFnId,
+        registry: &Registry,
+        resolutions: &Resolutions,
+    ) -> Option<Self> {
+        let f = registry.function(id);
+        if let Some(sig) = &f.signature {
+            return Some(Self::from_shape(sig.ret, registry, resolutions));
+        }
+        match f.return_hint {
+            Some(xur_runtime::registry::ReturnHint::Shape(s)) => {
+                Some(Self::from_shape(s, registry, resolutions))
+            }
+            Some(xur_runtime::registry::ReturnHint::Xur(xur)) => {
+                Some(Self::from_xur_type(xur, registry, resolutions))
+            }
+            None => None,
+        }
     }
 
-    fn from_shape(shape: &'static facet::Shape, registry: &Registry) -> Self {
-        Self::from_name(&registry.shape_xur_name(shape))
+    fn from_xur_type(
+        xur: xur_runtime::registry::XurType,
+        registry: &Registry,
+        resolutions: &Resolutions,
+    ) -> Self {
+        use xur_runtime::registry::XurType;
+        match xur {
+            XurType::Unit => Self::Unit,
+            XurType::Ptr(Some(inner)) => {
+                Self::Ptr(Box::new(Self::from_shape(inner, registry, resolutions)))
+            }
+            XurType::Ptr(None) => Self::Ptr(Box::new(Self::Infer)),
+            XurType::List(Some(inner)) => {
+                Self::List(Some(Box::new(Self::from_shape(inner, registry, resolutions))))
+            }
+            XurType::List(None) => Self::List(None),
+            XurType::Map(_, _) => Self::Map,
+        }
     }
 
+    fn from_shape(
+        shape: &'static facet::Shape,
+        registry: &Registry,
+        resolutions: &Resolutions,
+    ) -> Self {
+        if let Some(ty_id) = registry.type_of_shape(shape) {
+            if let Some(def) = def_of_native_type(ty_id, resolutions) {
+                return Self::Def(def);
+            }
+        }
+        if let Ok(list) = shape.def.into_list() {
+            return Self::List(Some(Box::new(Self::from_shape(list.t(), registry, resolutions))));
+        }
+        Self::from_rust_shape(shape)
+    }
+
+    fn from_rust_shape(shape: &'static facet::Shape) -> Self {
+        let name = shape.type_name().to_string();
+        match name.as_str() {
+            "String" | "&str" | "alloc::string::String" => Self::Prim(PrimTy::Str),
+            "()" => Self::Unit,
+            "Vec<u8>" | "alloc::vec::Vec<u8>" => Self::Prim(PrimTy::Bytes),
+            _ if name.starts_with("Vec<") || name == "Vec" => {
+                if let Ok(list) = shape.def.into_list() {
+                    Self::List(Some(Box::new(Self::from_rust_shape(list.t()))))
+                } else {
+                    Self::List(None)
+                }
+            }
+            _ => {
+                if let Some(prim) = PrimTy::from_name(Symbol::intern(&name)) {
+                    Self::from_prim(prim)
+                } else {
+                    Self::Named(name)
+                }
+            }
+        }
+    }
+
+    /// Bridge for registry APIs that only return a string name (e.g. shape_type_param).
     fn from_name(name: &str) -> Self {
+        if let Some(prim) = PrimTy::from_name(Symbol::intern(name)) {
+            return Self::from_prim(prim);
+        }
         match name {
-            "bool" => Self::Bool,
-            "i64" | "u8" | "u32" | "u64" | "usize" => Self::Int,
-            "f64" => Self::Float,
-            "str" => Self::Str,
-            "bytes" => Self::Bytes,
-            "list" => Self::List,
+            "list" => Self::List(None),
             "map" => Self::Map,
             "record" => Self::Record,
             "()" => Self::Unit,
             "module" => Self::Module,
+            "_" => Self::Infer,
             _ if name.starts_with('*') => {
                 Self::Ptr(Box::new(Self::from_name(&name[1..])))
             }
@@ -134,24 +214,63 @@ impl InferredTy {
         }
     }
 
-    fn is_uninferrable(&self) -> bool {
-        matches!(self, Self::Named(n) if n == "_")
+    pub fn display<'a>(&'a self, resolutions: &'a Resolutions) -> DisplayTy<'a> {
+        DisplayTy(self, resolutions)
     }
 }
 
+/// Wrapper for displaying InferredTy with access to resolutions.
+pub struct DisplayTy<'a>(&'a InferredTy, &'a Resolutions);
+
+impl fmt::Display for DisplayTy<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            InferredTy::Def(id) => {
+                f.write_str(self.1.defs.get(*id).name.as_str())
+            }
+            InferredTy::Named(n) => f.write_str(n),
+            InferredTy::Ptr(inner) => write!(f, "*{}", inner.display(self.1)),
+            InferredTy::List(Some(inner)) => write!(f, "list[{}]", inner.display(self.1)),
+            InferredTy::Tuple(elems) => {
+                write!(f, "(")?;
+                for (i, t) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", t.display(self.1))?;
+                }
+                write!(f, ")")
+            }
+            InferredTy::Fn { params, ret } => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", p.display(self.1))?;
+                }
+                if matches!(**ret, InferredTy::Unit) {
+                    write!(f, ")")
+                } else {
+                    write!(f, ") -> {}", ret.display(self.1))
+                }
+            }
+            other => write!(f, "{other}"),
+        }
+    }
+}
+
+/// Display for self-describing variants (no resolutions needed).
 impl fmt::Display for InferredTy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Named(n) => f.write_str(n),
             Self::Unit => f.write_str("()"),
-            Self::Bool => f.write_str("bool"),
-            Self::Int => f.write_str("i64"),
-            Self::Float => f.write_str("f64"),
-            Self::Str => f.write_str("str"),
-            Self::Bytes => f.write_str("bytes"),
-            Self::Ptr(inner) => write!(f, "*{inner}"),
-            Self::List => f.write_str("list"),
+            Self::Prim(p) => f.write_str(p.name()),
+            Self::List(Some(inner)) => write!(f, "list[{inner}]"),
+            Self::List(None) => f.write_str("list"),
             Self::Map => f.write_str("map"),
+            Self::Record => f.write_str("record"),
+            Self::Module => f.write_str("module"),
+            Self::Infer => f.write_str("_"),
+            Self::Named(n) => f.write_str(n),
+            Self::Def(_) => f.write_str("_"),
+            Self::Ptr(inner) => write!(f, "*{inner}"),
             Self::Tuple(elems) => {
                 write!(f, "(")?;
                 for (i, t) in elems.iter().enumerate() {
@@ -172,10 +291,14 @@ impl fmt::Display for InferredTy {
                     write!(f, ") -> {ret}")
                 }
             }
-            Self::Record => f.write_str("record"),
-            Self::Module => f.write_str("module"),
         }
     }
+}
+
+fn def_of_native_type(ty_id: NativeTypeId, resolutions: &Resolutions) -> Option<DefId> {
+    resolutions.defs.iter().find_map(|(id, data)| {
+        matches!(data.kind, DefKind::NativeType(nid) if nid == ty_id).then_some(id)
+    })
 }
 
 pub struct CallCollector(pub Vec<(xur_ast::NodeId, Vec<Span>)>);
@@ -300,7 +423,7 @@ impl<'ast> Visitor<'ast> for MethodCallCollector<'_> {
                 self.found.push(MethodAt {
                     method_name: mc.seg.ident.name.to_string(),
                     method_span: ident_span,
-                    receiver_ty: receiver_ty.map(|t| t.to_string()),
+                    receiver_ty: receiver_ty.map(|t| t.display(self.resolutions).to_string()),
                 });
             }
         }
@@ -317,14 +440,14 @@ pub fn infer_expr_type(
 ) -> Option<InferredTy> {
     match &expr.kind {
         ExprKind::Lit(lit) => match &lit.kind {
-            LitKind::Str(_) => Some(InferredTy::Str),
-            LitKind::Int(_) => Some(InferredTy::Int),
-            LitKind::Float(_) => Some(InferredTy::Float),
-            LitKind::Bool(_) => Some(InferredTy::Bool),
-            LitKind::ByteStr(_) => Some(InferredTy::Bytes),
+            LitKind::Str(_) => Some(InferredTy::Prim(PrimTy::Str)),
+            LitKind::Int(_) => Some(InferredTy::Prim(PrimTy::I64)),
+            LitKind::Float(_) => Some(InferredTy::Prim(PrimTy::F64)),
+            LitKind::Bool(_) => Some(InferredTy::Prim(PrimTy::Bool)),
+            LitKind::ByteStr(_) => Some(InferredTy::Prim(PrimTy::Bytes)),
             LitKind::Err => None,
         },
-        ExprKind::List(_) => Some(InferredTy::List),
+        ExprKind::List(_) => Some(InferredTy::List(None)),
         ExprKind::Map(_) => Some(InferredTy::Map),
         ExprKind::Record(_) => Some(InferredTy::Record),
         ExprKind::Tuple(elems) => {
@@ -333,16 +456,14 @@ pub fn infer_expr_type(
             }
             let types: Vec<_> = elems.iter()
                 .map(|e| infer_expr_type(e, resolutions, items, registry, local_types)
-                    .unwrap_or(InferredTy::Named("_".into())))
+                    .unwrap_or(InferredTy::Infer))
                 .collect();
             Some(InferredTy::Tuple(types))
         }
         ExprKind::Struct(s) => {
             let res = resolutions.res.get(&s.path.id)?;
             match res {
-                Res::Def(_, def) => {
-                    Some(InferredTy::Named(resolutions.defs.get(*def).name.to_string()))
-                }
+                Res::Def(_, def) => Some(InferredTy::Def(*def)),
                 _ => None,
             }
         }
@@ -361,7 +482,7 @@ pub fn infer_expr_type(
                         }
                     }
                     Res::Def(DefKind::NativeFn(id), _) => {
-                        if let Some(ty) = InferredTy::from_registry(*id, registry) {
+                        if let Some(ty) = InferredTy::from_registry(*id, registry, resolutions) {
                             return Some(ty);
                         }
                         path.segments.last()
@@ -370,11 +491,11 @@ pub fn infer_expr_type(
                             .map(|ty| InferredTy::from_ast(ty, resolutions))
                     }
                     Res::Def(DefKind::Struct | DefKind::NativeType(_), def) => {
-                        Some(InferredTy::Named(resolutions.defs.get(*def).name.to_string()))
+                        Some(InferredTy::Def(*def))
                     }
                     Res::Def(DefKind::Variant | DefKind::NativeVariant(_), def) => {
                         let parent = resolutions.defs.get(*def).parent?;
-                        Some(InferredTy::Named(resolutions.defs.get(parent).name.to_string()))
+                        Some(InferredTy::Def(parent))
                     }
                     Res::Local(node_id) => {
                         local_types.get(node_id)?.call_return()
@@ -388,19 +509,19 @@ pub fn infer_expr_type(
         ExprKind::MethodCall(mc) => {
             let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
             let method = mc.seg.ident.name.as_str();
-            if let Some(ty) = method_return_type(&receiver_ty, method, registry) {
+            if let Some(ty) = resolve_and_return(
+                &receiver_ty, method, resolutions, registry,
+            ) {
                 return Some(ty);
             }
-            if let InferredTy::Named(ref name) = receiver_ty {
+            if let Some(def) = receiver_ty.def_id() {
                 if let Some(ty) = user_method_return_type(
-                    name, method, &mc.receiver, resolutions, items, registry,
+                    def, method, &mc.receiver, resolutions, items, registry,
                 ) {
                     return Some(ty);
                 }
-                if resolutions.find_type(name).is_some() {
-                    if let Some(id) = registry.builtin_method(BuiltinType::Struct, method) {
-                        return InferredTy::from_registry(id, registry);
-                    }
+                if let Some(id) = registry.builtin_method(BuiltinType::Struct, method) {
+                    return InferredTy::from_registry(id, registry, resolutions);
                 }
             }
             None
@@ -434,18 +555,14 @@ pub fn infer_expr_type(
         ExprKind::Try(inner) => {
             if let Some(shape) = native_call_return_shape(inner, resolutions, registry) {
                 if let Ok(r) = shape.def.into_result() {
-                    return Some(InferredTy::from_shape(r.t(), registry));
+                    return Some(InferredTy::from_shape(r.t(), registry, resolutions));
                 }
                 if let Ok(o) = shape.def.into_option() {
-                    return Some(InferredTy::from_shape(o.t(), registry));
+                    return Some(InferredTy::from_shape(o.t(), registry, resolutions));
                 }
-                return Some(InferredTy::from_shape(shape, registry));
+                return Some(InferredTy::from_shape(shape, registry, resolutions));
             }
-            infer_expr_type(inner, resolutions, items, registry, local_types)
-                .and_then(|t| match t {
-                    InferredTy::Named(ref n) if n == "Result" || n == "Option" => None,
-                    other => Some(other),
-                })
+            None
         }
         ExprKind::Cast(_, ty) => Some(InferredTy::from_ast(ty, resolutions)),
         ExprKind::Closure(closure) => {
@@ -456,10 +573,10 @@ pub fn infer_expr_type(
                 FnRetTy::Ty(ty) => InferredTy::from_ast(ty, resolutions),
                 FnRetTy::Default(_) => {
                     infer_expr_type(&closure.body, resolutions, items, registry, local_types)
-                        .unwrap_or(InferredTy::Named("_".into()))
+                        .unwrap_or(InferredTy::Infer)
                 }
             };
-            if params.iter().all(|p| p.is_uninferrable()) && ret.is_uninferrable() {
+            if params.iter().all(|p| matches!(p, InferredTy::Infer)) && matches!(ret, InferredTy::Infer) {
                 return None;
             }
             Some(InferredTy::Fn { params, ret: Box::new(ret) })
@@ -467,7 +584,7 @@ pub fn infer_expr_type(
         ExprKind::Binary(op, lhs, rhs) => match op.kind {
             BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le
             | BinOpKind::Gt | BinOpKind::Ge | BinOpKind::And | BinOpKind::Or => {
-                Some(InferredTy::Bool)
+                Some(InferredTy::Prim(PrimTy::Bool))
             }
             _ => {
                 infer_expr_type(lhs, resolutions, items, registry, local_types)
@@ -503,9 +620,9 @@ fn native_call_return_shape(
         }
         ExprKind::MethodCall(mc) => {
             let receiver_shape = native_call_return_shape(&mc.receiver, resolutions, registry)?;
-            let receiver_name = registry.shape_xur_name(receiver_shape);
             let method = mc.seg.ident.name.as_str();
-            let id = resolve_method_by_name(&receiver_name, method, registry)?;
+            let ty = InferredTy::from_shape(receiver_shape, registry, resolutions);
+            let id = resolve_method(&ty, method, resolutions, registry)?;
             registry.native_return_shape(id)
         }
         ExprKind::Paren(inner) => native_call_return_shape(inner, resolutions, registry),
@@ -531,7 +648,7 @@ pub fn infer_iter_element_type(
     local_types: &HashMap<NodeId, InferredTy>,
 ) -> Option<InferredTy> {
     match &iter.kind {
-        ExprKind::Range(..) => Some(InferredTy::Int),
+        ExprKind::Range(..) => Some(InferredTy::Prim(PrimTy::I64)),
         ExprKind::List(elems) => {
             let mut seen = Vec::new();
             for e in elems {
@@ -550,7 +667,12 @@ pub fn infer_iter_element_type(
         _ => {
             if let Some(shape) = native_call_return_shape(iter, resolutions, registry) {
                 if let Ok(list) = shape.def.into_list() {
-                    return Some(InferredTy::from_shape(list.t(), registry));
+                    return Some(InferredTy::from_shape(list.t(), registry, resolutions));
+                }
+            }
+            if let Some(ty) = infer_expr_type(iter, resolutions, items, registry, local_types) {
+                if let InferredTy::List(Some(inner)) = ty {
+                    return Some(*inner);
                 }
             }
             None
@@ -559,14 +681,13 @@ pub fn infer_iter_element_type(
 }
 
 fn user_method_return_type(
-    receiver_name: &str,
+    type_def: DefId,
     method: &str,
     receiver_expr: &Expr,
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
 ) -> Option<InferredTy> {
-    let type_def = resolutions.find_type(receiver_name)?;
     let res = resolutions.assoc_fn(type_def, Symbol::intern(method))?;
     match res {
         Res::Def(DefKind::Fn, def) => {
@@ -588,7 +709,7 @@ fn user_method_return_type(
                 FnRetTy::Default(_) => Some(InferredTy::Unit),
             }
         }
-        Res::Def(DefKind::NativeFn(id), _) => InferredTy::from_registry(id, registry),
+        Res::Def(DefKind::NativeFn(id), _) => InferredTy::from_registry(id, registry, resolutions),
         _ => None,
     }
 }
@@ -609,9 +730,21 @@ fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<us
     Some(idx - start)
 }
 
-fn resolve_method(ty: &InferredTy, method: &str, registry: &Registry) -> Option<NativeFnId> {
+fn resolve_method(
+    ty: &InferredTy,
+    method: &str,
+    resolutions: &Resolutions,
+    registry: &Registry,
+) -> Option<NativeFnId> {
     if let Some(builtin) = ty.builtin() {
         return registry.builtin_method(builtin, method);
+    }
+    if let Some(def) = ty.def_id() {
+        return resolutions.assoc_fn(def, Symbol::intern(method))
+            .and_then(|res| match res {
+                Res::Def(DefKind::NativeFn(id), _) => Some(id),
+                _ => None,
+            });
     }
     if let InferredTy::Named(name) = ty {
         let type_id = registry.type_id_by_name(name)?;
@@ -620,17 +753,14 @@ fn resolve_method(ty: &InferredTy, method: &str, registry: &Registry) -> Option<
     None
 }
 
-fn resolve_method_by_name(name: &str, method: &str, registry: &Registry) -> Option<NativeFnId> {
-    resolve_method(&InferredTy::from_name(name), method, registry)
-}
-
-fn method_return_type(
-    receiver_ty: &InferredTy,
+fn resolve_and_return(
+    ty: &InferredTy,
     method: &str,
+    resolutions: &Resolutions,
     registry: &Registry,
 ) -> Option<InferredTy> {
-    let id = resolve_method(receiver_ty, method, registry)?;
-    InferredTy::from_registry(id, registry)
+    let id = resolve_method(ty, method, resolutions, registry)?;
+    InferredTy::from_registry(id, registry, resolutions)
 }
 
 pub fn method_signature(
@@ -639,7 +769,9 @@ pub fn method_signature(
     registry: &Registry,
 ) -> Option<String> {
     let receiver = receiver_ty?;
-    let id = resolve_method_by_name(receiver, method, registry)?;
+    let ty = InferredTy::from_name(receiver);
+    let empty = Resolutions::empty();
+    let id = resolve_method(&ty, method, &empty, registry)?;
     let native_fn = registry.function(id);
     let sig = native_fn.signature.as_ref()?;
     let params: Vec<String> = sig.params.iter().skip(1).enumerate().map(|(i, shape)| {

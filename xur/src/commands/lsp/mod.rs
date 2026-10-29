@@ -477,11 +477,14 @@ impl LanguageServer for Backend {
                     if let Some(id) = binding.binding_id {
                         local_types.insert(id, ty.clone());
                     }
-                    if in_file(Span { start: binding.pat_end, end: binding.pat_end }) {
+                    if !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                        && in_file(Span { start: binding.pat_end, end: binding.pat_end })
+                    {
                         let pos = file.line_col(binding.pat_end);
+                        let label = format!(": {}", ty.display(resolutions));
                         hints.push(InlayHint {
                             position: Position::new(pos.line - 1, pos.col - 1),
-                            label: InlayHintLabel::String(format!(": {ty}")),
+                            label: InlayHintLabel::String(label),
                             kind: Some(InlayHintKind::TYPE),
                             padding_left: None,
                             padding_right: None,
@@ -497,11 +500,14 @@ impl LanguageServer for Backend {
                 if !in_file(Span { start: *scrutinee_end, end: *scrutinee_end }) {
                     continue;
                 }
-                if let Some(ty) = infer_expr_type(scrutinee, resolutions, &state.items, &state.registry, &local_types) {
+                if let Some(ty) = infer_expr_type(scrutinee, resolutions, &state.items, &state.registry, &local_types)
+                    && !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                {
                     let pos = file.line_col(*scrutinee_end);
+                    let label = format!(": {}", ty.display(resolutions));
                     hints.push(InlayHint {
                         position: Position::new(pos.line - 1, pos.col - 1),
-                        label: InlayHintLabel::String(format!(": {ty}")),
+                        label: InlayHintLabel::String(label),
                         kind: Some(InlayHintKind::TYPE),
                         padding_left: Some(true),
                         padding_right: None,
@@ -525,11 +531,14 @@ impl LanguageServer for Backend {
                     if let Some(id) = binding_id {
                         local_types.insert(*id, ty.clone());
                     }
-                    if in_file(Span { start: *pat_end, end: *pat_end }) {
+                    if !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                        && in_file(Span { start: *pat_end, end: *pat_end })
+                    {
                         let pos = file.line_col(*pat_end);
+                        let label = format!(": {}", ty.display(resolutions));
                         hints.push(InlayHint {
                             position: Position::new(pos.line - 1, pos.col - 1),
-                            label: InlayHintLabel::String(format!(": {ty}")),
+                            label: InlayHintLabel::String(label),
                             kind: Some(InlayHintKind::TYPE),
                             padding_left: None,
                             padding_right: None,
