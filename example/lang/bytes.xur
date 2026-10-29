@@ -62,8 +62,8 @@ fn main() -> Result<()> {
     io::println("sum of 'ABC' bytes = {} (expected {})", sum, 0x41 + 0x42 + 0x43);
 
     // to_list: convert to a list of byte values for list methods.
-    let bytes = b"\x01\x02\x03\x04";
-    let doubled = bytes.to_list().map(|b| b * 2);
+    let raw = b"\x01\x02\x03\x04";
+    let doubled = raw.to_list().map(|b| b * 2);
     io::println("doubled = {}", doubled);
 
     // String round-trip.
