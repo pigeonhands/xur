@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use xur_ast::{Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind, TyKind};
+use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind, TyKind};
 use xur_ast::visit::{self, Visitor};
 use xur_bytecode::{ItemIndex, ItemRef, type_name};
 use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
@@ -266,6 +266,17 @@ pub fn infer_expr_type(
                 Some(format!("fn({}) -> {}", params.join(", "), ret))
             }
         }
+        ExprKind::Binary(op, lhs, rhs) => match op.kind {
+            BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le
+            | BinOpKind::Gt | BinOpKind::Ge | BinOpKind::And | BinOpKind::Or => {
+                Some("bool".into())
+            }
+            _ => {
+                infer_expr_type(lhs, resolutions, items, registry)
+                    .or_else(|| infer_expr_type(rhs, resolutions, items, registry))
+            }
+        },
+        ExprKind::Unary(_, inner) => infer_expr_type(inner, resolutions, items, registry),
         ExprKind::Path(_) => None,
         _ => None,
     }
