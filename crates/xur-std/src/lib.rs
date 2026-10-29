@@ -30,6 +30,7 @@ mod reflect;
 mod str;
 mod sync;
 mod thread;
+mod time;
 mod xur;
 
 pub use xur::{set_argv, set_invoked_by};
@@ -79,6 +80,7 @@ pub fn register(registry: &Registry) {
     path::register(registry);
     ptr::register(registry);
     record::register(registry);
+    time::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);

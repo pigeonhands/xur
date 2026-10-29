@@ -1,0 +1,28 @@
+// Measure how long a computation takes with Instant and Duration.
+//
+// Run it:
+//
+//     xur run example/time/bench.xur
+
+use std::time;
+use std::io;
+
+fn fib(n: int) -> int {
+    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn main() {
+    let start = time::now();
+    let result = fib(30);
+    let elapsed = start.elapsed();
+
+    io::println("fib(30) = {}", result);
+    io::println("elapsed: {}", elapsed);
+    io::println("  secs:   {}", elapsed.as_secs_f64());
+    io::println("  millis: {}", elapsed.millis());
+
+    // sleep accepts millis or a Duration
+    io::println("sleeping 100ms...");
+    time::sleep(100);
+    io::println("done");
+}

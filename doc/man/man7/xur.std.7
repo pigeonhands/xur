@@ -265,6 +265,25 @@ Prompts:
 .BR password ,
 .BR editor .
 .TP
+.B std::time
+Monotonic timing.
+.B now()
+returns an
+.B Instant
+with
+.BR elapsed() ;
+.B Duration
+has
+.BR secs() ,
+.BR millis() ,
+.BR as_secs_f64() .
+Also
+.BR sleep() ,
+.BR from_secs() ,
+.BR from_millis() .
+See
+.BR xur.std.time (7).
+.TP
 .B std::xur
 Runtime metadata.
 .B invoked_by()
@@ -362,4 +381,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.path (7),
 .BR xur.std.ptr (7),
 .BR xur.std.cli (7),
-.BR xur.std.http (7)
+.BR xur.std.http (7),
+.BR xur.std.time (7)

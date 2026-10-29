@@ -1,0 +1,67 @@
+.TH XUR.STD.TIME 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.time \- timing, durations and sleep
+.SH SYNOPSIS
+.B use std::time;
+.SH DESCRIPTION
+.B std::time
+provides monotonic timing with
+.B Instant
+and
+.BR Duration ,
+plus a sleep function.
+.SH FUNCTIONS
+.TP
+.B time::now() -> Instant
+The current monotonic time.
+.TP
+.B time::sleep(ms)
+.TQ
+.B time::sleep(duration)
+Pause the current thread for the given milliseconds or Duration.
+.TP
+.B time::from_secs(n) -> Duration
+Create a Duration from seconds (int or float).
+.TP
+.B time::from_millis(n) -> Duration
+Create a Duration from milliseconds.
+.SH INSTANT METHODS
+.TP
+.B elapsed() -> Duration
+Time elapsed since the Instant was created.
+.SH DURATION METHODS
+.TP
+.B secs() -> int
+Whole seconds.
+.TP
+.B millis() -> int
+Total milliseconds.
+.TP
+.B micros() -> int
+Total microseconds.
+.TP
+.B nanos() -> int
+Total nanoseconds.
+.TP
+.B as_secs_f64() -> float
+Seconds as a floating-point number.
+.PP
+Duration values print in a human-friendly format: "1.234s", "42ms",
+"100\(mcs", or "500ns".
+.SH EXAMPLES
+.nf
+use std::time;
+use std::io;
+
+fn main() {
+    let start = time::now();
+    // ... work ...
+    let elapsed = start.elapsed();
+    io::println("took {}", elapsed);
+    io::println("{:.3}s", elapsed.as_secs_f64());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.datetime (7),
+.BR xur.std.thread (7)
