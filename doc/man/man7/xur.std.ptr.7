@@ -1,0 +1,49 @@
+.TH XUR.STD.PTR 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.ptr \- raw pointer utilities
+.SH SYNOPSIS
+.B use std::ptr;
+.SH DESCRIPTION
+.B std::ptr
+provides functions for creating and inspecting raw pointers.
+Raw pointers in Xur are typed as
+.B *T
+and support arithmetic with
+.B +
+and
+.BR \- .
+.SH FUNCTIONS
+.TP
+.B null() -> *u8
+A null pointer.
+.TP
+.B from_int(addr) -> *u8
+Create a pointer from an integer address.
+.TP
+.B to_int(ptr) -> i64
+Convert a pointer to its integer address.
+.TP
+.B is_null(ptr) -> bool
+Whether the pointer is null.
+.TP
+.B offset(ptr, n) -> *u8
+Add
+.I n
+bytes to the pointer.
+.TP
+.B to_hex(ptr) -> str
+The pointer address as a hexadecimal string.
+.SH EXAMPLES
+.nf
+use std::ptr;
+use std::io;
+
+fn main() {
+    let p = ptr::from_int(0x1000);
+    io::println("addr: {}", ptr::to_hex(p));
+    io::println("null? {}", ptr::is_null(ptr::null()));
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.mem (7)

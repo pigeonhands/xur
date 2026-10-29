@@ -1,15 +1,16 @@
-.TH XUR.STD.MEM 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.TH XUR.STD.MEM 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
 .SH NAME
-xur.std.mem \- struct size, alignment and binary conversion
+xur.std.mem \- struct layout, binary conversion and page allocation
 .SH SYNOPSIS
 .B use std::mem;
 .SH DESCRIPTION
 .B std::mem
-provides size and alignment queries and binary conversion for structs
-that have a layout (see
-.BR xur.std.reflect (7)
-for the layout system).
-.SH FUNCTIONS
+provides size and alignment queries, binary conversion for structs
+with a layout (see
+.BR xur.std.reflect (7)),
+and cross-platform memory page allocation for assembling and
+executing machine code at runtime.
+.SH LAYOUT FUNCTIONS
 .TP
 .B size_of::<T>() -> i64
 The size in bytes of
@@ -38,7 +39,66 @@ Serialize the struct to bytes using its layout.
 .TP
 .B value.byte_size() -> i64
 The struct's size in bytes.
+.SH PAGE ALLOCATION
+.TP
+.B alloc_page(size) -> *u8
+Allocate
+.I size
+bytes of read-write memory. Returns a raw pointer.
+Uses
+.B mmap
+on Unix and
+.B VirtualAlloc
+on Windows.
+.TP
+.B protect(addr, size, mode)
+Change page protection.
+.I mode
+is a
+.B Protection
+flags value (see below) or a string:
+.BR \(dqr\(dq ,
+.BR \(dqrw\(dq ,
+.BR \(dqrx\(dq ,
+or
+.BR \(dqrwx\(dq .
+.TP
+.B write_bytes(addr, data)
+Copy
+.I data
+(bytes) into memory at
+.IR addr .
+.TP
+.B free_page(addr, size)
+Free a page allocated with
+.BR alloc_page .
+.SH PROTECTION ENUM
+.B mem::Protection
+is a
+.B #[repr(i64)]
+bitwise flags enum:
+.TP
+.B Protection::Read \fR(1)
+Allow reading.
+.TP
+.B Protection::Write \fR(2)
+Allow writing.
+.TP
+.B Protection::Execute \fR(4)
+Allow execution.
+.PP
+Flags are combined with
+.BR | :
+.PP
+.RS
+.nf
+mem::Protection::Read | mem::Protection::Execute
+.fi
+.RE
 .SH EXAMPLES
+Struct layout:
+.PP
+.RS
 .nf
 use std::mem;
 use std::io;
@@ -53,7 +113,26 @@ fn main() {
     io::println("bytes: {}", data.to_hex());
 }
 .fi
+.RE
+.PP
+Allocate, write, protect and call executable memory:
+.PP
+.RS
+.nf
+use std::mem;
+
+fn main() {
+    let page: *fn() = mem::alloc_page(4096);
+    mem::write_bytes(page, code);
+    mem::protect(page, 4096,
+        mem::Protection::Read | mem::Protection::Execute);
+    let result = page();
+    mem::free_page(page, 4096);
+}
+.fi
+.RE
 .SH SEE ALSO
 .BR xur.std (7),
 .BR xur.std.reflect (7),
-.BR xur.std.bytes (7)
+.BR xur.std.bytes (7),
+.BR xur.std.re (7)

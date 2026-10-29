@@ -1,4 +1,4 @@
-.TH XUR.STD 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.TH XUR.STD 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
 .SH NAME
 xur.std \- overview of Xur's standard library
 .SH DESCRIPTION
@@ -137,17 +137,113 @@ String utilities:
 .BR to_upper ,
 .BR to_lower .
 .TP
+.B std::mem
+Struct layout, binary conversion and page allocation.
+.BR size_of ,
+.BR align_of ,
+.BR to_bytes ,
+.BR from_bytes ,
+.BR alloc_page ,
+.BR protect ,
+.BR write_bytes ,
+.BR free_page .
+Includes the
+.B Protection
+bitwise flags enum.
+See
+.BR xur.std.mem (7).
+.TP
 .B std::num
-Numeric conversions:
-.BR parse_int ,
-.BR parse_float ,
+Integer and float methods (available on values directly):
+.BR abs ,
+.BR pow ,
+.BR min ,
+.BR max ,
+.BR to_float ,
 .BR to_hex ,
-.BR to_bin .
+.BR to_string ,
+.BR sqrt ,
+.BR floor ,
+.BR ceil ,
+.BR round ,
+.BR to_int .
 .TP
 .B std::fmt
 Format strings.
 .B format(template, args...)
 returns a formatted string.
+.TP
+.B std::json
+JSON serialisation.
+.B parse(text)
+parses a JSON string into Xur values;
+.B stringify(value)
+serialises a value to JSON.
+.TP
+.B std::assert
+Test assertions.
+.BR is_eq ,
+.BR is_ne ,
+.BR is_true ,
+.BR is_false ,
+.BR fail .
+.TP
+.B std::log
+Structured logging via a builder-style subscriber.
+.BR subscriber() ,
+.BR trace ,
+.BR debug ,
+.BR info ,
+.BR warn ,
+.BR error .
+See
+.BR xur.std.log (7).
+.TP
+.B std::path
+Path manipulation.
+.BR join ,
+.BR parent ,
+.BR file_name ,
+.BR stem ,
+.BR extension ,
+.BR with_extension ,
+.BR is_absolute ,
+.BR is_relative ,
+.BR is_dir ,
+.BR is_file ,
+.BR exists ,
+.BR absolute ,
+.BR components .
+.TP
+.B std::ptr
+Raw pointer utilities.
+.BR null ,
+.BR from_int ,
+.BR to_int ,
+.BR is_null ,
+.BR offset ,
+.BR to_hex .
+.TP
+.B std::cli
+Argument parsing (pico-args) and interactive prompts (inquire).
+.BR parse ,
+.BR table .
+.B Args
+type with
+.BR contains ,
+.BR option ,
+.BR value ,
+.BR subcommand ,
+.BR free ,
+.BR remaining ,
+.BR finish .
+Prompts:
+.BR prompt ,
+.BR confirm ,
+.BR select ,
+.BR multi_select ,
+.BR password ,
+.BR editor .
 .TP
 .B std::xur
 Runtime metadata.
@@ -239,4 +335,10 @@ fn main() -> Result<(), str> {
 .BR xur.std.bytes (7),
 .BR xur.std.str (7),
 .BR xur.std.num (7),
-.BR xur.std.mem (7)
+.BR xur.std.mem (7),
+.BR xur.std.json (7),
+.BR xur.std.assert (7),
+.BR xur.std.log (7),
+.BR xur.std.path (7),
+.BR xur.std.ptr (7),
+.BR xur.std.cli (7)

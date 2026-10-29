@@ -1,4 +1,4 @@
-.TH XUR.STD.RE 7 "2026-10-27" "xur 0.1.1" "Xur Manual"
+.TH XUR.STD.RE 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
 .SH NAME
 xur.std.re \- Xur's reverse engineering standard library module
 .SH DESCRIPTION
@@ -68,25 +68,93 @@ Write bytes to process memory.
 Inject a DLL into the target process (requires the
 .B inject
 feature).
-.SS std::re::asm::x86 \(em x86 disassembly via iced\-x86
-Decode and format x86/x64 machine code.
+.SS std::re::asm::x86 \(em x86 assembly and disassembly via iced\-x86
+Decode, construct, encode, and format x86/x64 machine code.
 .TP
-.B decode(bitness, bytes, ip)
+.B decode(bitness, bytes, ip?) -> [Instruction]
 Disassemble
 .I bytes
 at virtual address
-.IR ip .
+.I ip
+(default 0).
 .I bitness
 is 16, 32, or 64.
-Returns a list of instruction objects with fields:
-.BR ip ,
-.BR len ,
-.BR mnemonic ,
-.BR op_count ,
-and formatting methods.
 .TP
-.B encode(bitness, instructions, ip)
-Assemble a list of instructions back to bytes.
+.B encode(bitness, instructions, ip?) -> Result<bytes, str>
+Re-encode a list of instructions at
+.I ip
+(default 0).
+.TP
+.B insn(code, ops...) -> Result<Instruction, str>
+Build an instruction from a
+.B Code
+enum value (or string) and 0\(en3 operands.
+Operands may be
+.B Register
+enum values, integers (immediates), strings
+.RB ( \(dqRAX\(dq ),
+or memory operands from
+.BR mem() .
+.TP
+.B format(instruction, syntax?) -> str
+Format an instruction.
+.I syntax
+is
+.BR \(dqintel\(dq ,
+.BR \(dqnasm\(dq ,
+.BR \(dqmasm\(dq
+(default), or
+.BR \(dqgas\(dq .
+.TP
+.B mem(base, ...) -> MemOp
+Build a memory operand:
+.BR mem(base) ,
+.BR mem(base,\ disp) ,
+or
+.BR mem(base,\ index,\ scale,\ disp) .
+.PP
+.B Enums:
+.B Code
+names every x86 instruction encoding (e.g.\&
+.BR Code::Mov_r32_imm32 ).
+.B Register
+names every register (e.g.\&
+.BR Register::EAX ,
+.BR Register::RSP ).
+Both are
+.B #[repr(i64)]
+enums that coerce to integers in arithmetic contexts.
+.PP
+.B Instruction methods:
+.BR ip() ,
+.BR next_ip() ,
+.BR len() ,
+.BR is_invalid() ,
+.BR mnemonic() ,
+.BR code() ,
+.BR op_count() ,
+.BR op_kind(n) ,
+.BR op_register(n) ,
+.BR immediate(n) ,
+.BR near_branch_target() ,
+.BR memory_base() ,
+.BR memory_index() ,
+.BR memory_index_scale() ,
+.BR memory_displacement() ,
+.BR memory_segment() ,
+.BR memory_size() ,
+.BR is_ip_rel_memory_operand() ,
+.BR ip_rel_memory_address() ,
+.BR flow_control() ,
+.BR is_privileged() ,
+.BR is_stack_instruction() ,
+.BR stack_pointer_increment() ,
+.BR has_lock_prefix() ,
+.BR has_rep_prefix() ,
+.BR has_repe_prefix() ,
+.BR has_repne_prefix() ,
+.BR segment_prefix() ,
+.BR format(syntax?) .
 .SS std::re::dotnet \(em .NET assemblies via hao
 Read, construct, and write .NET (ECMA-335) assemblies.
 .SS std::re::dotnet::il2cpp \(em Unity Il2Cpp games via hao\-il2cpp
@@ -211,6 +279,30 @@ fn main() {
 .fi
 .RE
 .PP
+Assemble and run machine code:
+.PP
+.RS
+.nf
+use std::re::asm::x86;
+use std::mem;
+
+fn main() -> Result<()> {
+    let ins = x86::insn(
+        x86::Code::Mov_r32_imm32,
+        x86::Register::EAX, 42)?;
+    let code = x86::encode(64, [ins], 0)?;
+    let page: *fn() = mem::alloc_page(4096);
+    mem::write_bytes(page, code);
+    mem::protect(page, 4096,
+        mem::Protection::Read
+        | mem::Protection::Execute);
+    let result = page();
+    mem::free_page(page, 4096);
+    Ok(())
+}
+.fi
+.RE
+.PP
 Read a .NET assembly:
 .PP
 .RS
@@ -270,4 +362,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.re.dotnet.il2cpp (7),
 .BR xur.std.re.dotnet.runtime (7),
 .BR xur.std.io (7),
-.BR xur.std.fs (7)
+.BR xur.std.fs (7),
+.BR xur.std.mem (7)

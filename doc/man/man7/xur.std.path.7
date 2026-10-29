@@ -1,0 +1,65 @@
+.TH XUR.STD.PATH 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.path \- path manipulation
+.SH SYNOPSIS
+.B use std::path;
+.SH DESCRIPTION
+.B std::path
+provides functions for manipulating filesystem paths as strings.
+.SH FUNCTIONS
+.TP
+.B join(parts...) -> str
+Join path components. Accepts strings or a list of strings.
+.TP
+.B parent(path) -> Option<str>
+The parent directory, or
+.B None
+for a root path.
+.TP
+.B file_name(path) -> Option<str>
+The final component of the path.
+.TP
+.B stem(path) -> Option<str>
+The file name without its extension.
+.TP
+.B extension(path) -> Option<str>
+The file extension, without the leading dot.
+.TP
+.B with_extension(path, ext) -> str
+Replace the extension.
+.TP
+.B is_absolute(path) -> bool
+Whether the path is absolute.
+.TP
+.B is_relative(path) -> bool
+Whether the path is relative.
+.TP
+.B is_dir(path) -> bool
+Whether the path points to a directory.
+.TP
+.B is_file(path) -> bool
+Whether the path points to a file.
+.TP
+.B exists(path) -> bool
+Whether the path exists on the filesystem.
+.TP
+.B absolute(path) -> Result<str, str>
+Resolve the path to an absolute path.
+.TP
+.B components(path) -> [str]
+Split the path into its components.
+.SH EXAMPLES
+.nf
+use std::path;
+use std::io;
+
+fn main() {
+    let p = path::join("/usr", "local", "bin");
+    io::println("{}", p);
+    io::println("parent: {}", path::parent(p).unwrap());
+    io::println("ext: {}", path::extension("file.tar.gz").unwrap());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.fs (7)

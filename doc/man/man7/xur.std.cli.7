@@ -1,0 +1,108 @@
+.TH XUR.STD.CLI 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.cli \- argument parsing and interactive prompts
+.SH SYNOPSIS
+.B use std::cli;
+.SH DESCRIPTION
+.B std::cli
+provides command-line argument parsing via pico-args and
+interactive terminal prompts via inquire.
+.SH ARGUMENT PARSING
+.TP
+.B cli::args() -> Args
+Parse the program's command-line arguments into an
+.B Args
+handle.
+.SS Args methods
+.TP
+.B contains(flag) -> bool
+Whether
+.I flag
+(e.g.\&
+.BR \(dq\-\-verbose\(dq )
+is present. Consumes it.
+.TP
+.B option(name) -> Option<str>
+The value of a named option (e.g.\&
+.BR \(dq\-\-output\(dq ).
+Consumes the flag and its value.
+.TP
+.B value(name) -> Result<str, str>
+Like
+.BR option ,
+but returns an error if the option is missing.
+.TP
+.B subcommand() -> Option<str>
+The first free argument, if it does not start with
+.BR \- .
+.TP
+.B free() -> Result<[str], str>
+All remaining free (non-flag) arguments.
+.TP
+.B remaining() -> [str]
+All remaining arguments, including flags.
+.TP
+.B finish() -> Result<(), str>
+Verify that all arguments were consumed. Returns an error naming
+any unexpected arguments.
+.SS Declarative parsing
+.TP
+.B cli::parse(specs) -> Result<record, str>
+Parse arguments from a list of spec records. Each spec has a
+.B name
+and optional
+.BR short ,
+.BR kind
+.RB ( \(dqflag\(dq ,
+.BR \(dqoption\(dq ,
+.BR \(dqpositional\(dq ),
+and
+.BR default .
+.SH TABLE
+.TP
+.B cli::table(headers, rows)
+Print a formatted table to stdout.
+.I headers
+is a list of column name strings;
+.I rows
+is a list of lists.
+.SH PROMPTS
+Interactive prompts that read from the terminal:
+.TP
+.B cli::prompt(message) -> str
+Ask for free-text input.
+.TP
+.B cli::confirm(message) -> bool
+Ask a yes/no question.
+.TP
+.B cli::select(message, options) -> str
+Choose one from a list of options.
+.TP
+.B cli::multi_select(message, options) -> [str]
+Choose one or more from a list.
+.TP
+.B cli::password(message) -> str
+Read a password (input is hidden).
+.TP
+.B cli::editor(message) -> str
+Open the user's editor and return the text.
+.SH EXAMPLES
+.nf
+use std::cli;
+use std::io;
+
+fn main() -> Result<()> {
+    let args = cli::args();
+    let verbose = args.contains("--verbose");
+    let output = args.option("--output");
+    let files = args.free()?;
+    args.finish()?;
+    for file in files {
+        io::println("processing: {}", file);
+    }
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.io (7)

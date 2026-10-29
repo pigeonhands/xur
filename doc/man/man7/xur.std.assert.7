@@ -1,0 +1,50 @@
+.TH XUR.STD.ASSERT 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.assert \- test assertions
+.SH SYNOPSIS
+.B use std::assert;
+.SH DESCRIPTION
+.B std::assert
+provides assertion functions for testing. Each function
+panics with a descriptive message when the assertion fails.
+.SH FUNCTIONS
+.TP
+.B is_eq(left, right)
+Assert that
+.I left
+equals
+.IR right .
+.TP
+.B is_ne(left, right)
+Assert that
+.I left
+does not equal
+.IR right .
+.TP
+.B is_true(value)
+Assert that
+.I value
+is
+.BR true .
+.TP
+.B is_false(value)
+Assert that
+.I value
+is
+.BR false .
+.TP
+.B fail(message)
+Unconditionally fail with
+.IR message .
+.SH EXAMPLES
+.nf
+use std::assert;
+
+fn main() {
+    assert::is_eq(1 + 1, 2);
+    assert::is_ne("hello", "world");
+    assert::is_true(10 > 5);
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7)

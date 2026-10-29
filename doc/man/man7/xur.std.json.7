@@ -1,0 +1,36 @@
+.TH XUR.STD.JSON 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.json \- JSON serialisation
+.SH SYNOPSIS
+.B use std::json;
+.SH DESCRIPTION
+.B std::json
+parses JSON text into Xur values and serialises Xur values back to
+JSON. Objects become records, arrays become lists, numbers become
+integers or floats, strings remain strings, booleans remain booleans,
+and
+.B null
+becomes
+.BR None .
+.SH FUNCTIONS
+.TP
+.B parse(text) -> Result<value, str>
+Parse a JSON string. Returns the parsed value or an error.
+.TP
+.B stringify(value) -> str
+Serialise a value to a JSON string.
+.SH EXAMPLES
+.nf
+use std::json;
+use std::io;
+
+fn main() -> Result<()> {
+    let data = json::parse("{\\"name\\": \\"xur\\", \\"version\\": 1}")?;
+    io::println("name: {}", data.name);
+    io::println("{}", json::stringify(data));
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.fs (7)

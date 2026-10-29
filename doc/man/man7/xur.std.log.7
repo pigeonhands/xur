@@ -1,0 +1,97 @@
+.TH XUR.STD.LOG 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.log \- structured logging
+.SH SYNOPSIS
+.B use std::log;
+.SH DESCRIPTION
+.B std::log
+provides structured logging backed by the
+.B tracing
+ecosystem. A subscriber is configured with a builder, then log
+functions emit events at different severity levels.
+.SH FUNCTIONS
+.TP
+.B subscriber() -> SubscriberBuilder
+Create a new subscriber builder with default settings.
+.TP
+.B trace(format, args...)
+Emit a trace-level event.
+.TP
+.B debug(format, args...)
+Emit a debug-level event.
+.TP
+.B info(format, args...)
+Emit an info-level event.
+.TP
+.B warn(format, args...)
+Emit a warning-level event.
+.TP
+.B error(format, args...)
+Emit an error-level event.
+.SH SUBSCRIBERBUILDER METHODS
+.TP
+.B with_max_level(level) -> SubscriberBuilder
+Set the maximum log level.
+.I level
+is
+.BR \(dqtrace\(dq ,
+.BR \(dqdebug\(dq ,
+.BR \(dqinfo\(dq ,
+.BR \(dqwarn\(dq ,
+or
+.BR \(dqerror\(dq .
+.TP
+.B with_target(bool) -> SubscriberBuilder
+Show or hide the target (module path) in output.
+.TP
+.B with_file(bool) -> SubscriberBuilder
+Show or hide the source file name.
+.TP
+.B with_line_number(bool) -> SubscriberBuilder
+Show or hide the line number.
+.TP
+.B with_ansi(bool) -> SubscriberBuilder
+Enable or disable ANSI colour codes.
+.TP
+.B json() -> SubscriberBuilder
+Output events as JSON.
+.TP
+.B pretty() -> SubscriberBuilder
+Use the pretty (multi-line) output format.
+.TP
+.B compact() -> SubscriberBuilder
+Use the compact (single-line) output format.
+.TP
+.B with_filter(directive) -> SubscriberBuilder
+Apply an
+.B EnvFilter
+directive, e.g.\&
+.BR \(dqinfo,mymodule=debug\(dq .
+.TP
+.B to_file(path) -> SubscriberBuilder
+Write log output to a file instead of stderr.
+.TP
+.B to_stderr() -> SubscriberBuilder
+Write log output to stderr (the default).
+.TP
+.B init()
+Install the subscriber as the global default. Call once at startup.
+.SH EXAMPLES
+.nf
+use std::log;
+use std::io;
+
+fn main() {
+    log::subscriber()
+        .with_max_level("debug")
+        .with_ansi(true)
+        .init();
+
+    log::info("application started");
+    log::debug("value: {}", 42);
+    log::warn("something to watch");
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.io (7)
