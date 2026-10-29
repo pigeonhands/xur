@@ -15,10 +15,10 @@ pub(crate) fn register(registry: &Registry) {
         .builtin(BuiltinType::Str)
         .function("len", |s: String| s.chars().count() as i64)
         .function("is_empty", |s: String| s.is_empty())
-        .function("ord", |s: String| -> Result<i64, String> {
+        .function("ord", |s: String| -> Result<u32, String> {
             let mut chars = s.chars();
             match (chars.next(), chars.next()) {
-                (Some(c), None) => Ok(c as i64),
+                (Some(c), None) => Ok(c as u32),
                 _ => Err(format!("`ord` expects a single character, got {}-char string", s.chars().count())),
             }
         })
