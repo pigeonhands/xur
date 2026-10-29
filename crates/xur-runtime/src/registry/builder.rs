@@ -34,6 +34,21 @@ pub enum XurType {
     Unit,
 }
 
+impl XurType {
+    pub const PTR: Self = Self::Ptr(None);
+    pub const LIST: Self = Self::List(None);
+    pub const MAP: Self = Self::Map(None, None);
+    pub const UNIT: Self = Self::Unit;
+
+    pub fn ptr<T: Facet<'static>>() -> Self { Self::Ptr(Some(T::SHAPE)) }
+    pub fn list<T: Facet<'static>>() -> Self { Self::List(Some(T::SHAPE)) }
+    pub fn map<K: Facet<'static>, V: Facet<'static>>() -> Self {
+        Self::Map(Some(K::SHAPE), Some(V::SHAPE))
+    }
+    pub fn map_keys<K: Facet<'static>>() -> Self { Self::Map(Some(K::SHAPE), None) }
+    pub fn map_values<V: Facet<'static>>() -> Self { Self::Map(None, Some(V::SHAPE)) }
+}
+
 /// A return-type hint stored on a raw function: either a Facet [`Shape`]
 /// (introspectable for generics) or an [`XurType`] name.
 #[derive(Clone, Copy)]
