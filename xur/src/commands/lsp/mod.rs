@@ -12,6 +12,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+use xur_ast::{Expr, ExprKind, NodeId};
 use xur_ast::visit::Visitor;
 use xur_bytecode::ItemIndex;
 use xur_resolve::{DefKind, Namespace, Program, Res};
@@ -461,22 +462,30 @@ impl LanguageServer for Backend {
                 }
             }
 
-            for (pat_end, init) in &let_collector.0 {
-                if !in_file(Span { start: *pat_end, end: *pat_end }) {
-                    continue;
+            let mut local_types: HashMap<NodeId, String> = HashMap::new();
+            let mut local_inits: HashMap<NodeId, &Expr> = HashMap::new();
+
+            for (pat_end, binding_id, init) in &let_collector.0 {
+                if let Some(id) = binding_id {
+                    local_inits.insert(*id, init);
                 }
-                if let Some(ty) = infer_expr_type(init, resolutions, &state.items, &state.registry) {
-                    let pos = file.line_col(*pat_end);
-                    hints.push(InlayHint {
-                        position: Position::new(pos.line - 1, pos.col - 1),
-                        label: InlayHintLabel::String(format!(": {ty}")),
-                        kind: Some(InlayHintKind::TYPE),
-                        padding_left: None,
-                        padding_right: None,
-                        text_edits: None,
-                        tooltip: None,
-                        data: None,
-                    });
+                if let Some(ty) = infer_expr_type(init, resolutions, &state.items, &state.registry, &local_types) {
+                    if let Some(id) = binding_id {
+                        local_types.insert(*id, ty.clone());
+                    }
+                    if in_file(Span { start: *pat_end, end: *pat_end }) {
+                        let pos = file.line_col(*pat_end);
+                        hints.push(InlayHint {
+                            position: Position::new(pos.line - 1, pos.col - 1),
+                            label: InlayHintLabel::String(format!(": {ty}")),
+                            kind: Some(InlayHintKind::TYPE),
+                            padding_left: None,
+                            padding_right: None,
+                            text_edits: None,
+                            tooltip: None,
+                            data: None,
+                        });
+                    }
                 }
             }
 
@@ -484,7 +493,7 @@ impl LanguageServer for Backend {
                 if !in_file(Span { start: *scrutinee_end, end: *scrutinee_end }) {
                     continue;
                 }
-                if let Some(ty) = infer_expr_type(scrutinee, resolutions, &state.items, &state.registry) {
+                if let Some(ty) = infer_expr_type(scrutinee, resolutions, &state.items, &state.registry, &local_types) {
                     let pos = file.line_col(*scrutinee_end);
                     hints.push(InlayHint {
                         position: Position::new(pos.line - 1, pos.col - 1),
@@ -499,22 +508,32 @@ impl LanguageServer for Backend {
                 }
             }
 
-            for (pat_end, iter) in &for_collector.0 {
-                if !in_file(Span { start: *pat_end, end: *pat_end }) {
-                    continue;
-                }
-                if let Some(ty) = infer_iter_element_type(iter, resolutions, &state.items, &state.registry) {
-                    let pos = file.line_col(*pat_end);
-                    hints.push(InlayHint {
-                        position: Position::new(pos.line - 1, pos.col - 1),
-                        label: InlayHintLabel::String(format!(": {ty}")),
-                        kind: Some(InlayHintKind::TYPE),
-                        padding_left: None,
-                        padding_right: None,
-                        text_edits: None,
-                        tooltip: None,
-                        data: None,
-                    });
+            for (pat_end, binding_id, iter) in &for_collector.0 {
+                let effective_iter = if let ExprKind::Path(path) = &iter.kind
+                    && let Some(Res::Local(node_id)) = resolutions.res.get(&path.id)
+                    && let Some(init) = local_inits.get(node_id)
+                {
+                    init
+                } else {
+                    iter
+                };
+                if let Some(ty) = infer_iter_element_type(effective_iter, resolutions, &state.items, &state.registry, &local_types) {
+                    if let Some(id) = binding_id {
+                        local_types.insert(*id, ty.clone());
+                    }
+                    if in_file(Span { start: *pat_end, end: *pat_end }) {
+                        let pos = file.line_col(*pat_end);
+                        hints.push(InlayHint {
+                            position: Position::new(pos.line - 1, pos.col - 1),
+                            label: InlayHintLabel::String(format!(": {ty}")),
+                            kind: Some(InlayHintKind::TYPE),
+                            padding_left: None,
+                            padding_right: None,
+                            text_edits: None,
+                            tooltip: None,
+                            data: None,
+                        });
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, PatKind, TyKind};
+use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, NodeId, PatKind, TyKind};
 use xur_ast::visit::{self, Visitor};
 use xur_bytecode::{ItemIndex, ItemRef, type_name};
 use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
@@ -21,14 +21,18 @@ impl<'ast> Visitor<'ast> for CallCollector {
     }
 }
 
-pub struct LetCollector<'a>(pub Vec<(usize, &'a Expr)>);
+pub struct LetCollector<'a>(pub Vec<(usize, Option<NodeId>, &'a Expr)>);
 
 impl<'ast> Visitor<'ast> for LetCollector<'ast> {
     fn visit_local(&mut self, local: &'ast Local) {
         if local.ty.is_none()
             && let Some(init) = &local.init
         {
-            self.0.push((local.pat.span.end, init));
+            let binding_id = match &local.pat.kind {
+                PatKind::Ident(_) => Some(local.pat.id),
+                _ => None,
+            };
+            self.0.push((local.pat.span.end, binding_id, init));
         }
         visit::walk_local(self, local);
     }
@@ -45,12 +49,16 @@ impl<'ast> Visitor<'ast> for MatchCollector<'ast> {
     }
 }
 
-pub struct ForLoopCollector<'a>(pub Vec<(usize, &'a Expr)>);
+pub struct ForLoopCollector<'a>(pub Vec<(usize, Option<NodeId>, &'a Expr)>);
 
 impl<'ast> Visitor<'ast> for ForLoopCollector<'ast> {
     fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
         if let ExprKind::ForLoop { pat, iter, .. } = &expr.kind {
-            self.0.push((pat.span.end, iter));
+            let binding_id = match &pat.kind {
+                PatKind::Ident(_) => Some(pat.id),
+                _ => None,
+            };
+            self.0.push((pat.span.end, binding_id, iter));
         }
         visit::walk_expr(self, expr);
     }
@@ -71,6 +79,7 @@ pub fn method_at_offset(
     offset: usize,
 ) -> Option<MethodAt> {
     let resolutions = program.resolutions();
+    let empty = HashMap::new();
     let mut best: Option<MethodAt> = None;
     for module in &program.krate.modules {
         let mut collector = MethodCallCollector {
@@ -78,6 +87,7 @@ pub fn method_at_offset(
             resolutions,
             items,
             registry,
+            local_types: &empty,
             found: Vec::new(),
         };
         collector.visit_module(module.ast);
@@ -95,6 +105,7 @@ struct MethodCallCollector<'a> {
     resolutions: &'a Resolutions,
     items: &'a ItemIndex,
     registry: &'a Registry,
+    local_types: &'a HashMap<NodeId, String>,
     found: Vec<MethodAt>,
 }
 
@@ -105,6 +116,7 @@ impl<'ast> Visitor<'ast> for MethodCallCollector<'_> {
             if ident_span.start <= self.offset && self.offset < ident_span.end {
                 let receiver_ty = infer_expr_type(
                     &mc.receiver, self.resolutions, self.items, self.registry,
+                    self.local_types,
                 );
                 self.found.push(MethodAt {
                     method_name: mc.seg.ident.name.to_string(),
@@ -122,6 +134,7 @@ pub fn infer_expr_type(
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
+    local_types: &HashMap<NodeId, String>,
 ) -> Option<String> {
     match &expr.kind {
         ExprKind::Lit(lit) => match &lit.kind {
@@ -140,7 +153,7 @@ pub fn infer_expr_type(
                 return Some("()".into());
             }
             let types: Vec<_> = elems.iter()
-                .map(|e| infer_expr_type(e, resolutions, items, registry)
+                .map(|e| infer_expr_type(e, resolutions, items, registry, local_types)
                     .unwrap_or_else(|| "_".into()))
                 .collect();
             Some(format!("({})", types.join(", ")))
@@ -189,29 +202,34 @@ pub fn infer_expr_type(
             }
         }
         ExprKind::MethodCall(mc) => {
-            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry);
+            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types);
             let method = mc.seg.ident.name.as_str();
-            // Try native/builtin method lookup first.
             if let Some(ty) = method_return_type(receiver_ty.as_deref(), method, registry) {
                 return Some(ty);
             }
-            // Try user-defined impl methods via the resolution system.
             if let Some(receiver_name) = receiver_ty.as_deref() {
-                return user_method_return_type(
+                if let Some(ty) = user_method_return_type(
                     receiver_name, method, &mc.receiver, resolutions, items, registry,
-                );
+                ) {
+                    return Some(ty);
+                }
+                if resolutions.find_type(receiver_name).is_some() {
+                    if let Some(id) = registry.builtin_method(BuiltinType::Struct, method) {
+                        return native_return_type(id, registry);
+                    }
+                }
             }
             None
         }
         ExprKind::Deref(inner) => {
-            infer_expr_type(inner, resolutions, items, registry)
+            infer_expr_type(inner, resolutions, items, registry, local_types)
                 .and_then(|t| t.strip_prefix('*').map(|s| s.to_string()))
         }
-        ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry),
+        ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry, local_types),
         ExprKind::Block(block) => {
             block.stmts.last().and_then(|stmt| {
                 if let xur_ast::StmtKind::Expr(e) = &stmt.kind {
-                    infer_expr_type(e, resolutions, items, registry)
+                    infer_expr_type(e, resolutions, items, registry, local_types)
                 } else {
                     None
                 }
@@ -220,14 +238,14 @@ pub fn infer_expr_type(
         ExprKind::If(_, then_block, _) => {
             then_block.stmts.last().and_then(|stmt| {
                 if let xur_ast::StmtKind::Expr(e) = &stmt.kind {
-                    infer_expr_type(e, resolutions, items, registry)
+                    infer_expr_type(e, resolutions, items, registry, local_types)
                 } else {
                     None
                 }
             })
         }
         ExprKind::Match(_, arms) => {
-            arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry))
+            arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry, local_types))
         }
         ExprKind::Try(inner) => {
             if let Some(shape) = native_call_return_shape(inner, resolutions, registry) {
@@ -239,7 +257,7 @@ pub fn infer_expr_type(
                 }
                 return Some(registry.shape_xur_name(shape));
             }
-            infer_expr_type(inner, resolutions, items, registry)
+            infer_expr_type(inner, resolutions, items, registry, local_types)
                 .map(|t| match t.as_str() {
                     "Result" | "Option" => "_".into(),
                     _ => t,
@@ -253,7 +271,7 @@ pub fn infer_expr_type(
             let ret = match &closure.decl.output {
                 FnRetTy::Ty(ty) => type_name(resolutions, ty),
                 FnRetTy::Default(_) => {
-                    infer_expr_type(&closure.body, resolutions, items, registry)
+                    infer_expr_type(&closure.body, resolutions, items, registry, local_types)
                         .unwrap_or_else(|| "_".into())
                 }
             };
@@ -272,12 +290,19 @@ pub fn infer_expr_type(
                 Some("bool".into())
             }
             _ => {
-                infer_expr_type(lhs, resolutions, items, registry)
-                    .or_else(|| infer_expr_type(rhs, resolutions, items, registry))
+                infer_expr_type(lhs, resolutions, items, registry, local_types)
+                    .or_else(|| infer_expr_type(rhs, resolutions, items, registry, local_types))
             }
         },
-        ExprKind::Unary(_, inner) => infer_expr_type(inner, resolutions, items, registry),
-        ExprKind::Path(_) => None,
+        ExprKind::Unary(_, inner) => infer_expr_type(inner, resolutions, items, registry, local_types),
+        ExprKind::Path(path) => {
+            let res = resolutions.res.get(&path.id)?;
+            match res {
+                Res::Local(node_id) => local_types.get(node_id).cloned(),
+                Res::Def(DefKind::Mod, _) => Some("module".into()),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
@@ -330,13 +355,14 @@ pub fn infer_iter_element_type(
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
+    local_types: &HashMap<NodeId, String>,
 ) -> Option<String> {
     match &iter.kind {
         ExprKind::Range(..) => Some("i64".into()),
         ExprKind::List(elems) => {
             let mut seen = Vec::new();
             for e in elems {
-                if let Some(ty) = infer_expr_type(e, resolutions, items, registry) {
+                if let Some(ty) = infer_expr_type(e, resolutions, items, registry, local_types) {
                     if !seen.contains(&ty) {
                         seen.push(ty);
                     }
