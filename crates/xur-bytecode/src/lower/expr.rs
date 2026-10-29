@@ -262,10 +262,18 @@ impl Lowerer<'_> {
             Res::Def(DefKind::Const, def) => DefRef::Const(def),
             Res::Def(DefKind::Mod, def) => DefRef::Module(def),
             Res::Def(DefKind::NativeVariant(_), def)
-                if self.resolutions.native_repr_values.contains_key(&def) =>
+                if self.resolutions.repr_values.contains_key(&def) =>
             {
-                let v = self.resolutions.native_repr_values[&def];
-                return self.constant(Constant::Int(v), span);
+                let dst = self.new_reg();
+                self.emit(
+                    InstKind::Adt {
+                        dst,
+                        ctor: def,
+                        fields: Vec::new(),
+                    },
+                    span,
+                );
+                return dst;
             }
             // A unit variant of a native enum; the VM rejects other kinds.
             Res::Def(DefKind::NativeVariant(ty), def) => {
@@ -274,9 +282,6 @@ impl Lowerer<'_> {
             }
             Res::Def(DefKind::Struct | DefKind::Variant, def) => match self.ctor_shape(def) {
                 Some(VariantData::Unit) => {
-                    if let Some(v) = self.items.repr_value(def) {
-                        return self.constant(Constant::Int(v), span);
-                    }
                     let dst = self.new_reg();
                     self.emit(
                         InstKind::Adt {

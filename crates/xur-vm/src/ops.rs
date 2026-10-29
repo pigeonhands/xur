@@ -27,11 +27,34 @@ pub(crate) fn unary(op: UnOp, value: &Value) -> RunResult<Value> {
 }
 
 impl Interp<'_> {
+    pub(crate) fn coerce_repr(&self, value: &Value) -> Option<Value> {
+        if let Value::Adt(adt) = value {
+            if adt.fields.is_empty() {
+                let program = self.shared.program();
+                return program
+                    .resolutions()
+                    .repr_values
+                    .get(&adt.ctor)
+                    .map(|&v| Value::Int(v));
+            }
+        }
+        None
+    }
+
     pub(crate) fn binary(&self, op: BinOpKind, lhs: &Value, rhs: &Value) -> RunResult<Value> {
         use BinOpKind::*;
+        // Equality uses original values so enum identity is preserved.
+        if op == Eq {
+            return Ok(Value::Bool(self.values_eq(lhs, rhs)));
+        }
+        if op == Ne {
+            return Ok(Value::Bool(!self.values_eq(lhs, rhs)));
+        }
+        let lhs_c = self.coerce_repr(lhs);
+        let lhs = lhs_c.as_ref().unwrap_or(lhs);
+        let rhs_c = self.coerce_repr(rhs);
+        let rhs = rhs_c.as_ref().unwrap_or(rhs);
         let result = match (op, lhs, rhs) {
-            (Eq, _, _) => Some(Value::Bool(self.values_eq(lhs, rhs))),
-            (Ne, _, _) => Some(Value::Bool(!self.values_eq(lhs, rhs))),
             (Add | Sub | Mul | Div | Rem, Value::Int(a), Value::Int(b)) => {
                 Some(int_op(op, *a, *b)?)
             }

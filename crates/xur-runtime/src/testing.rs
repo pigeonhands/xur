@@ -139,6 +139,10 @@ impl Context for TestCx<'_> {
         Err(RuntimeError::new("try_cast is not available in tests"))
     }
 
+    fn repr_value(&self, _def: DefId) -> Option<i64> {
+        None
+    }
+
     fn fn_info(&self, _value: &Value) -> Option<crate::FnInfo> {
         None
     }

@@ -432,7 +432,9 @@ impl<'s> Interp<'s> {
                 frame.set(*dst, value);
             }
             InstKind::Unary { dst, op, src } => {
-                let value = crate::ops::unary(*op, frame.get(*src))?;
+                let operand = frame.get(*src);
+                let coerced = self.coerce_repr(operand);
+                let value = crate::ops::unary(*op, coerced.as_ref().unwrap_or(operand))?;
                 frame.set(*dst, value);
             }
             InstKind::Binary { dst, op, lhs, rhs } => {

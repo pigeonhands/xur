@@ -124,6 +124,10 @@ impl Context for Interp<'_> {
         }
     }
 
+    fn repr_value(&self, def: DefId) -> Option<i64> {
+        self.shared.program().resolutions().repr_values.get(&def).copied()
+    }
+
     fn fn_info(&self, value: &Value) -> Option<FnInfo> {
         match value {
             Value::Fn(def) => {

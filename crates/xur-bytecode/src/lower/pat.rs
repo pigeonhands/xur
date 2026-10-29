@@ -28,19 +28,12 @@ impl Lowerer<'_> {
                     self.locals.insert(pat.id, reg);
                 }
                 Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
-                    if let Some(v) = self.items.repr_value(ctor) {
-                        let expected = self.constant(Constant::Int(v), span);
-                        self.test_eq(value, expected, fail, span);
-                    } else {
-                        self.test_ctor(value, ctor, fail, span);
-                    }
+                    self.test_ctor(value, ctor, fail, span);
                 }
                 Some(Res::Def(DefKind::NativeVariant(_), def))
-                    if self.resolutions.native_repr_values.contains_key(&def) =>
+                    if self.resolutions.repr_values.contains_key(&def) =>
                 {
-                    let v = self.resolutions.native_repr_values[&def];
-                    let expected = self.constant(Constant::Int(v), span);
-                    self.test_eq(value, expected, fail, span);
+                    self.test_ctor(value, def, fail, span);
                 }
                 Some(res @ Res::Def(DefKind::NativeVariant(_), _)) => {
                     self.test_record(res, value, fail, span)
@@ -181,19 +174,12 @@ impl Lowerer<'_> {
     fn pat_path(&mut self, path: &Path, value: Reg, fail: BlockId) {
         match self.resolutions.res.get(&path.id).copied() {
             Some(Res::Def(DefKind::Variant | DefKind::Struct, ctor)) => {
-                if let Some(v) = self.items.repr_value(ctor) {
-                    let expected = self.constant(Constant::Int(v), path.span);
-                    self.test_eq(value, expected, fail, path.span);
-                } else {
-                    self.test_ctor(value, ctor, fail, path.span);
-                }
+                self.test_ctor(value, ctor, fail, path.span);
             }
             Some(Res::Def(DefKind::NativeVariant(_), def))
-                if self.resolutions.native_repr_values.contains_key(&def) =>
+                if self.resolutions.repr_values.contains_key(&def) =>
             {
-                let v = self.resolutions.native_repr_values[&def];
-                let expected = self.constant(Constant::Int(v), path.span);
-                self.test_eq(value, expected, fail, path.span);
+                self.test_ctor(value, def, fail, path.span);
             }
             Some(res @ Res::Def(DefKind::NativeVariant(_) | DefKind::NativeType(_), _)) => {
                 self.test_record(res, value, fail, path.span)

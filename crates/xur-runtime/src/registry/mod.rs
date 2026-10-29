@@ -90,6 +90,9 @@ pub trait Context: ConvertCx {
     /// coercion fails.
     fn try_cast(&self, value: &Value, target: DefId) -> RunResult<Value>;
 
+    /// The integer repr value of a repr enum variant, if `def` is one.
+    fn repr_value(&self, def: DefId) -> Option<i64>;
+
     /// Reflection data for a function, closure, or constructor value.
     fn fn_info(&self, value: &Value) -> Option<crate::FnInfo>;
 }
