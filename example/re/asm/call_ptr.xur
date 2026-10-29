@@ -15,7 +15,7 @@ use std::re::asm::x86;
 fn main() -> Result<()> {
     // Build the instructions using enum operands.
     let instructions = [
-        x86::insn(x86::Code::Mov_r32_imm32, x86::reg(x86::Register::EAX), 42)?,
+        x86::insn(x86::Code::Mov_r32_imm32, x86::Register::EAX, 42)?,
         x86::insn(x86::Code::Retnq)?,
     ];
 
