@@ -40,7 +40,12 @@ pub enum XurType {
     List(Option<ElemHint>),
     /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
     Map(Option<&'static Shape>, Option<&'static Shape>),
+    /// `Result<T, E>` — the Ok and Err inner types.
+    Result(ElemHint, ElemHint),
+    /// `Option<T>` — the Some inner type.
+    Option(ElemHint),
     Record,
+    Module,
     Unit,
 }
 

@@ -379,7 +379,17 @@ impl Registry {
             }
             XurType::Map(Some(k), None) => format!("map<{}, _>", self.shape_xur_name(k)),
             XurType::Map(None, Some(v)) => format!("map<_, {}>", self.shape_xur_name(v)),
+            XurType::Result(ok, err) => {
+                let ok = match ok { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
+                let err = match err { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
+                format!("Result<{ok}, {err}>")
+            }
+            XurType::Option(inner) => {
+                let inner = match inner { ElemHint::Shape(s) => self.shape_xur_name(s), ElemHint::Name(n) => n.into() };
+                format!("Option<{inner}>")
+            }
             XurType::Record => "record".into(),
+            XurType::Module => "module".into(),
             XurType::Unit => "()".into(),
         }
     }

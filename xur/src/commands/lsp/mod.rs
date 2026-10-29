@@ -21,7 +21,7 @@ use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
     HintCollector, InferredTy, LetBinding,
-    build_param_name_map, infer_expr_type, infer_iter_element_type, return_shape,
+    build_param_name_map, infer_expr_type, infer_iter_element_type, infer_match_arm_type,
     method_at_offset, method_signature,
 };
 use util::*;
@@ -571,30 +571,17 @@ impl LanguageServer for Backend {
                 if !in_file(Span { start: pat_end, end: pat_end }) {
                     continue;
                 }
-                let shape = return_shape(scrutinee, resolutions, &state.items, &state.registry, &local_types);
-                let ty = shape.and_then(|shape| {
-                    let variant_def = match resolutions.res.get(&variant_path_id) {
-                        Some(Res::Def(DefKind::Variant, def)) => *def,
-                        _ => return None,
-                    };
-                    if let Ok(r) = shape.def.into_result() {
-                        if variant_def == lang.ok {
-                            return Some(InferredTy::from_shape(r.t(), &state.registry, resolutions));
-                        }
-                        if variant_def == lang.err {
-                            return Some(InferredTy::from_shape(r.e(), &state.registry, resolutions));
-                        }
-                    }
-                    if let Ok(o) = shape.def.into_option() {
-                        if variant_def == lang.some {
-                            return Some(InferredTy::from_shape(o.t(), &state.registry, resolutions));
-                        }
-                    }
-                    None
-                });
+                let variant_def = match resolutions.res.get(&variant_path_id) {
+                    Some(Res::Def(DefKind::Variant, def)) => *def,
+                    _ => continue,
+                };
+                let ty = infer_match_arm_type(
+                    scrutinee, variant_def, &lang,
+                    resolutions, &state.items, &state.registry, &local_types,
+                );
                 if let Some(ty) = ty {
                     local_types.insert(binding_id, ty.clone());
-                    if !matches!(ty, InferredTy::Infer | InferredTy::Module) {
+                    if !matches!(ty, InferredTy::Infer) {
                         let pos = file.line_col(pat_end);
                         let label = format!(": {}", ty.display(resolutions));
                         hints.push(InlayHint {

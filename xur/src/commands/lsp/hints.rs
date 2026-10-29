@@ -156,7 +156,9 @@ impl InferredTy {
             }
             XurType::List(None) => Self::List(None),
             XurType::Map(_, _) => Self::Map,
+            XurType::Result(_, _) | XurType::Option(_) => Self::Infer,
             XurType::Record => Self::Record,
+            XurType::Module => Self::Module,
         }
     }
 
@@ -675,6 +677,84 @@ pub fn return_shape(
 ) -> Option<&'static facet::Shape> {
     native_call_return_shape(expr, resolutions, registry)
         .or_else(|| inferred_return_shape(expr, resolutions, items, registry, local_types))
+}
+
+/// Infer the type of a match arm binding (e.g. `m` in `Ok(m)`) by decomposing
+/// the scrutinee's return type.
+pub fn infer_match_arm_type(
+    scrutinee: &Expr,
+    variant_def: DefId,
+    lang: &xur_resolve::LangItems,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<InferredTy> {
+    // Shape-based: works for typed Rust functions returning Result<T, E> / Option<T>.
+    if let Some(shape) = return_shape(scrutinee, resolutions, items, registry, local_types) {
+        if let Ok(r) = shape.def.into_result() {
+            if variant_def == lang.ok {
+                return Some(InferredTy::from_shape(r.t(), registry, resolutions));
+            }
+            if variant_def == lang.err {
+                return Some(InferredTy::from_shape(r.e(), registry, resolutions));
+            }
+        }
+        if let Ok(o) = shape.def.into_option() {
+            if variant_def == lang.some {
+                return Some(InferredTy::from_shape(o.t(), registry, resolutions));
+            }
+        }
+    }
+    // XurType-based: for raw functions that declare Result/Option return hints.
+    let id = resolve_callee_id(scrutinee, resolutions, items, registry, local_types)?;
+    let hint = registry.function(id).return_hint?;
+    use xur_runtime::registry::{ElemHint, ReturnHint, XurType};
+    if let ReturnHint::Xur(xur) = hint {
+        match xur {
+            XurType::Result(ok, err) => {
+                let ty = if variant_def == lang.ok { ok } else if variant_def == lang.err { err } else { return None };
+                return Some(match ty {
+                    ElemHint::Shape(s) => InferredTy::from_shape(s, registry, resolutions),
+                    ElemHint::Name(n) => InferredTy::from_name(n),
+                });
+            }
+            XurType::Option(inner) => {
+                if variant_def == lang.some {
+                    return Some(match inner {
+                        ElemHint::Shape(s) => InferredTy::from_shape(s, registry, resolutions),
+                        ElemHint::Name(n) => InferredTy::from_name(n),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn resolve_callee_id(
+    expr: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<NativeFnId> {
+    match &expr.kind {
+        ExprKind::Call(callee, _) => {
+            if let ExprKind::Path(path) = &callee.kind
+                && let Some(Res::Def(DefKind::NativeFn(id), _)) = resolutions.res.get(&path.id)
+            {
+                return Some(*id);
+            }
+            None
+        }
+        ExprKind::MethodCall(mc) => {
+            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
+            resolve_method(&receiver_ty, mc.seg.ident.name.as_str(), resolutions, registry)
+        }
+        _ => None,
+    }
 }
 
 fn native_call_return_shape(
