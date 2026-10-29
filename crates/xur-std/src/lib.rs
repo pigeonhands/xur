@@ -27,6 +27,7 @@ mod ptr;
 pub mod re;
 mod record;
 mod reflect;
+mod regex;
 mod str;
 mod sync;
 mod thread;
@@ -80,6 +81,7 @@ pub fn register(registry: &Registry) {
     path::register(registry);
     ptr::register(registry);
     record::register(registry);
+    regex::register(registry);
     time::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]

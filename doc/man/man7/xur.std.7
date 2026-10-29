@@ -284,6 +284,22 @@ Also
 See
 .BR xur.std.time (7).
 .TP
+.B std::regex
+Regular expressions.
+.B new(pattern)
+returns a
+.B Regex
+with
+.BR is_match() ,
+.BR find() ,
+.BR find_all() ,
+.BR captures() ,
+.BR replace() ,
+.BR replace_all() ,
+.BR split() .
+See
+.BR xur.std.regex (7).
+.TP
 .B std::xur
 Runtime metadata.
 .B invoked_by()
@@ -382,4 +398,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.ptr (7),
 .BR xur.std.cli (7),
 .BR xur.std.http (7),
-.BR xur.std.time (7)
+.BR xur.std.time (7),
+.BR xur.std.regex (7)

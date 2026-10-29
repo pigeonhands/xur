@@ -1,0 +1,45 @@
+// Regular expressions: match, find, capture, replace.
+//
+// Run it:
+//
+//     xur run example/regex/match.xur
+
+use std::regex;
+use std::io;
+
+fn main() {
+    let re = regex::new("\\d+");
+
+    io::println("is_match('abc123'): {}", re.is_match("abc123"));
+    io::println("is_match('abc'):    {}", re.is_match("abc"));
+
+    // find returns the first match
+    match re.find("price: 42 dollars") {
+        Some(m) => io::println("found: {}", m),
+        None    => io::println("no match"),
+    }
+
+    // find_all returns all matches
+    let all = re.find_all("a1 b22 c333");
+    io::println("all matches: {}", all);
+
+    // captures with groups
+    let email_re = regex::new("(\\w+)@(\\w+)\\.(\\w+)");
+    match email_re.captures("user@example.com") {
+        Some(caps) => {
+            io::println("full:   {}", caps[0]);
+            io::println("user:   {}", caps[1]);
+            io::println("domain: {}", caps[2]);
+            io::println("tld:    {}", caps[3]);
+        }
+        None => io::println("no match"),
+    }
+
+    // replace
+    let censored = regex::new("\\b\\w{4}\\b");
+    io::println("replace: {}", censored.replace_all("the quick brown fox", "****"));
+
+    // split
+    let csv = regex::new(",\\s*");
+    io::println("split: {}", csv.split("one, two,three ,  four"));
+}

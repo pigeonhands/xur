@@ -1,0 +1,62 @@
+.TH XUR.STD.REGEX 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.regex \- regular expressions
+.SH SYNOPSIS
+.B use std::regex;
+.SH DESCRIPTION
+.B std::regex
+provides Perl-compatible regular expressions backed by the Rust
+.B regex
+crate.
+.SH FUNCTIONS
+.TP
+.B regex::new(pattern) -> Regex
+Compile a regex pattern. Raises an error on invalid syntax.
+.SH REGEX METHODS
+.TP
+.B is_match(text) -> bool
+Whether the pattern matches anywhere in
+.IR text .
+.TP
+.B find(text) -> Option<str>
+The first match as a string, or None.
+.TP
+.B find_all(text) -> [str]
+All non-overlapping matches.
+.TP
+.B captures(text) -> Option<[value]>
+Capture groups from the first match. Index 0 is the full match.
+Unmatched groups are
+.BR () .
+Returns None if no match.
+.TP
+.B replace(text, replacement) -> str
+Replace the first match. Use
+.B $1
+etc. in the replacement to reference capture groups.
+.TP
+.B replace_all(text, replacement) -> str
+Replace all matches.
+.TP
+.B split(text) -> [str]
+Split the text around all matches.
+.SH EXAMPLES
+.nf
+use std::regex;
+use std::io;
+
+fn main() {
+    let re = regex::new(r"\\d+");
+    io::println("{}", re.find_all("a1 b22 c333"));
+    // => ["1", "22", "333"]
+
+    let email = regex::new(r"(\\w+)@(\\w+\\.\\w+)");
+    match email.captures("user@example.com") {
+        Some(caps) => io::println("{} at {}", caps[1], caps[2]),
+        None => io::println("no match"),
+    }
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.str (7)
