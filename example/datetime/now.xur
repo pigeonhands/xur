@@ -1,0 +1,47 @@
+// Date and time: current time, formatting, timestamps.
+//
+// Run it:
+//
+//     xur run example/datetime/now.xur
+
+use std::datetime;
+use std::io;
+
+fn main() -> Result<()> {
+    let now = datetime::now();
+    io::println("now:       {}", now);
+    io::println("iso:       {}", now.iso());
+    io::println("year:      {}", now.year());
+    io::println("month:     {}", now.month());
+    io::println("day:       {}", now.day());
+    io::println("hour:      {}", now.hour());
+    io::println("minute:    {}", now.minute());
+    io::println("second:    {}", now.second());
+    io::println("weekday:   {}", now.weekday());
+    io::println("timestamp: {}", now.timestamp());
+    io::println("formatted: {}", now.format("%Y-%m-%d %H:%M:%S"));
+
+    // from a unix timestamp
+    let epoch = datetime::from_timestamp(0);
+    io::println("epoch: {}", epoch);
+
+    // parse an ISO string
+    let parsed = datetime::parse("2026-10-29T12:00:00+00:00")?;
+    io::println("parsed: {}", parsed);
+
+    // parse with a custom format template
+    let custom = datetime::parse("29/10/2026 14:30:00", "%d/%m/%Y %H:%M:%S")?;
+    io::println("custom: {}", custom.format("%Y-%m-%d %H:%M"));
+
+    // date arithmetic
+    let tomorrow = now.add_days(1);
+    io::println("tomorrow:   {}", tomorrow.format("%Y-%m-%d"));
+    let last_week = now.add_weeks(-1);
+    io::println("last week:  {}", last_week.format("%Y-%m-%d"));
+    let next_month = now.add_months(1);
+    io::println("next month: {}", next_month.format("%Y-%m-%d"));
+    let in_2_hours = now.add_hours(2);
+    io::println("+2 hours:   {}", in_2_hours.format("%H:%M:%S"));
+
+    Ok(())
+}

@@ -284,6 +284,21 @@ Also
 See
 .BR xur.std.time (7).
 .TP
+.B std::datetime
+Date and time.
+.B now()
+and
+.B utc_now()
+return a
+.B DateTime
+with accessors, formatting, arithmetic
+.RB ( add_days() ,
+.BR add_hours() ,
+.BR add_months() ),
+and parsing (RFC\ 3339, RFC\ 2822, custom templates).
+See
+.BR xur.std.datetime (7).
+.TP
 .B std::regex
 Regular expressions.
 .B new(pattern)
@@ -399,4 +414,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.cli (7),
 .BR xur.std.http (7),
 .BR xur.std.time (7),
-.BR xur.std.regex (7)
+.BR xur.std.regex (7),
+.BR xur.std.datetime (7)

@@ -9,6 +9,7 @@ mod assert;
 mod bytes;
 #[cfg(feature = "cli")]
 mod cli;
+mod datetime;
 mod fmt;
 mod fs;
 mod http;
@@ -82,6 +83,7 @@ pub fn register(registry: &Registry) {
     ptr::register(registry);
     record::register(registry);
     regex::register(registry);
+    datetime::register(registry);
     time::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]

@@ -1,0 +1,118 @@
+.TH XUR.STD.DATETIME 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.datetime \- date and time
+.SH SYNOPSIS
+.B use std::datetime;
+.SH DESCRIPTION
+.B std::datetime
+provides wall-clock date and time, backed by chrono.
+For monotonic timing, see
+.BR xur.std.time (7).
+.SH FUNCTIONS
+.TP
+.B datetime::now() -> DateTime
+Current local time.
+.TP
+.B datetime::utc_now() -> DateTime
+Current UTC time.
+.TP
+.B datetime::from_timestamp(secs) -> DateTime
+DateTime from a Unix timestamp (seconds since epoch, UTC).
+.TP
+.B datetime::parse(text) -> Result<DateTime, str>
+Parse an RFC 3339 or RFC 2822 string.
+.TP
+.B datetime::parse(text, format) -> Result<DateTime, str>
+Parse with a chrono format string (e.g.\&
+.BR "%Y-%m-%d %H:%M:%S" ).
+.SH DATETIME METHODS
+.TP
+.B year() -> int
+Four-digit year.
+.TP
+.B month() -> int
+Month (1\(en12).
+.TP
+.B day() -> int
+Day of the month (1\(en31).
+.TP
+.B hour() -> int
+Hour (0\(en23).
+.TP
+.B minute() -> int
+Minute (0\(en59).
+.TP
+.B second() -> int
+Second (0\(en59).
+.TP
+.B weekday() -> str
+Day name (e.g. "Monday").
+.TP
+.B timestamp() -> int
+Unix timestamp in seconds.
+.TP
+.B timestamp_millis() -> int
+Unix timestamp in milliseconds.
+.TP
+.B iso() -> str
+RFC 3339 representation.
+.TP
+.B format(pattern) -> str
+Format the datetime using a chrono format string.
+.SS Arithmetic
+All arithmetic methods accept negative values and return a new DateTime.
+.TP
+.B add_days(n) -> DateTime
+Add (or subtract)
+.I n
+days.
+.TP
+.B add_hours(n) -> DateTime
+Add
+.I n
+hours.
+.TP
+.B add_minutes(n) -> DateTime
+Add
+.I n
+minutes.
+.TP
+.B add_seconds(n) -> DateTime
+Add
+.I n
+seconds.
+.TP
+.B add_weeks(n) -> DateTime
+Add
+.I n
+weeks.
+.TP
+.B add_months(n) -> DateTime
+Add
+.I n
+calendar months.
+.TP
+.B add_years(n) -> DateTime
+Add
+.I n
+years.
+.SH EXAMPLES
+.nf
+use std::datetime;
+use std::io;
+
+fn main() -> Result<()> {
+    let now = datetime::now();
+    io::println("{}", now.format("%Y-%m-%d %H:%M"));
+    io::println("weekday: {}", now.weekday());
+    io::println("timestamp: {}", now.timestamp());
+
+    let epoch = datetime::from_timestamp(0);
+    io::println("epoch: {}", epoch.iso());
+
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.time (7)
