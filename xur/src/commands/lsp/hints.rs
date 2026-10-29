@@ -213,6 +213,15 @@ pub fn infer_expr_type(
             arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry))
         }
         ExprKind::Try(inner) => {
+            if let Some(shape) = native_call_return_shape(inner, resolutions, registry) {
+                if let Ok(r) = shape.def.into_result() {
+                    return Some(registry.shape_xur_name(r.t()));
+                }
+                if let Ok(o) = shape.def.into_option() {
+                    return Some(registry.shape_xur_name(o.t()));
+                }
+                return Some(registry.shape_xur_name(shape));
+            }
             infer_expr_type(inner, resolutions, items, registry)
                 .map(|t| match t.as_str() {
                     "Result" | "Option" => "_".into(),
