@@ -39,8 +39,6 @@ macro_rules! register_flags {
 
 pub(super) use register_flags;
 
-/// Collects the `(name, value)` pairs of a bitflags type for
-/// [`ModuleBuilder::repr_enum`].
 macro_rules! flag_variants {
     ($flags:ty, $bits:ty) => {{
         <$flags>::FLAGS

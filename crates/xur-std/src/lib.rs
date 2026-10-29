@@ -9,11 +9,14 @@ mod assert;
 mod bytes;
 #[cfg(feature = "cli")]
 mod cli;
+#[cfg(feature = "datetime")]
 mod datetime;
 mod fmt;
 mod fs;
+#[cfg(feature = "http")]
 mod http;
 mod io;
+#[cfg(feature = "json")]
 mod json;
 mod list;
 mod log;
@@ -28,6 +31,7 @@ mod ptr;
 pub mod re;
 mod record;
 mod reflect;
+#[cfg(feature = "regex")]
 mod regex;
 mod str;
 mod sync;
@@ -74,7 +78,9 @@ pub fn register(registry: &Registry) {
     any::register(registry);
     assert::register(registry);
     reflect::register(registry);
+    #[cfg(feature = "http")]
     http::register(registry);
+    #[cfg(feature = "json")]
     json::register(registry);
     re::register(registry);
     math::register(registry);
@@ -88,7 +94,9 @@ pub fn register(registry: &Registry) {
     path::register(registry);
     ptr::register(registry);
     record::register(registry);
+    #[cfg(feature = "regex")]
     regex::register(registry);
+    #[cfg(feature = "datetime")]
     datetime::register(registry);
     time::register(registry);
     xur::register(registry);

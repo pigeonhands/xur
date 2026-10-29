@@ -14,7 +14,9 @@
 //! ```
 
 mod emitter;
+#[cfg(feature = "re-dotnet-il2cpp")]
 pub(super) mod il2cpp;
+#[cfg(feature = "re-dotnet-runtime")]
 mod runtime;
 mod sig;
 
@@ -150,7 +152,9 @@ pub(super) fn register(registry: &Registry, re: &mut ModuleBuilder<'_>) {
         &skip,
     );
 
+    #[cfg(feature = "re-dotnet-il2cpp")]
     il2cpp::register(registry, &mut dotnet);
+    #[cfg(feature = "re-dotnet-runtime")]
     runtime::register(registry, &mut dotnet);
 }
 

@@ -24,11 +24,17 @@
 //! for ty in module.all_types() { ... }
 //! ```
 
+#[cfg(feature = "re-asm")]
 mod asm;
+#[cfg(feature = "re-dotnet")]
 mod dotnet;
+#[allow(unused)]
 mod flags;
+#[cfg(feature = "re-image")]
 mod image;
+#[cfg_attr(not(any(feature = "re-image", feature = "re-proc")), allow(unused))]
 mod native;
+#[cfg(feature = "re-proc")]
 mod proc;
 pub mod walk;
 
@@ -37,9 +43,14 @@ use xur_runtime::Registry;
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::re", |re| {
         let registry = re.registry();
+        let _ = &registry;
+        #[cfg(feature = "re-image")]
         image::register(registry, re);
+        #[cfg(feature = "re-proc")]
         proc::register(registry, re);
+        #[cfg(feature = "re-asm")]
         asm::register(registry, re);
+        #[cfg(feature = "re-dotnet")]
         dotnet::register(registry, re);
     });
 }

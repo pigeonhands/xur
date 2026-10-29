@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 xur-resolve.workspace = true
 xur-runtime.workspace = true
-xur-std.workspace = true
+xur-std = { workspace = true, default-features = false }
 xur-vm.workspace = true
 xur-span.workspace = true
 ctor = "0.4"
@@ -24,8 +24,19 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [features]
-default = ["il2cpp-runtime", "il2cpp-unity", "godot"]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re"]
 il2cpp-runtime = ["dep:hao-il2cpp-runtime"]
 il2cpp-unity = ["dep:hao-il2cpp-unity"]
 godot = ["dep:hao-godot"]
 egui = ["hao-il2cpp-unity/egui"]
+xur-http              = ["xur-std/http"]
+xur-regex             = ["xur-std/regex"]
+xur-datetime          = ["xur-std/datetime"]
+xur-json              = ["xur-std/json"]
+xur-re-image          = ["xur-std/re-image"]
+xur-re-proc           = ["xur-std/re-proc"]
+xur-re-asm            = ["xur-std/re-asm"]
+xur-re-dotnet         = ["xur-std/re-dotnet"]
+xur-re-dotnet-il2cpp  = ["xur-std/re-dotnet-il2cpp"]
+xur-re-dotnet-runtime = ["xur-std/re-dotnet-runtime"]
+xur-re                = ["xur-std/re"]

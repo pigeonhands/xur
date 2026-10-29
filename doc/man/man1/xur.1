@@ -104,6 +104,28 @@ Inspect a file's tokens:
 xur debug tokens example/main.xur
 .fi
 .RE
+.SH FEATURE FLAGS
+Standard library modules backed by heavyweight crates are behind Cargo
+features so embedders only compile what they need.
+All features are enabled by default.
+.PP
+.TS
+l l l .
+Feature	Modules	Crate
+_
+cli	std::cli	pico-args, inquire, comfy-table
+http	std::http	ureq
+regex	std::regex	regex
+datetime	std::datetime	chrono
+json	std::json	serde, serde_json
+re-image	std::re (pe, elf)	pewter
+re-proc	std::re::proc	procodile
+re-asm	std::re::asm	iced-x86
+re-dotnet	std::re::dotnet	hao
+re-dotnet-il2cpp	std::re::dotnet::il2cpp	hao-il2cpp
+re-dotnet-runtime	std::re::dotnet::runtime	hao-runtime
+re	all re-* features
+.TE
 .SH EXIT STATUS
 .TP
 .B 0

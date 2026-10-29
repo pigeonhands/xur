@@ -210,13 +210,41 @@ modules are lazy: they are only built if a program uses them.
 | `std::time`    | `Instant`, `Duration`, `now`, `elapsed`, `sleep`                         |
 | `std::datetime`| `now`, `utc_now`, formatting, parsing (RFC 3339, custom)                 |
 | `std::assert`  | `is_eq`, `is_ne`, `is_true`, `is_false`, `fail`                         |
-| `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe`, `elf`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), and .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`) |
+| `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe`, `elf`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`), and Unity Il2Cpp with [hao-il2cpp](https://docs.rs/hao-il2cpp) (`dotnet::il2cpp`) |
 
 Built-in values have methods too: lists (`push`, `pop`, `get`, `map`,
 `filter`, `sort`, `join`, ...), strings (`split`, `trim`, `starts_with`,
 `replace`, `to_upper`, `ord`, ...), numbers (`abs`, `pow`, `to_hex`, ...),
 bytes (`read_u32`, `write_u16`, ...) and records (`set_field`,
 `set_method`, `keys`, `values`).
+
+### Feature flags
+
+Modules backed by heavyweight external crates are behind Cargo features so
+embedders only compile what they need. All are enabled by default.
+
+| Feature | Modules | Backing crate |
+| ------- | ------- | ------------- |
+| `cli` | `std::cli` | pico-args, inquire, comfy-table |
+| `http` | `std::http` | ureq |
+| `regex` | `std::regex` | regex |
+| `datetime` | `std::datetime` | chrono |
+| `json` | `std::json` | serde, serde_json |
+| `re-image` | `std::re` (pe, elf) | pewter |
+| `re-proc` | `std::re::proc` | procodile |
+| `re-asm` | `std::re::asm` | iced-x86 |
+| `re-dotnet` | `std::re::dotnet` | hao |
+| `re-dotnet-il2cpp` | `std::re::dotnet::il2cpp` | hao-il2cpp |
+| `re-dotnet-runtime` | `std::re::dotnet::runtime` | hao-runtime |
+| `re` | all `re-*` features | |
+
+```sh
+# Minimal build — no optional modules:
+cargo build -p xur-std --no-default-features
+
+# Just .NET assembly support:
+cargo build -p xur-std --no-default-features --features re-dotnet
+```
 
 ## Examples
 

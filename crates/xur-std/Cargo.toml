@@ -11,8 +11,19 @@ name = "xur_std"
 path = "src/lib.rs"
 
 [features]
-default = ["cli"]
-cli = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
+default = ["cli", "http", "regex", "datetime", "json", "re"]
+cli               = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
+http              = ["dep:ureq"]
+regex             = ["dep:regex"]
+datetime          = ["dep:chrono"]
+json              = ["dep:serde", "dep:serde_json"]
+re-image          = ["dep:pewter"]
+re-proc           = ["dep:procodile"]
+re-asm            = ["dep:iced-x86"]
+re-dotnet         = ["dep:hao"]
+re-dotnet-il2cpp  = ["re-dotnet", "dep:hao-il2cpp"]
+re-dotnet-runtime = ["re-dotnet", "dep:hao-runtime"]
+re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime"]
 
 [dependencies]
 xur-ast.workspace = true
@@ -20,21 +31,21 @@ xur-resolve.workspace = true
 xur-runtime.workspace = true
 xur-span.workspace = true
 facet.workspace = true
-pewter.workspace = true
-procodile.workspace = true
 bitflags.workspace = true
-hao.workspace = true
-hao-il2cpp.workspace = true
-hao-runtime.workspace = true
-iced-x86.workspace = true
-ureq.workspace = true
-regex.workspace = true
-chrono.workspace = true
+pewter = { workspace = true, optional = true }
+procodile = { workspace = true, optional = true }
+hao = { workspace = true, optional = true }
+hao-il2cpp = { workspace = true, optional = true }
+hao-runtime = { workspace = true, optional = true }
+iced-x86 = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 dashmap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
