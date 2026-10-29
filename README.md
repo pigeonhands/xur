@@ -320,6 +320,8 @@ There are complete programs in [`example/`](example):
 | [`xur-stub/example/hooking.xur`](xur-stub/example/hooking.xur) | inline function hooking with hooking-rs |
 | [`xur-stub/example/tracing.xur`](xur-stub/example/tracing.xur) | structured logging with `stub::tracing` |
 | [`xur-stub/example/godot.xur`](xur-stub/example/godot.xur) | Godot (.NET) game inspector |
+| [`xur-stub/example/megabonk.xur`](xur-stub/example/megabonk.xur) | Megabonk (Unity Il2Cpp) game analysis |
+| [`xur-stub/example/sts2.xur`](xur-stub/example/sts2.xur) | Slay the Spire 2 (Godot CoreCLR) game analysis |
 
 ## In-process injection with xur-stub
 

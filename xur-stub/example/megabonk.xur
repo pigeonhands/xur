@@ -1,0 +1,115 @@
+// Megabonk inspector — Unity Il2Cpp game analysis.
+//
+// Loads into the game via LD_PRELOAD, reads Il2Cpp metadata, lists
+// assemblies and types, dumps fields and methods, and writes proxy
+// assemblies for offline analysis.
+//
+//     cargo build --release -p xur-stub
+//     # Steam > Megabonk > Properties > Launch options:
+//     XUR_STUB_PATH=xur-stub/example/megabonk.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::io;
+use std::fmt;
+use std::re::proc;
+use std::re::dotnet::il2cpp;
+use std::stub::tracing;
+
+fn ctor() {
+    tracing::register("file", "/tmp/megabonk-xur.log", "debug");
+}
+
+fn main() -> Result<()> {
+    let pid = proc::current_pid();
+    io::println("[megabonk] pid {}", pid);
+
+    let handle = proc::open_current()?;
+    let modules = handle.modules()?;
+    io::println("[megabonk] {} modules loaded", modules.len());
+
+    // Find GameAssembly.so — the Il2Cpp compiled code.
+    let ga_base = 0;
+    let ga_size = 0;
+    let ga_path = "";
+    for m in modules {
+        if m.name.starts_with("GameAssembly") {
+            ga_base = m.base;
+            ga_size = m.size;
+            ga_path = m.path;
+        }
+    }
+
+    if ga_base == 0 {
+        io::println("[megabonk] GameAssembly not found — not running inside the game?");
+        io::println("[megabonk] loaded modules:");
+        for m in modules {
+            io::println("  {} 0x{} ({} bytes)", m.name, m.base.to_hex(), m.size);
+        }
+        return Ok(());
+    }
+
+    io::println("[megabonk] GameAssembly at 0x{} ({} bytes)", ga_base.to_hex(), ga_size);
+
+    // Read the ELF header to confirm it's mapped.
+    let header = handle.read(ga_base, 16)?;
+    io::println("[megabonk] header: {}", header.to_hex());
+
+    // Derive the game directory from the GameAssembly path.
+    let parts = ga_path.split("/");
+    let dir_parts = [];
+    let i = 0;
+    for part in parts {
+        if i < parts.len() - 1 {
+            dir_parts.push(part);
+        }
+        i = i + 1;
+    }
+    let game_dir = dir_parts.join("/");
+    io::println("[megabonk] game dir: {}", game_dir);
+
+    // Open Il2Cpp metadata.
+    let game = il2cpp::open(game_dir)?;
+
+    // List assemblies (images).
+    let images = game.image_names();
+    io::println("[megabonk] {} assemblies:", images.len());
+    for name in images {
+        io::println("  {}", name);
+    }
+
+    // Dump types.
+    let types = game.types();
+    io::println("[megabonk] {} types total", types.len());
+    io::println("");
+
+    let limit = 100;
+    let shown = 0;
+    for ty in types {
+        if shown >= limit { break; }
+        io::println("{}", ty.full_name());
+
+        for field in ty.fields() {
+            let tag = if field.is_static() { " (static)" } else { "" };
+            io::println("  field {} {}{}", field.type_name(), field.name(), tag);
+        }
+
+        for method in ty.methods() {
+            let tag = if method.is_static() { " static" } else { "" };
+            io::println("  method {}({}){}", method.name(),
+                method.parameter_type_names().join(", "), tag);
+        }
+
+        shown = shown + 1;
+    }
+
+    if types.len() > limit {
+        io::println("... and {} more types", types.len() - limit);
+    }
+
+    // Write proxy assemblies for offline analysis with dotPeek / ILSpy.
+    let out = "/tmp/megabonk-proxies";
+    let paths = game.write_assemblies(out)?;
+    io::println("[megabonk] wrote {} proxy assemblies to {}", paths.len(), out);
+
+    Ok(())
+}
