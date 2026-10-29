@@ -21,7 +21,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             Ok(option(cx, record.field(sym(name)).cloned()))
         })
-        .raw_function("set_field", |_, args| {
+        .raw_function_returns_xur("set_field", XurType::Record, |_, args| {
             let (record, [Value::Str(name), value]) = receiver(args)? else {
                 return Err(RuntimeError::new(
                     "`set_field` takes a field name and a value",
@@ -48,7 +48,7 @@ pub(crate) fn register(registry: &Registry) {
             let value = record.field(sym(name)).filter(|v| is_callable(v)).cloned();
             Ok(option(cx, value))
         })
-        .raw_function("set_method", |_, args| {
+        .raw_function_returns_xur("set_method", XurType::Record, |_, args| {
             let (record, [Value::Str(name), value]) = receiver(args)? else {
                 return Err(RuntimeError::new(
                     "`set_method` takes a method name and a function",

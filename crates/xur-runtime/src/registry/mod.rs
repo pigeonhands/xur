@@ -379,6 +379,7 @@ impl Registry {
             }
             XurType::Map(Some(k), None) => format!("map<{}, _>", self.shape_xur_name(k)),
             XurType::Map(None, Some(v)) => format!("map<_, {}>", self.shape_xur_name(v)),
+            XurType::Record => "record".into(),
             XurType::Unit => "()".into(),
         }
     }

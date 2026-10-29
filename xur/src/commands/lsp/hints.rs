@@ -156,6 +156,7 @@ impl InferredTy {
             }
             XurType::List(None) => Self::List(None),
             XurType::Map(_, _) => Self::Map,
+            XurType::Record => Self::Record,
         }
     }
 

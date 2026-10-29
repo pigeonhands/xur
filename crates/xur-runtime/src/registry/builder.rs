@@ -40,6 +40,7 @@ pub enum XurType {
     List(Option<ElemHint>),
     /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
     Map(Option<&'static Shape>, Option<&'static Shape>),
+    Record,
     Unit,
 }
 
