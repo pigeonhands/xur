@@ -10,6 +10,8 @@ use xur_vm::Vm;
 
 #[cfg(feature = "egui")]
 mod egui_module;
+#[cfg(feature = "hooking")]
+mod hooking_module;
 mod tracing_module;
 
 const STACK_SIZE: usize = 256 << 20;
@@ -282,6 +284,12 @@ fn register_game_mods(registry: &Registry) {
     registry.lazy_module("std::stub::re::unity::egui", |m| {
         let registry = m.registry();
         egui_module::register(registry, m);
+    });
+
+    #[cfg(feature = "hooking")]
+    registry.lazy_module("std::stub::hooking", |m| {
+        let registry = m.registry();
+        hooking_module::register(&registry, m);
     });
 
     registry.lazy_module("std::stub::tracing", |m| {

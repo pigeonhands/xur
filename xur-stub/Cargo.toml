@@ -22,12 +22,16 @@ hao-il2cpp-unity = { workspace = true, optional = true }
 hao-godot = { workspace = true, optional = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+hooking = { workspace = true, optional = true }
+hao-runtime = { workspace = true, optional = true }
 
 [features]
-default = ["il2cpp-runtime", "il2cpp-unity", "godot", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui"]
-il2cpp-runtime = ["dep:hao-il2cpp-runtime"]
-il2cpp-unity = ["dep:hao-il2cpp-unity"]
-godot = ["dep:hao-godot"]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui"]
+hooking = ["dep:hooking", "xur-re-asm"]
+hao-runtime = ["dep:hao-runtime", "hooking"]
+il2cpp-runtime = ["dep:hao-il2cpp-runtime", "hooking"]
+il2cpp-unity = ["dep:hao-il2cpp-unity", "il2cpp-runtime"]
+godot = ["dep:hao-godot", "hao-runtime"]
 egui = ["hao-il2cpp-unity/egui"]
 xur-http              = ["xur-std/http"]
 xur-regex             = ["xur-std/regex"]

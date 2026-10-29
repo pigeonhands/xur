@@ -5647,6 +5647,7 @@ dependencies = [
  "hao-godot",
  "hao-il2cpp-runtime",
  "hao-il2cpp-unity",
+ "hao-runtime",
  "hooking",
  "tracing",
  "tracing-subscriber",
