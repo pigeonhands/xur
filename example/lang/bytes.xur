@@ -1,0 +1,76 @@
+// Bytes: mutable byte buffers, literals, slicing and iteration.
+//
+//     xur run example/lang/bytes.xur
+
+use std::io;
+
+fn main() -> Result<()> {
+    // Byte-string literals.
+    let magic = b"XUR!";
+    io::println("magic = {}, len = {}", magic, magic.len());
+
+    // Hex literals via std::bytes.
+    let header = std::bytes::from_hex("4d5a 9000")?;
+    io::println("header = {}", header.to_hex());
+
+    // From a list of byte values.
+    let data = std::bytes::from_list([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
+    io::println("data = {}", data.decode()?);
+
+    // Zeroed buffer.
+    let buf = std::bytes::zeroed(8);
+    io::println("zeroed = {}, len = {}", buf.to_hex(), buf.len());
+
+    // Concatenation with +.
+    let combined = b"AB" + b"CD";
+    io::println("combined = {}", combined.decode()?);
+
+    // Mutation: push and extend.
+    let out = b"";
+    out.push(0x58);
+    out.push(0x55);
+    out.push(0x52);
+    io::println("pushed = {}", out.decode()?);
+
+    out.extend(b"!!!");
+    io::println("extended = {}", out.decode()?);
+
+    // Reading and writing integers.
+    let buf = std::bytes::zeroed(8);
+    buf.write_u32_le(0, 0xdeadbeef);
+    buf.write_u16_be(4, 0xcafe);
+    io::println("u32 le = 0x{}", buf.read_u32_le(0).to_hex());
+    io::println("u16 be = 0x{}", buf.read_u16_be(4).to_hex());
+
+    // Slicing with ranges.
+    let full = b"Hello, world!";
+    let slice = full[0..5];
+    io::println("slice = {}", slice.decode()?);
+
+    // Searching.
+    match full.find(b"world") {
+        Some(at) => io::println("found 'world' at offset {}", at),
+        None     => io::println("not found"),
+    }
+    io::println("starts_with 'Hello': {}", full.starts_with(b"Hello"));
+
+    // Iteration: for-loops yield integer byte values.
+    let sum = 0;
+    for byte in b"ABC" {
+        sum = sum + byte;
+    }
+    io::println("sum of 'ABC' bytes = {} (expected {})", sum, 0x41 + 0x42 + 0x43);
+
+    // to_list: convert to a list of byte values for list methods.
+    let bytes = b"\x01\x02\x03\x04";
+    let doubled = bytes.to_list().map(|b| b * 2);
+    io::println("doubled = {}", doubled);
+
+    // String round-trip.
+    let text = "Hello, xur!";
+    let encoded = text.to_bytes();
+    let decoded = encoded.decode()?;
+    io::println("round-trip: '{}' -> {} bytes -> '{}'", text, encoded.len(), decoded);
+
+    Ok(())
+}
