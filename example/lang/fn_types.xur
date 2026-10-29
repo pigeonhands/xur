@@ -28,7 +28,7 @@ fn square(n: i64) -> i64 { n * n }
 
 fn main() -> Result<()> {
     // Function types in variable bindings.
-    let f: fn(i64) -> i64 = double;
+    let f = double;
     io::println("double(5) = {}", f(5));
 
     // Passing typed callbacks.
