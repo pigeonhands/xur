@@ -17,11 +17,11 @@ pub(crate) fn register(registry: &Registry) {
         .named_raw_function("size_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "size_of")?;
             Ok(Value::Int(layout.byte_size() as i64))
-        })
+        }).returns::<i64>()
         .named_raw_function("align_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "align_of")?;
             Ok(Value::Int(layout.alignment() as i64))
-        })
+        }).returns::<i64>()
         .named_raw_function("from_bytes", &["data"], |cx, args| {
             let [Value::Bytes(data)] = args else {
                 return Err(RuntimeError::new(

@@ -10,7 +10,7 @@ use crate::result;
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::any")
-        .named_raw_function("type_name", &[], type_name)
+        .named_raw_function("type_name", &[], type_name).returns::<String>()
         .named_raw_function("try_cast", &["value"], try_cast)
         .named_raw_function("record", &["value"], to_record)
         .named_raw_function("type_name_val", &["value"], type_name_val);
