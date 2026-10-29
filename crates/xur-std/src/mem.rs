@@ -9,6 +9,11 @@ use crate::reflect::layout::{layout_of_def, type_arg_layout};
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::mem")
+        .repr_enum("Protection", &[
+            ("Read", 1),
+            ("Write", 2),
+            ("Execute", 4),
+        ])
         .named_raw_function("size_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "size_of")?;
             Ok(Value::Int(layout.byte_size() as i64))
@@ -58,17 +63,38 @@ fn alloc_page(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     Ok(Value::Ptr(addr as u64))
 }
 
-/// `mem::protect(addr, size, mode)` — changes page protection.
-/// `mode` is `"rx"`, `"rw"`, `"rwx"`, or `"r"`.
-fn protect_page(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Ptr(addr), Value::Int(size), Value::Str(mode)] = args else {
-        return Err(RuntimeError::new(
-            "`protect` takes (ptr, size, mode) where mode is \"rx\", \"rw\", \"rwx\", or \"r\"",
-        ));
+fn protect_page(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let (addr, size, prot) = match args {
+        [Value::Ptr(a), Value::Int(s), Value::Str(mode)] => {
+            (*a, *s, mode_to_prot(mode)?)
+        }
+        [Value::Ptr(a), Value::Int(s), Value::Int(flags)] => {
+            (*a, *s, *flags as i32)
+        }
+        [Value::Ptr(a), Value::Int(s), Value::Adt(adt)] => {
+            let v = cx.repr_value(adt.ctor)
+                .ok_or_else(|| RuntimeError::new("expected a Protection enum value"))?;
+            (*a, *s, v as i32)
+        }
+        _ => {
+            return Err(RuntimeError::new(
+                "`protect` takes (ptr, size, mode) where mode is a Protection flag or string",
+            ));
+        }
     };
-    platform::protect(*addr as usize, *size as usize, mode)
+    platform::protect(addr as usize, size as usize, prot)
         .map_err(RuntimeError::new)?;
     Ok(Value::Unit)
+}
+
+fn mode_to_prot(mode: &str) -> RunResult<i32> {
+    match mode {
+        "r" => Ok(1),
+        "rw" => Ok(1 | 2),
+        "rx" => Ok(1 | 4),
+        "rwx" => Ok(1 | 2 | 4),
+        _ => Err(RuntimeError::new(format!("unknown protection mode `{mode}`"))),
+    }
 }
 
 /// `mem::write_bytes(addr, data)` — copies `data` into memory at `addr`.
@@ -115,14 +141,11 @@ mod platform {
         }
     }
 
-    pub fn protect(addr: usize, size: usize, mode: &str) -> Result<(), String> {
-        let prot = match mode {
-            "r" => libc::PROT_READ,
-            "rw" => libc::PROT_READ | libc::PROT_WRITE,
-            "rx" => libc::PROT_READ | libc::PROT_EXEC,
-            "rwx" => libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
-            _ => return Err(format!("unknown protection mode `{mode}`")),
-        };
+    pub fn protect(addr: usize, size: usize, flags: i32) -> Result<(), String> {
+        let mut prot = 0;
+        if flags & 1 != 0 { prot |= libc::PROT_READ; }
+        if flags & 2 != 0 { prot |= libc::PROT_WRITE; }
+        if flags & 4 != 0 { prot |= libc::PROT_EXEC; }
         let ret = unsafe { libc::mprotect(addr as *mut c_void, size, prot) };
         if ret != 0 {
             Err(format!("mprotect failed: {}", std::io::Error::last_os_error()))
@@ -160,14 +183,15 @@ mod platform {
         }
     }
 
-    pub fn protect(addr: usize, size: usize, mode: &str) -> Result<(), String> {
+    pub fn protect(addr: usize, size: usize, flags: i32) -> Result<(), String> {
         use windows_sys::Win32::System::Memory::*;
-        let prot = match mode {
-            "r" => PAGE_READONLY,
-            "rw" => PAGE_READWRITE,
-            "rx" => PAGE_EXECUTE_READ,
-            "rwx" => PAGE_EXECUTE_READWRITE,
-            _ => return Err(format!("unknown protection mode `{mode}`")),
+        let prot = match (flags & 1 != 0, flags & 2 != 0, flags & 4 != 0) {
+            (true, false, false) => PAGE_READONLY,
+            (true, true, false) => PAGE_READWRITE,
+            (true, false, true) => PAGE_EXECUTE_READ,
+            (true, true, true) => PAGE_EXECUTE_READWRITE,
+            (false, false, true) => PAGE_EXECUTE,
+            _ => return Err(format!("unsupported protection flags {flags}")),
         };
         let mut old = 0u32;
         let ret = unsafe {
