@@ -4,7 +4,7 @@
 // tracing output to a separate log window.
 //
 //     cargo build --release -p xur-stub --features egui
-//     XUR_STUB_PATH=example/stub/egui_overlay.xur \
+//     XUR_STUB_PATH=xur-stub/example/egui_overlay.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
 use std::fmt;

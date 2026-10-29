@@ -307,15 +307,19 @@ There are complete programs in [`example/`](example):
 | [`cli/args.xur`](example/cli/args.xur) | raw argument access |
 | [`cli/editor.xur`](example/cli/editor.xur) | opening an external editor |
 | [`gui/hello.xur`](example/gui/hello.xur) | desktop GUI with egui |
+| [`gui/windows.xur`](example/gui/windows.xur) | multiple OS-level windows sharing state |
 | [`sync/channels.xur`](example/sync/channels.xur) | threads sending results back over a channel |
 | [`net/echo_server.xur`](example/net/echo_server.xur) | a TCP echo server |
 | [`datetime/now.xur`](example/datetime/now.xur) | current date and time |
 | [`regex/match.xur`](example/regex/match.xur) | regex pattern matching |
 | [`time/bench.xur`](example/time/bench.xur) | benchmarking with `std::time` |
 | [`module/plugin_load.xur`](example/module/plugin_load.xur) | dynamic imports and module introspection |
-| [`stub/hello.xur`](example/stub/hello.xur) | minimal stub injection |
-| [`stub/game_inspector.xur`](example/stub/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
-| [`stub/egui_overlay.xur`](example/stub/egui_overlay.xur) | egui overlay injected into a running process |
+| [`xur-stub/example/hello.xur`](xur-stub/example/hello.xur) | minimal stub injection |
+| [`xur-stub/example/game_inspector.xur`](xur-stub/example/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
+| [`xur-stub/example/egui_overlay.xur`](xur-stub/example/egui_overlay.xur) | egui overlay injected into a running process |
+| [`xur-stub/example/hooking.xur`](xur-stub/example/hooking.xur) | inline function hooking with hooking-rs |
+| [`xur-stub/example/tracing.xur`](xur-stub/example/tracing.xur) | structured logging with `stub::tracing` |
+| [`xur-stub/example/godot.xur`](xur-stub/example/godot.xur) | Godot (.NET) game inspector |
 
 ## In-process injection with xur-stub
 
@@ -328,10 +332,10 @@ process's memory and modules.
 cargo build --release -p xur-stub
 
 # Point at a script directory or a single file:
-XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so ./target_program
+XUR_STUB_PATH=xur-stub/example LD_PRELOAD=target/release/libxur_stub.so ./target_program
 
 # Or via Steam launch options for a Unity game:
-# XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so %command%
+# XUR_STUB_PATH=xur-stub/example LD_PRELOAD=target/release/libxur_stub.so %command%
 ```
 
 Scripts can define `fn ctor()` for work that must run before the host's
@@ -345,11 +349,11 @@ the payload. The stub adds extra modules for game engines:
 | `std::stub::re::unity::egui` | `egui` | egui rendering inside a Unity game |
 | `std::stub::re::il2cpp_runtime` | `il2cpp-runtime` | Il2Cpp runtime reflection |
 | `std::stub::re::godot` | `godot` | Godot engine reflection |
+| `std::stub::hooking` | `hooking` | inline function hooking via hooking-rs |
 | `std::stub::tracing` | (always) | structured logging via `tracing` |
 
-See [`example/stub/game_inspector.xur`](example/stub/game_inspector.xur)
-for a complete example that enumerates a Unity game's Il2Cpp types and
-generates proxy assemblies.
+See [`xur-stub/example/`](xur-stub/example/) for complete examples, including
+a Unity game inspector, egui overlay, Godot inspector, and hooking demo.
 
 ## Extending Xur with Rust
 

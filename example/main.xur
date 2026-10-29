@@ -17,7 +17,7 @@ fn run_example(p: str) -> Result<()> {
 fn all_examples() -> [str] {
     // Categories skipped: interactive input, network listeners,
     // GUI windows, or external targets (reverse-engineering tools).
-    let skip = ["cli", "gui", "http", "net", "re", "stub"];
+    let skip = ["cli", "gui", "http", "net", "re"];
     let entries = fs::read_dir("example").unwrap();
     let folders: [str] = entries.filter(|e| !e.ends_with(".xur"));
     let examples = [];

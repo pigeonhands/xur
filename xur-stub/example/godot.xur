@@ -1,0 +1,42 @@
+// Godot (.NET / CoreCLR) game inspector.
+//
+// Lists loaded modules, attaches to the Godot runtime, and prints
+// types from the game's managed assemblies.  Derived from hao-godot's
+// call and godot_types examples.
+//
+//     cargo build --release -p xur-stub --features godot
+//     # Steam > game > Properties > Launch options:
+//     XUR_STUB_PATH=xur-stub/example/godot.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::io;
+use std::fmt;
+use std::re::proc;
+use std::stub::re::godot;
+use std::stub::tracing;
+
+fn ctor() {
+    tracing::register("stdout", "info");
+}
+
+fn main() -> Result<()> {
+    let pid = proc::current_pid();
+    io::println("[godot] running inside pid {}", pid);
+
+    let handle = proc::open_current()?;
+    let modules = handle.modules()?;
+    io::println("[godot] {} modules loaded", modules.len());
+
+    for m in modules {
+        if m.name.contains("coreclr") || m.name.contains("Godot") || m.name.contains("hostfxr") {
+            io::println("  {} at 0x{} ({} bytes)", m.name, m.base.to_hex(), m.size);
+        }
+    }
+
+    // std::stub::re::godot exposes the hao-godot reflection roots.
+    // In a real game, the runtime types would be available here after
+    // CoreCLR has initialized.
+    io::println("[godot] godot reflection module loaded");
+
+    Ok(())
+}

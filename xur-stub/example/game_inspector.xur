@@ -8,11 +8,11 @@
 //
 //     cargo build --release -p xur-stub
 //     # Steam > game > Properties > Launch options:
-//     XUR_STUB_PATH=example/stub LD_PRELOAD=target/release/libxur_stub.so %command%
+//     XUR_STUB_PATH=xur-stub/example LD_PRELOAD=target/release/libxur_stub.so %command%
 //
 // Or test without a real game (shows process info only):
 //
-//     XUR_STUB_PATH=example/stub/game_inspector.xur \
+//     XUR_STUB_PATH=xur-stub/example/game_inspector.xur \
 //         LD_PRELOAD=target/debug/libxur_stub.so /bin/true
 
 use std::io;

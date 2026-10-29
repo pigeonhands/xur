@@ -1,0 +1,32 @@
+// Structured logging with stub::tracing.
+//
+// Registers a memory-backed log sink, drains buffered lines, and
+// prints them.  Works in any process.
+//
+//     cargo build -p xur-stub
+//     XUR_STUB_PATH=xur-stub/example/tracing.xur \
+//         LD_PRELOAD=target/debug/libxur_stub.so /bin/true
+
+use std::io;
+use std::stub::tracing;
+
+fn ctor() {
+    tracing::register("memory", "debug");
+}
+
+fn main() -> Result<()> {
+    io::println("[tracing] draining buffered log lines:");
+    let lines = tracing::drain();
+    for line in lines {
+        io::println("  {}", line);
+    }
+    io::println("[tracing] {} line(s) captured", lines.len());
+
+    // Other sinks:
+    //   tracing::register("file", "/tmp/game.log")          — log to file
+    //   tracing::register("file", "/tmp/game.log", "trace") — with level
+    //   tracing::register("stdout")                          — log to stdout
+    //   tracing::register("stdout", "debug")                 — with level
+
+    Ok(())
+}

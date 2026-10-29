@@ -1,0 +1,34 @@
+// Inline function hooking with hooking-rs.
+//
+// Demonstrates the hooking API. In a real mod, `destination` would be
+// the address of your detour function (e.g. from an Il2Cpp method
+// pointer).  This example shows the module's API shape; running it
+// requires a target process with symbols to hook.
+//
+//     cargo build -p xur-stub
+//     XUR_STUB_PATH=xur-stub/example/hooking.xur \
+//         LD_PRELOAD=target/debug/libxur_stub.so ./some_target
+
+use std::io;
+use std::stub::hooking;
+
+fn main() -> Result<()> {
+    io::println("[hooking] stub::hooking API:");
+    io::println("  hooking::create(target_addr, dest_addr)  — hook by address");
+    io::println("  hooking::by_name(symbol, dest)           — hook by symbol");
+    io::println("  hooking::by_name(module, symbol, dest)   — hook in a specific module");
+    io::println("  hook.apply()   — install the detour");
+    io::println("  hook.remove()  — restore original code");
+    io::println("  hook.original() — address of the relocated original");
+    io::println("  hook.target()  — address of the hooked function");
+
+    // Example (requires real addresses):
+    //
+    //   let hook = hooking::by_name("puts", my_detour_addr);
+    //   hook.apply();
+    //   // ... puts() now redirects to my_detour_addr
+    //   let original = hook.original();  // call this to reach the real puts
+    //   hook.remove();
+
+    Ok(())
+}

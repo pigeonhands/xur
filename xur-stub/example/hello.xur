@@ -1,7 +1,7 @@
 // A simple stub script: runs when the stub is loaded into a process.
 //
 // Test with:
-//     XUR_STUB_PATH=example/stub LD_PRELOAD=target/debug/libxur_stub.so /bin/true
+//     XUR_STUB_PATH=xur-stub/example/hello.xur LD_PRELOAD=target/debug/libxur_stub.so /bin/true
 
 use std::io;
 use std::re::proc;
