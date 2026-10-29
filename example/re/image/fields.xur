@@ -7,8 +7,8 @@ use std::re::pe;
 use std::re::pe::ImageFileMachine;
 
 fn main() -> Result<()> {
-    let bytes = pe::ImageDef::new_dll(ImageFileMachine::Amd64).write()?;
-    let file = pe::PEFile::parse(bytes)?;
+    let data = pe::ImageDef::new_dll(ImageFileMachine::Amd64).write()?;
+    let file = pe::PEFile::parse(data)?;
     io::println("machine {}", file.coff_header.machine);
     Ok(())
 }

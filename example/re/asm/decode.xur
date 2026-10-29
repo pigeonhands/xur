@@ -7,8 +7,8 @@ use std::re::asm::x86;
 
 fn main() -> Result<()> {
     // `nop; xor eax, eax; ret` encoded at address 0x1000.
-    let bytes = std::bytes::from_list([0x90, 0x31, 0xC0, 0xC3]);
-    let insns = x86::decode(64, bytes, 0x1000);
+    let code = std::bytes::from_list([0x90, 0x31, 0xC0, 0xC3]);
+    let insns = x86::decode(64, code, 0x1000);
 
     for insn in insns {
         io::println("{}  {}  {}", insn.ip().to_hex(), insn, insn.mnemonic());

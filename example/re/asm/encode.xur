@@ -6,11 +6,11 @@ use std::io;
 use std::re::asm::x86;
 
 fn main() -> Result<()> {
-    let bytes = std::bytes::from_list([0x90, 0x31, 0xC0, 0xC3]);
-    let insns = x86::decode(64, bytes, 0x1000);
+    let code = std::bytes::from_list([0x90, 0x31, 0xC0, 0xC3]);
+    let insns = x86::decode(64, code, 0x1000);
     let encoded = x86::encode(64, insns, 0x1000)?;
 
-    io::println("original: {}", bytes.to_hex());
+    io::println("original: {}", code.to_hex());
     io::println("encoded:  {}", encoded.to_hex());
     Ok(())
 }

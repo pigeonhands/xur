@@ -12,10 +12,10 @@ fn main() -> Result<()> {
     io::println("created: {}", module.name());
     io::println("runtime: {}", module.runtime_version());
 
-    let bytes = module.write()?;
-    io::println("wrote {} bytes", bytes.len());
+    let data = module.write()?;
+    io::println("wrote {} bytes", data.len());
 
-    let loaded = dotnet::parse(bytes)?;
+    let loaded = dotnet::parse(data)?;
     io::println("loaded back: {}", loaded.name());
 
     for ty in loaded.all_types() {

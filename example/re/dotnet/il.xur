@@ -48,8 +48,8 @@ fn main() -> Result<()> {
     module.set_entry_point(main_entry);
 
     // Round-trip: write and parse back.
-    let bytes = module.write()?;
-    let loaded = dotnet::parse(bytes)?;
+    let data = module.write()?;
+    let loaded = dotnet::parse(data)?;
 
     io::println("=== types and methods ===");
     for ty in loaded.all_types() {

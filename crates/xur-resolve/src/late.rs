@@ -17,7 +17,7 @@ use xur_errors::Diag;
 use xur_span::{Ident, Span, Symbol};
 
 use crate::Resolver;
-use crate::def::{DefData, DefId, DefKind, Namespace, Res};
+use crate::def::{DefData, DefId, DefKind, Namespace, PrimTy, Res};
 use crate::ident::{Lookup, undeclared_module};
 use crate::loader::ModuleIdx;
 
@@ -247,6 +247,15 @@ impl LateResolver<'_, '_> {
                 )
                 .with_label(ident.span, "used in a pattern more than once")
                 .with_label(first, "first bound here"),
+            );
+        }
+        if PrimTy::from_name(ident.name).is_some() {
+            self.r.report(
+                Diag::error(
+                    format!("`{}` is a builtin type and cannot be used as a variable name", ident.name),
+                    ident.span,
+                )
+                .with_label(ident.span, "shadows a builtin type"),
             );
         }
         self.pat_bindings.insert(ident.name, ident.span);

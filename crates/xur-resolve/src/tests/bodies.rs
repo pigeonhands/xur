@@ -246,3 +246,20 @@ fn grouped_imports_import_each_path() {
         "native function std::any::type_name"
     );
 }
+
+#[test]
+fn shadowing_builtin_type_is_an_error() {
+    assert_eq!(
+        resolve_src("fn f() { let bytes = 1; }").errors,
+        ["`bytes` is a builtin type and cannot be used as a variable name"]
+    );
+    assert_eq!(
+        resolve_src("fn f() { let str = 1; }").errors,
+        ["`str` is a builtin type and cannot be used as a variable name"]
+    );
+}
+
+#[test]
+fn non_builtin_names_are_fine() {
+    resolve_src("fn f() { let data = 1; }").assert_no_errors();
+}

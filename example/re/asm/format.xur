@@ -6,8 +6,8 @@ use std::io;
 use std::re::asm::x86;
 
 fn main() -> Result<()> {
-    let bytes = std::bytes::from_list([0x48, 0x89, 0x5C, 0x24, 0x08]);
-    let insns = x86::decode(64, bytes, 0);
+    let code = std::bytes::from_list([0x48, 0x89, 0x5C, 0x24, 0x08]);
+    let insns = x86::decode(64, code, 0);
     let insn = insns[0];
 
     io::println("masm:  {}", x86::format(insn));
