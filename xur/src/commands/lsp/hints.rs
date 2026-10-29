@@ -167,6 +167,9 @@ impl InferredTy {
             }
         }
         if let Ok(list) = shape.def.into_list() {
+            if std::ptr::eq(list.t(), <u8 as facet::Facet>::SHAPE) {
+                return Self::Prim(PrimTy::Bytes);
+            }
             return Self::List(Some(Box::new(Self::from_shape(list.t(), registry, resolutions))));
         }
         Self::from_rust_shape(shape)
