@@ -106,6 +106,23 @@ impl Resolutions {
         }
     }
 
+    /// Empty resolutions with no definitions. For lookups that only need
+    /// the registry (no xur-defined types).
+    pub fn empty() -> Self {
+        Self {
+            defs: Definitions::default(),
+            res: HashMap::new(),
+            locals: HashMap::new(),
+            node_defs: HashMap::new(),
+            module_defs: Vec::new(),
+            unnamed_modules: Vec::new(),
+            scopes: HashMap::new(),
+            native_roots: HashMap::new(),
+            lazy_natives: HashMap::new(),
+            repr_values: HashMap::new(),
+        }
+    }
+
     /// The path a definition is known by, e.g. `std::io::println`,
     /// `math::div` or `Result::Ok`. Items of the root module and the prelude
     /// are written without a module prefix.
