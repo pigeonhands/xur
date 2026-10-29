@@ -8,9 +8,10 @@ syntax and direct access to native tooling through
 [![crates.io](https://img.shields.io/crates/v/xur)](https://crates.io/crates/xur)
 [![license](https://img.shields.io/crates/l/xur)](LICENSE-MIT)
 
-> **Status:** early development. Programs run: they are parsed, have their
-> names resolved across modules, are compiled to bytecode and interpreted.
-> A static type checker and a JIT are future work.
+> **Status:** early development. Programs are parsed, have their names
+> resolved across modules, compiled to bytecode and interpreted. A language
+> server provides diagnostics, completions, go-to-definition, hover, inlay
+> hints and find-references. A static type checker and a JIT are future work.
 
 ## What it looks like
 
@@ -186,23 +187,36 @@ modules are lazy: they are only built if a program uses them.
 
 | Module         | Contents                                                                 |
 | -------------- | ------------------------------------------------------------------------ |
-| `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe::PEFile`, `pe::ImageDef`, `elf::ElfFile`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), and .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`) |
-| `std::mem`     | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>(data)`, `to_bytes(v)` |
-| `std::reflect` | `fields`, `get`, `set`, `methods`, `call` of any value; `layout::<T>()`, `Layout` |
-| `std`          | `import(path)`, `panic(format, ...)`                                     |
-| `std::io`      | `print`, `println`, with `{}` placeholders                               |
-| `std::fs`      | `read_to_string`, `write`, `append`, `exists`, `remove`, `read_dir`, `File` |
-| `std::net`     | `TcpListener`, `TcpStream`, `UdpSocket`, `UnixListener`, `UnixStream`    |
+| `std`          | `import(path)`, `try_import(path)`, `panic(format, ...)`, `argv()`       |
+| `std::io`      | `print`, `println`, `eprint`, `eprintln` with `{}` placeholders          |
+| `std::io::c`   | ANSI colours: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `bold`, `dim` |
+| `std::fmt`     | `format(template, args...)`                                              |
+| `std::fs`      | `read_to_string`, `read`, `write`, `write_bytes`, `exists`, `remove`, `read_dir`, `create_dir_all`, `File` |
+| `std::path`    | `join`, `parent`, `file_name`, `stem`, `extension`, `is_dir`, `is_file`, `exists`, `absolute` |
+| `std::net`     | `TcpListener`, `TcpStream`, `UdpSocket`, `UnixListener`, `UnixStream`   |
+| `std::http`    | `get`, `post`, `put`, `patch`, `delete`; `Response` with `status`, `text`, `json`, `headers` |
+| `std::json`    | `parse(text)`, `stringify(value)`                                        |
+| `std::regex`   | `Regex` with `is_match`, `find`, `find_all`, `captures`, `replace`, `split` |
 | `std::thread`  | `spawn`, `sleep`, `JoinHandle::join`                                     |
 | `std::process` | `spawn(program, args)` an OS child process; `Process::pid/kill/wait`     |
-| `std::sync`    | `channel`, `Sender::send`, `Receiver::recv`, `Receiver::try_recv`        |
-| `std::math`    | `sqrt`, `pow`, `abs`, `min`, `max`                                       |
-| `std::any`     | `type_name::<T>()`                                                       |
+| `std::sync`    | `channel`, `Sender::send`, `Receiver::recv`; `Mutex`, `lock`, `try_lock` |
+| `std::math`    | `sqrt`, `pow`, `abs`, `min`, `max`, `floor`, `ceil`, `PI`, `E`           |
+| `std::mem`     | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>()`, `to_bytes`, `alloc_page`, `protect`, `free_page` |
+| `std::ptr`     | `null`, `from_int`, `to_int`, `offset`, pointer arithmetic               |
+| `std::reflect` | `fields`, `get`, `set`, `methods`, `call`, `variants`; `layout::<T>()`, `Layout` |
+| `std::any`     | `type_name::<T>()`, `type_name_val()`                                    |
+| `std::cli`     | argument parsing (`parse`), prompts (`prompt`, `confirm`, `select`, `password`, `editor`), `table` |
+| `std::log`     | structured logging: `trace`, `debug`, `info`, `warn`, `error`, `subscriber` |
+| `std::time`    | `Instant`, `Duration`, `now`, `elapsed`, `sleep`                         |
+| `std::datetime`| `now`, `utc_now`, formatting, parsing (RFC 3339, custom)                 |
+| `std::assert`  | `is_eq`, `is_ne`, `is_true`, `is_false`, `fail`                         |
+| `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe`, `elf`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), and .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`) |
 
-Built-in values have methods too: lists (`len`, `push`, `pop`, `get`,
-`insert`, `remove`, `contains`, `extend`, `join`, ...), strings (`len`,
-`split`, `trim`, `to_upper`, `parse_int`, ...) and numbers (`abs`, `pow`,
-`sqrt`, `round`, ...).
+Built-in values have methods too: lists (`push`, `pop`, `get`, `map`,
+`filter`, `sort`, `join`, ...), strings (`split`, `trim`, `starts_with`,
+`replace`, `to_upper`, `ord`, ...), numbers (`abs`, `pow`, `to_hex`, ...),
+bytes (`read_u32`, `write_u16`, ...) and records (`set_field`,
+`set_method`, `keys`, `values`).
 
 ## Examples
 
@@ -221,6 +235,7 @@ There are complete programs in [`example/`](example):
 | [`re/asm/encode.xur`](example/re/asm/encode.xur) | decoding and re-encoding instructions |
 | [`re/asm/format.xur`](example/re/asm/format.xur) | formatting instructions with operand details |
 | [`re/asm/inspect.xur`](example/re/asm/inspect.xur) | inspecting instruction properties |
+| [`re/asm/call_ptr.xur`](example/re/asm/call_ptr.xur) | calling assembled code via a function pointer |
 | [`re/asm/jit.xur`](example/re/asm/jit.xur) | assembling, injecting, and executing code remotely |
 | [`re/dotnet/dump.xur`](example/re/dotnet/dump.xur) | listing types and methods in a .NET assembly |
 | [`re/dotnet/new.xur`](example/re/dotnet/new.xur) | creating a .NET assembly from scratch |
@@ -246,11 +261,28 @@ There are complete programs in [`example/`](example):
 | [`lang/records.xur`](example/lang/records.xur) | anonymous records |
 | [`lang/fn_types.xur`](example/lang/fn_types.xur) | function types and higher-order functions |
 | [`lang/decorators.xur`](example/lang/decorators.xur) | decorator syntax |
+| [`lang/pointers.xur`](example/lang/pointers.xur) | pointer types and arithmetic |
+| [`lang/bitwise.xur`](example/lang/bitwise.xur) | bitwise operators and masks |
+| [`lang/repr_enums.xur`](example/lang/repr_enums.xur) | repr enums |
+| [`lang/try_custom.xur`](example/lang/try_custom.xur) | custom `#[try(unwrap)]` enums |
+| [`lang/bytes.xur`](example/lang/bytes.xur) | byte manipulation |
+| [`lang/logging.xur`](example/lang/logging.xur) | structured logging |
+| [`lang/ord_chr.xur`](example/lang/ord_chr.xur) | character ordinals and conversion |
 | [`json/`](example/json) | JSON parsing and struct coercion |
-| [`cli/`](example/cli) | argument parsing, prompts, subcommands, editors |
+| [`http/get.xur`](example/http/get.xur) | HTTP GET request |
+| [`http/post_json.xur`](example/http/post_json.xur) | HTTP POST with JSON body |
+| [`cli/parse.xur`](example/cli/parse.xur) | argument parsing |
+| [`cli/prompts.xur`](example/cli/prompts.xur) | interactive prompts |
+| [`cli/subcommand.xur`](example/cli/subcommand.xur) | CLI subcommands |
+| [`cli/args.xur`](example/cli/args.xur) | raw argument access |
+| [`cli/editor.xur`](example/cli/editor.xur) | opening an external editor |
 | [`sync/channels.xur`](example/sync/channels.xur) | threads sending results back over a channel |
 | [`net/echo_server.xur`](example/net/echo_server.xur) | a TCP echo server |
-| [`module/`](example/module) | dynamic imports and module introspection |
+| [`datetime/now.xur`](example/datetime/now.xur) | current date and time |
+| [`regex/match.xur`](example/regex/match.xur) | regex pattern matching |
+| [`time/bench.xur`](example/time/bench.xur) | benchmarking with `std::time` |
+| [`module/plugin_load.xur`](example/module/plugin_load.xur) | dynamic imports and module introspection |
+| [`stub/hello.xur`](example/stub/hello.xur) | minimal stub injection |
 | [`stub/game_inspector.xur`](example/stub/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
 | [`stub/egui_overlay.xur`](example/stub/egui_overlay.xur) | egui overlay injected into a running process |
 
@@ -347,10 +379,29 @@ fn div (captures: 0, params: 2, registers: 9)
 | `xur debug ast <file>`     | the syntax tree of one file                              |
 | `xur debug resolve <file>` | what every name in the program refers to                 |
 | `xur debug bytecode <file>`| the bytecode of every function in one file               |
+| `xur lsp`                  | starts the language server (stdio)                       |
 
 Errors, at compile time or at runtime, are shown as annotated source
 snippets. Like rustc, the parser and resolver recover from errors, so every
 mistake in a file is reported in one run.
+
+## Editor support
+
+`xur lsp` is a language server over stdio that provides:
+
+- **Diagnostics** — errors and warnings on open, change and save
+- **Completions** — triggered by `.` and `::`
+- **Go-to-definition** — jump to where a name is defined
+- **Hover** — type information and descriptions
+- **Inlay hints** — inferred types and parameter names
+- **Find references** — all uses of a definition
+
+## Documentation
+
+Manpages are in [`doc/man/`](doc/man): `xur(1)` for the CLI and
+`xur.std(7)` plus per-module pages (`xur.std.fs(7)`, `xur.std.http(7)`,
+...) for the standard library. See also
+[ARCHITECTURE.md](ARCHITECTURE.md) for the compiler pipeline.
 
 ## Crates
 
