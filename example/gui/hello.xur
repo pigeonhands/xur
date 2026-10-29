@@ -1,0 +1,26 @@
+// A minimal egui desktop window.
+//
+//     xur run example/gui/hello.xur
+
+use std::gui;
+use std::fmt;
+
+fn main() {
+    let name = "";
+    let clicks = 0;
+
+    gui::dialog("Hello", |ui| {
+        ui.heading("Hello from Xur!");
+        ui.separator();
+
+        name = ui.text_edit(name);
+        if name != "" {
+            ui.label(fmt::format("Hello, {}!", name));
+        }
+
+        if ui.button("Click me") {
+            clicks = clicks + 1;
+        }
+        ui.label(fmt::format("{} click(s)", clicks));
+    });
+}

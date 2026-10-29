@@ -13,6 +13,8 @@ mod cli;
 mod datetime;
 mod fmt;
 mod fs;
+#[cfg(feature = "gui")]
+mod gui;
 #[cfg(feature = "http")]
 mod http;
 mod io;
@@ -78,6 +80,8 @@ pub fn register(registry: &Registry) {
     any::register(registry);
     assert::register(registry);
     reflect::register(registry);
+    #[cfg(feature = "gui")]
+    gui::register(registry);
     #[cfg(feature = "http")]
     http::register(registry);
     #[cfg(feature = "json")]

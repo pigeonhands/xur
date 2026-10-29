@@ -11,7 +11,7 @@ name = "xur_std"
 path = "src/lib.rs"
 
 [features]
-default = ["cli", "http", "regex", "datetime", "json", "re"]
+default = ["cli", "http", "regex", "datetime", "json", "re", "gui"]
 cli               = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
 http              = ["dep:ureq"]
 regex             = ["dep:regex"]
@@ -24,6 +24,7 @@ re-dotnet         = ["dep:hao"]
 re-dotnet-il2cpp  = ["re-dotnet", "dep:hao-il2cpp"]
 re-dotnet-runtime = ["re-dotnet", "dep:hao-runtime"]
 re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime"]
+gui               = ["dep:eframe", "dep:winit"]
 
 [dependencies]
 xur-ast.workspace = true
@@ -41,6 +42,8 @@ iced-x86 = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
+eframe = { version = "0.37", optional = true }
+winit = { version = "0.30", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

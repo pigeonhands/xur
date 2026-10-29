@@ -210,6 +210,7 @@ modules are lazy: they are only built if a program uses them.
 | `std::time`    | `Instant`, `Duration`, `now`, `elapsed`, `sleep`                         |
 | `std::datetime`| `now`, `utc_now`, formatting, parsing (RFC 3339, custom)                 |
 | `std::assert`  | `is_eq`, `is_ne`, `is_true`, `is_false`, `fail`                         |
+| `std::gui`     | desktop GUI with [egui](https://docs.rs/egui): `run(title, fn(ui))`, `Ui` with `label`, `button`, `checkbox`, `slider_*`, `text_edit`, `window`, `collapsing`, `horizontal`, `scroll` |
 | `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe`, `elf`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`), and Unity Il2Cpp with [hao-il2cpp](https://docs.rs/hao-il2cpp) (`dotnet::il2cpp`) |
 
 Built-in values have methods too: lists (`push`, `pop`, `get`, `map`,
@@ -230,6 +231,7 @@ embedders only compile what they need. All are enabled by default.
 | `regex` | `std::regex` | regex |
 | `datetime` | `std::datetime` | chrono |
 | `json` | `std::json` | serde, serde_json |
+| `gui` | `std::gui` | eframe (egui) |
 | `re-image` | `std::re` (pe, elf) | pewter |
 | `re-proc` | `std::re::proc` | procodile |
 | `re-asm` | `std::re::asm` | iced-x86 |
@@ -304,6 +306,7 @@ There are complete programs in [`example/`](example):
 | [`cli/subcommand.xur`](example/cli/subcommand.xur) | CLI subcommands |
 | [`cli/args.xur`](example/cli/args.xur) | raw argument access |
 | [`cli/editor.xur`](example/cli/editor.xur) | opening an external editor |
+| [`gui/hello.xur`](example/gui/hello.xur) | desktop GUI with egui |
 | [`sync/channels.xur`](example/sync/channels.xur) | threads sending results back over a channel |
 | [`net/echo_server.xur`](example/net/echo_server.xur) | a TCP echo server |
 | [`datetime/now.xur`](example/datetime/now.xur) | current date and time |
