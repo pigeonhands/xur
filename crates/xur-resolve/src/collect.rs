@@ -1,6 +1,9 @@
 //! Declaring items in scopes (rustc's `build_reduced_graph`).
 
-use xur_ast::{Expr, Impl, Item, ItemKind, TyKind, VariantData, Visibility};
+use xur_ast::{
+    Attribute, Expr, ExprKind, Impl, Item, ItemKind, LitKind, MetaItemKind, TyKind, UnOp,
+    VariantData, Visibility,
+};
 use xur_errors::Diag;
 use xur_span::Ident;
 
@@ -98,6 +101,7 @@ impl<'a> Resolver<'a> {
                 self.node_defs.insert(item.id, enum_def);
                 names.push((Namespace::TYPE, *ident, Res::Def(DefKind::Enum, enum_def)));
 
+                let mut next_discriminant = find_repr_attr(&item.attrs);
                 for variant in &def.variants {
                     let def = self.defs.create(DefData {
                         kind: DefKind::Variant,
@@ -106,12 +110,21 @@ impl<'a> Resolver<'a> {
                         span: Some(variant.ident.span),
                     });
                     self.node_defs.insert(variant.id, def);
+                    if let Some(next) = &mut next_discriminant {
+                        let value = match &variant.discriminant {
+                            Some(disc) => eval_discriminant(disc),
+                            None => Some(*next),
+                        };
+                        if let Some(v) = value {
+                            self.repr_values.insert(def, v);
+                            *next = v + 1;
+                        }
+                    }
                     let binding = Binding {
                         res: Res::Def(DefKind::Variant, def),
                         vis: Vis::Public,
                         span: Some(variant.ident.span),
                     };
-                    // Variants are both constructors and patterns.
                     self.declare(enum_def, Namespace::BOTH, variant.ident, binding);
                 }
             }
@@ -241,5 +254,39 @@ impl Resolver<'_> {
             };
             self.declare(ty, Namespace::VALUE, func.ident, binding);
         }
+    }
+}
+
+fn find_repr_attr(attrs: &[Attribute]) -> Option<i64> {
+    for attr in attrs {
+        let segments = &attr.meta.path.segments;
+        if segments.len() != 1 || segments[0].ident.name.as_str() != "repr" {
+            continue;
+        }
+        if let MetaItemKind::List(items) = &attr.meta.kind {
+            for item in items {
+                if let xur_ast::MetaItemInner::MetaItem(meta) = item {
+                    let name = meta.path.segments.last().map(|s| s.ident.name.as_str());
+                    if matches!(
+                        name,
+                        Some("u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64")
+                    ) {
+                        return Some(0);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn eval_discriminant(expr: &Expr) -> Option<i64> {
+    match &expr.kind {
+        ExprKind::Lit(lit) => match lit.kind {
+            LitKind::Int(i) => i64::try_from(i).ok(),
+            _ => None,
+        },
+        ExprKind::Unary(UnOp::Neg, inner) => eval_discriminant(inner).map(|v| -v),
+        _ => None,
     }
 }
