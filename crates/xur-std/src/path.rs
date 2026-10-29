@@ -26,7 +26,7 @@ pub(crate) fn register(registry: &Registry) {
                 }
             }
             Ok(xur_runtime::Value::str(&path.to_string_lossy()))
-        })
+        }).returns::<String>()
         .named_function("parent", &["path"], |path: String| -> Option<String> {
             Path::new(&path)
                 .parent()

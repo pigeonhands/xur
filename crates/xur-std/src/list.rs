@@ -17,13 +17,13 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(0);
             };
             Ok(Value::Int(lock(list).len() as i64))
-        })
+        }).returns::<i64>()
         .raw_function("is_empty", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(lock(list).is_empty()))
-        })
+        }).returns::<bool>()
         .raw_function("push", |_, args| {
             let (list, [item]) = receiver(args)? else {
                 return arity(1);
@@ -83,7 +83,7 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(1);
             };
             Ok(Value::Bool(lock(list).contains(item)))
-        })
+        }).returns::<bool>()
         .raw_function("clear", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
@@ -146,7 +146,7 @@ pub(crate) fn register(registry: &Registry) {
             let items = lock(list).clone();
             let parts: Vec<_> = items.iter().map(|item| cx.display(item)).collect();
             Ok(Value::str(&parts.join(separator)))
-        });
+        }).returns::<String>();
 }
 
 /// Splits a method call's arguments into the list and the rest.

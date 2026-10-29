@@ -30,13 +30,13 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(0);
             };
             Ok(Value::Int(lock(bytes).len() as i64))
-        })
+        }).returns::<i64>()
         .raw_function("is_empty", |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(lock(bytes).is_empty()))
-        })
+        }).returns::<bool>()
         .raw_function("push", |_, args| {
             let (bytes, [byte]) = receiver(args)? else {
                 return arity(1);
@@ -68,7 +68,7 @@ pub(crate) fn register(registry: &Registry) {
             };
             let prefix = lock(prefix).clone();
             Ok(Value::Bool(lock(bytes).starts_with(&prefix)))
-        })
+        }).returns::<bool>()
         .raw_function("to_hex", |_, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);
@@ -78,7 +78,7 @@ pub(crate) fn register(registry: &Registry) {
                 .map(|byte| format!("{byte:02x}"))
                 .collect();
             Ok(Value::str(&hex))
-        })
+        }).returns::<String>()
         .raw_function("decode", |cx, args| {
             let (bytes, []) = receiver(args)? else {
                 return arity(0);

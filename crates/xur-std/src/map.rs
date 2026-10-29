@@ -17,13 +17,13 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(0);
             };
             Ok(Value::Int(map.len() as i64))
-        })
+        }).returns::<i64>()
         .raw_function("is_empty", |_, args| {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
             Ok(Value::Bool(map.is_empty()))
-        })
+        }).returns::<bool>()
         .raw_function("get", |cx, args| {
             let (map, [key]) = receiver(args)? else {
                 return arity(1);
@@ -36,7 +36,7 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(1);
             };
             Ok(Value::Bool(map.contains_key(&MapKey(key.clone()))))
-        })
+        }).returns::<bool>()
         .raw_function("insert", |_, args| {
             let (map, [key, value]) = receiver(args)? else {
                 return arity(2);

@@ -311,7 +311,7 @@ pub(crate) fn register(registry: &Registry) {
                 let keys = keys(key_args)?;
                 let found = with_args(object, |a| a.0.lock().unwrap().contains(keys))?;
                 Ok(Value::Bool(found))
-            })
+            }).returns::<bool>()
             .raw_function("option", |cx, args| {
                 let [Value::Native(object), key_args @ ..] = args else {
                     return Err(RuntimeError::new("expected an `Args` object"));
@@ -333,7 +333,7 @@ pub(crate) fn register(registry: &Registry) {
                 })?
                 .map_err(|e| RuntimeError::new(error_text(e)))?;
                 Ok(Value::str(&value))
-            })
+            }).returns::<String>()
             .raw_function("subcommand", |cx, args| {
                 let [Value::Native(object)] = args else {
                     return Err(RuntimeError::new("`subcommand` takes no arguments"));
@@ -392,14 +392,14 @@ pub(crate) fn register(registry: &Registry) {
         // Declarative parsing
         module.named_raw_function("parse", &["specs"], |cx, args| parse_spec(cx, args));
         // Table
-        module.named_raw_function("table", &["headers", "rows"], |cx, args| table(cx, args));
+        module.named_raw_function("table", &["headers", "rows"], |cx, args| table(cx, args)).returns::<String>();
         // Prompts
         module
-            .named_raw_function("prompt", &["message"], |_cx, args| prompt_text(args))
-            .named_raw_function("confirm", &["message"], |_cx, args| prompt_confirm(args))
-            .named_raw_function("select", &["message", "options"], |_cx, args| prompt_select(args))
+            .named_raw_function("prompt", &["message"], |_cx, args| prompt_text(args)).returns::<String>()
+            .named_raw_function("confirm", &["message"], |_cx, args| prompt_confirm(args)).returns::<bool>()
+            .named_raw_function("select", &["message", "options"], |_cx, args| prompt_select(args)).returns::<String>()
             .named_raw_function("multi_select", &["message", "options"], |_cx, args| prompt_multi_select(args))
-            .named_raw_function("password", &["message"], |_cx, args| prompt_password(args))
-            .named_raw_function("editor", &["message"], |_cx, args| prompt_editor(args));
+            .named_raw_function("password", &["message"], |_cx, args| prompt_password(args)).returns::<String>()
+            .named_raw_function("editor", &["message"], |_cx, args| prompt_editor(args)).returns::<String>();
     });
 }

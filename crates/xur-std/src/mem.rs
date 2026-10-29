@@ -36,21 +36,21 @@ pub(crate) fn register(registry: &Registry) {
                 return Err(RuntimeError::new("`size_of_val` takes a struct"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
-        })
-        .named_raw_function("to_bytes", &["value"], struct_to_bytes)
+        }).returns::<i64>()
+        .named_raw_function("to_bytes", &["value"], struct_to_bytes).returns::<Vec<u8>>()
         .named_raw_function("alloc_page", &["size"], alloc_page)
         .named_raw_function("protect", &["addr", "size", "mode"], protect_page)
         .named_raw_function("write_bytes", &["addr", "data"], write_bytes)
         .named_raw_function("free_page", &["addr", "size"], free_page);
     registry
         .builtin(BuiltinType::Struct)
-        .raw_function("to_bytes", struct_to_bytes)
+        .raw_function("to_bytes", struct_to_bytes).returns::<Vec<u8>>()
         .raw_function("byte_size", |cx, args| {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`byte_size` takes no arguments"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
-        });
+        }).returns::<i64>();
 }
 
 /// `mem::alloc_page(size)` → `*u8`: allocates `size` bytes of read-write memory.

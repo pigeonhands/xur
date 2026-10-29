@@ -34,5 +34,5 @@ pub(crate) fn register(registry: &Registry) {
             }
             let name = INVOKED_BY.get().map_or("unknown", |s| s.as_str());
             Ok(Value::str(name))
-        });
+        }).returns::<String>();
 }

@@ -10,14 +10,14 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::name` expects a function"))?;
         Ok(Value::str(&info.name))
-    })
+    }).returns::<String>()
     .named_raw_function("params", &["f"], |cx, args| {
         let [value] = args else { return arity("params", "f") };
         let info = cx
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::params` expects a function"))?;
         Ok(Value::Int(info.param_count as i64))
-    })
+    }).returns::<i64>()
     .named_raw_function("param_names", &["f"], |cx, args| {
         let [value] = args else { return arity("param_names", "f") };
         let info = cx

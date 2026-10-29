@@ -58,7 +58,7 @@ pub fn register(registry: &Registry) {
         .named_raw_function("argv", &[], argv);
     registry
         .module("std::fmt")
-        .named_raw_function("format", &["template", "args"], format);
+        .named_raw_function("format", &["template", "args"], format).returns::<String>();
     io::register(registry);
     fs::register(registry);
     process::register(registry);

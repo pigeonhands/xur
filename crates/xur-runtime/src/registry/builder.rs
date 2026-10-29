@@ -286,11 +286,12 @@ impl<T: Facet<'static> + 'static> TypeBuilder<'_, T> {
 pub struct BuiltinBuilder<'r> {
     registry: &'r Registry,
     ty: BuiltinType,
+    last_fn: Option<NativeFnId>,
 }
 
 impl<'r> BuiltinBuilder<'r> {
     pub(super) fn new(registry: &'r Registry, ty: BuiltinType) -> Self {
-        Self { registry, ty }
+        Self { registry, ty, last_fn: None }
     }
 
     /// Registers a method as a Rust function taking the receiver, converted,
@@ -310,8 +311,16 @@ impl<'r> BuiltinBuilder<'r> {
         self.add(name, None, Box::new(f))
     }
 
+    pub fn returns<T: Facet<'static>>(&mut self) -> &mut Self {
+        if let Some(id) = self.last_fn {
+            self.registry.set_return_hint(id, T::SHAPE);
+        }
+        self
+    }
+
     fn add(&mut self, name: &str, signature: Option<Signature>, call: Box<CallFn>) -> &mut Self {
         let decl = self.registry.add_fn(name, signature, Vec::new(), call);
+        self.last_fn = Some(decl.id);
         let key = (self.ty, name.to_owned());
         self.registry
             .with_inner(|inner| inner.builtin_methods.insert(key, decl.id));

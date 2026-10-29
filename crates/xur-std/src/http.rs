@@ -38,7 +38,7 @@ pub(crate) fn register(registry: &Registry) {
             .method("text", |r: &Response| {
                 String::from_utf8_lossy(&r.body).into_owned()
             })
-            .raw_function("bytes", resp_bytes)
+            .raw_function("bytes", resp_bytes).returns::<Vec<u8>>()
             .raw_function("json", resp_json)
             .raw_function("header", resp_header)
             .raw_function("headers", resp_headers);

@@ -611,7 +611,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                 return Err(RuntimeError::new("`offset_of` takes a field name"));
             };
             Ok(Value::Int(layout_arg(args)?.field(name)?.offset as i64))
-        })
+        }).returns::<i64>()
         .raw_function("field", |_, args| {
             let (name, kind) = match args {
                 [_, Value::Str(name), Value::Type(ty)] => {
@@ -712,7 +712,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             let mut buffer = vec![0; layout.0.size];
             layout.write(cx, &mut buffer, 0, value)?;
             Ok(Value::Bytes(Arc::new(buffer.into())))
-        });
+        }).returns::<Vec<u8>>();
 }
 
 /// The layout of a function's one type argument, which takes no other
