@@ -14,7 +14,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use xur_ast::{Expr, ExprKind, NodeId};
 use xur_ast::visit::Visitor;
-use xur_bytecode::ItemIndex;
+use xur_bytecode::{ItemIndex, type_name};
 use xur_resolve::{DefKind, Namespace, Program, Res};
 use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
@@ -465,16 +465,21 @@ impl LanguageServer for Backend {
             let mut local_types: HashMap<NodeId, String> = HashMap::new();
             let mut local_inits: HashMap<NodeId, &Expr> = HashMap::new();
 
-            for (pat_end, binding_id, init) in &let_collector.0 {
-                if let Some(id) = binding_id {
-                    local_inits.insert(*id, init);
+            for binding in &let_collector.0 {
+                if let Some(id) = binding.binding_id {
+                    local_inits.insert(id, binding.init);
                 }
-                if let Some(ty) = infer_expr_type(init, resolutions, &state.items, &state.registry, &local_types) {
-                    if let Some(id) = binding_id {
-                        local_types.insert(*id, ty.clone());
+                if let Some(ann) = binding.ty {
+                    // Annotated binding: record the type but don't emit a hint.
+                    if let Some(id) = binding.binding_id {
+                        local_types.insert(id, type_name(resolutions, ann));
                     }
-                    if in_file(Span { start: *pat_end, end: *pat_end }) {
-                        let pos = file.line_col(*pat_end);
+                } else if let Some(ty) = infer_expr_type(binding.init, resolutions, &state.items, &state.registry, &local_types) {
+                    if let Some(id) = binding.binding_id {
+                        local_types.insert(id, ty.clone());
+                    }
+                    if in_file(Span { start: binding.pat_end, end: binding.pat_end }) {
+                        let pos = file.line_col(binding.pat_end);
                         hints.push(InlayHint {
                             position: Position::new(pos.line - 1, pos.col - 1),
                             label: InlayHintLabel::String(format!(": {ty}")),

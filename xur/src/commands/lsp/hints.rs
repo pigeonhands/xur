@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, NodeId, PatKind, TyKind};
+use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, NodeId, PatKind, Ty, TyKind};
 use xur_ast::visit::{self, Visitor};
 use xur_bytecode::{ItemIndex, ItemRef, type_name};
 use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
@@ -21,18 +21,28 @@ impl<'ast> Visitor<'ast> for CallCollector {
     }
 }
 
-pub struct LetCollector<'a>(pub Vec<(usize, Option<NodeId>, &'a Expr)>);
+pub struct LetBinding<'a> {
+    pub pat_end: usize,
+    pub binding_id: Option<NodeId>,
+    pub init: &'a Expr,
+    pub ty: Option<&'a Ty>,
+}
+
+pub struct LetCollector<'a>(pub Vec<LetBinding<'a>>);
 
 impl<'ast> Visitor<'ast> for LetCollector<'ast> {
     fn visit_local(&mut self, local: &'ast Local) {
-        if local.ty.is_none()
-            && let Some(init) = &local.init
-        {
+        if let Some(init) = &local.init {
             let binding_id = match &local.pat.kind {
                 PatKind::Ident(_) => Some(local.pat.id),
                 _ => None,
             };
-            self.0.push((local.pat.span.end, binding_id, init));
+            self.0.push(LetBinding {
+                pat_end: local.pat.span.end,
+                binding_id,
+                init,
+                ty: local.ty.as_ref(),
+            });
         }
         visit::walk_local(self, local);
     }
