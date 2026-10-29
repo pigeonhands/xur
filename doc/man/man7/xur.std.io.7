@@ -14,11 +14,17 @@ and
 .BR }} .
 .SH FUNCTIONS
 .TP
-.B println(format, args...)
+.B println(format, args...) -> ()
 Print a formatted line to stdout (with trailing newline).
 .TP
-.B print(format, args...)
+.B print(format, args...) -> ()
 Print formatted text to stdout (no trailing newline).
+.TP
+.B eprintln(format, args...) -> ()
+Print a formatted line to stderr (with trailing newline).
+.TP
+.B eprint(format, args...) -> ()
+Print formatted text to stderr (no trailing newline).
 .SH EXAMPLES
 .nf
 use std::io;

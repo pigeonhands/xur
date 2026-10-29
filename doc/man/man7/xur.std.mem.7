@@ -51,7 +51,7 @@ on Unix and
 .B VirtualAlloc
 on Windows.
 .TP
-.B protect(addr, size, mode)
+.B protect(addr, size, mode) -> ()
 Change page protection.
 .I mode
 is a
@@ -63,13 +63,13 @@ flags value (see below) or a string:
 or
 .BR \(dqrwx\(dq .
 .TP
-.B write_bytes(addr, data)
+.B write_bytes(addr, data) -> ()
 Copy
 .I data
 (bytes) into memory at
 .IR addr .
 .TP
-.B free_page(addr, size)
+.B free_page(addr, size) -> ()
 Free a page allocated with
 .BR alloc_page .
 .SH PROTECTION ENUM

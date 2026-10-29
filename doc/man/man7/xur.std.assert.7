@@ -9,31 +9,31 @@ provides assertion functions for testing. Each function
 panics with a descriptive message when the assertion fails.
 .SH FUNCTIONS
 .TP
-.B is_eq(left, right)
+.B is_eq(left, right) -> ()
 Assert that
 .I left
 equals
 .IR right .
 .TP
-.B is_ne(left, right)
+.B is_ne(left, right) -> ()
 Assert that
 .I left
 does not equal
 .IR right .
 .TP
-.B is_true(value)
+.B is_true(value) -> ()
 Assert that
 .I value
 is
 .BR true .
 .TP
-.B is_false(value)
+.B is_false(value) -> ()
 Assert that
 .I value
 is
 .BR false .
 .TP
-.B fail(message)
+.B fail(message) -> ()
 Unconditionally fail with
 .IR message .
 .SH EXAMPLES

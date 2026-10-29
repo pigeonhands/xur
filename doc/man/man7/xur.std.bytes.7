@@ -28,10 +28,10 @@ Length of the buffer.
 .B is_empty() -> bool
 Whether the buffer is empty.
 .TP
-.B push(byte)
+.B push(byte) -> ()
 Append a byte (0\(en255).
 .TP
-.B extend(other)
+.B extend(other) -> ()
 Append another byte buffer.
 .TP
 .B find(needle) -> Option<i64>

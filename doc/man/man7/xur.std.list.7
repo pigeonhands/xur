@@ -13,7 +13,7 @@ Number of elements.
 .B is_empty() -> bool
 Whether the list has no elements.
 .TP
-.B push(item)
+.B push(item) -> ()
 Append an item to the end.
 .TP
 .B pop() -> Option<Value>
@@ -32,7 +32,7 @@ The first item.
 .B last() -> Option<Value>
 The last item.
 .TP
-.B insert(index, item)
+.B insert(index, item) -> ()
 Insert an item at the given position.
 .TP
 .B remove(index) -> Value
@@ -41,18 +41,26 @@ Remove and return the item at the given position.
 .B contains(item) -> bool
 Whether the list contains the item.
 .TP
-.B clear()
+.B clear() -> ()
 Remove all items.
 .TP
-.B reverse()
+.B reverse() -> ()
 Reverse the list in place.
 .TP
-.B extend(other)
+.B extend(other) -> ()
 Append all items from another list. Safe to call as
 .BR xs.extend(xs) .
 .TP
 .B to_hex() -> str
 Format a list of bytes as a hex string.
+.TP
+.B map(f) -> list
+Apply a function to each element and return a new list of results.
+.TP
+.B filter(f) -> list
+Return a new list containing only elements for which
+.I f
+returns true.
 .TP
 .B join(separator) -> str
 Join all items into a string, separated by

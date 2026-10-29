@@ -15,9 +15,9 @@ plus a sleep function.
 .B time::now() -> Instant
 The current monotonic time.
 .TP
-.B time::sleep(ms)
+.B time::sleep(ms) -> ()
 .TQ
-.B time::sleep(duration)
+.B time::sleep(duration) -> ()
 Pause the current thread for the given milliseconds or Duration.
 .TP
 .B time::from_secs(n) -> Duration

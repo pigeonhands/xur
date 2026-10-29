@@ -14,19 +14,19 @@ functions emit events at different severity levels.
 .B subscriber() -> SubscriberBuilder
 Create a new subscriber builder with default settings.
 .TP
-.B trace(format, args...)
+.B trace(format, args...) -> ()
 Emit a trace-level event.
 .TP
-.B debug(format, args...)
+.B debug(format, args...) -> ()
 Emit a debug-level event.
 .TP
-.B info(format, args...)
+.B info(format, args...) -> ()
 Emit an info-level event.
 .TP
-.B warn(format, args...)
+.B warn(format, args...) -> ()
 Emit a warning-level event.
 .TP
-.B error(format, args...)
+.B error(format, args...) -> ()
 Emit an error-level event.
 .SH SUBSCRIBERBUILDER METHODS
 .TP
@@ -74,7 +74,7 @@ Write log output to a file instead of stderr.
 .B to_stderr() -> SubscriberBuilder
 Write log output to stderr (the default).
 .TP
-.B init()
+.B init() -> ()
 Install the subscriber as the global default. Call once at startup.
 .SH EXAMPLES
 .nf
