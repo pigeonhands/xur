@@ -20,7 +20,7 @@ use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
-    CallCollector, ChainCollector, ForLoopCollector, InferredTy, LetCollector, MatchCollector,
+    CallCollector, ChainCollector, ForLoopCollector, InferredTy, LetBinding, LetCollector, MatchCollector,
     build_param_name_map, infer_expr_type, infer_iter_element_type,
     method_at_offset, method_signature,
 };
@@ -471,29 +471,83 @@ impl LanguageServer for Backend {
                 if let Some(id) = binding.binding_id {
                     local_inits.insert(id, binding.init);
                 }
-                if let Some(ann) = binding.ty {
-                    if let Some(id) = binding.binding_id {
-                        local_types.insert(id, InferredTy::from_ast(ann, resolutions));
+            }
+
+            // Merge let and for-loop bindings so they are processed in source
+            // order.  This ensures a for-loop variable (e.g. `ch`) is in
+            // local_types before let bindings inside its body are inferred.
+            enum Binding<'a> {
+                Let(&'a LetBinding<'a>),
+                For(usize, Option<NodeId>, &'a Expr),
+            }
+            let mut bindings: Vec<(usize, Binding<'_>)> = Vec::new();
+            for b in &let_collector.0 {
+                bindings.push((b.pat_end, Binding::Let(b)));
+            }
+            for &(pat_end, binding_id, iter) in &for_collector.0 {
+                bindings.push((pat_end, Binding::For(pat_end, binding_id, iter)));
+            }
+            bindings.sort_by_key(|(pos, _)| *pos);
+
+            for (_, binding) in &bindings {
+                match binding {
+                    Binding::Let(binding) => {
+                        if let Some(ann) = binding.ty {
+                            if let Some(id) = binding.binding_id {
+                                local_types.insert(id, InferredTy::from_ast(ann, resolutions));
+                            }
+                        } else if let Some(ty) = infer_expr_type(binding.init, resolutions, &state.items, &state.registry, &local_types) {
+                            if let Some(id) = binding.binding_id {
+                                local_types.insert(id, ty.clone());
+                            }
+                            if !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                                && in_file(Span { start: binding.pat_end, end: binding.pat_end })
+                            {
+                                let pos = file.line_col(binding.pat_end);
+                                let label = format!(": {}", ty.display(resolutions));
+                                hints.push(InlayHint {
+                                    position: Position::new(pos.line - 1, pos.col - 1),
+                                    label: InlayHintLabel::String(label),
+                                    kind: Some(InlayHintKind::TYPE),
+                                    padding_left: None,
+                                    padding_right: None,
+                                    text_edits: None,
+                                    tooltip: None,
+                                    data: None,
+                                });
+                            }
+                        }
                     }
-                } else if let Some(ty) = infer_expr_type(binding.init, resolutions, &state.items, &state.registry, &local_types) {
-                    if let Some(id) = binding.binding_id {
-                        local_types.insert(id, ty.clone());
-                    }
-                    if !matches!(ty, InferredTy::Infer | InferredTy::Module)
-                        && in_file(Span { start: binding.pat_end, end: binding.pat_end })
-                    {
-                        let pos = file.line_col(binding.pat_end);
-                        let label = format!(": {}", ty.display(resolutions));
-                        hints.push(InlayHint {
-                            position: Position::new(pos.line - 1, pos.col - 1),
-                            label: InlayHintLabel::String(label),
-                            kind: Some(InlayHintKind::TYPE),
-                            padding_left: None,
-                            padding_right: None,
-                            text_edits: None,
-                            tooltip: None,
-                            data: None,
-                        });
+                    Binding::For(pat_end, binding_id, iter) => {
+                        let effective_iter = if let ExprKind::Path(path) = &iter.kind
+                            && let Some(Res::Local(node_id)) = resolutions.res.get(&path.id)
+                            && let Some(init) = local_inits.get(node_id)
+                        {
+                            init
+                        } else {
+                            iter
+                        };
+                        if let Some(ty) = infer_iter_element_type(effective_iter, resolutions, &state.items, &state.registry, &local_types) {
+                            if let Some(id) = binding_id {
+                                local_types.insert(*id, ty.clone());
+                            }
+                            if !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                                && in_file(Span { start: *pat_end, end: *pat_end })
+                            {
+                                let pos = file.line_col(*pat_end);
+                                let label = format!(": {}", ty.display(resolutions));
+                                hints.push(InlayHint {
+                                    position: Position::new(pos.line - 1, pos.col - 1),
+                                    label: InlayHintLabel::String(label),
+                                    kind: Some(InlayHintKind::TYPE),
+                                    padding_left: None,
+                                    padding_right: None,
+                                    text_edits: None,
+                                    tooltip: None,
+                                    data: None,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -517,38 +571,6 @@ impl LanguageServer for Backend {
                         tooltip: None,
                         data: None,
                     });
-                }
-            }
-
-            for (pat_end, binding_id, iter) in &for_collector.0 {
-                let effective_iter = if let ExprKind::Path(path) = &iter.kind
-                    && let Some(Res::Local(node_id)) = resolutions.res.get(&path.id)
-                    && let Some(init) = local_inits.get(node_id)
-                {
-                    init
-                } else {
-                    iter
-                };
-                if let Some(ty) = infer_iter_element_type(effective_iter, resolutions, &state.items, &state.registry, &local_types) {
-                    if let Some(id) = binding_id {
-                        local_types.insert(*id, ty.clone());
-                    }
-                    if !matches!(ty, InferredTy::Infer | InferredTy::Module)
-                        && in_file(Span { start: *pat_end, end: *pat_end })
-                    {
-                        let pos = file.line_col(*pat_end);
-                        let label = format!(": {}", ty.display(resolutions));
-                        hints.push(InlayHint {
-                            position: Position::new(pos.line - 1, pos.col - 1),
-                            label: InlayHintLabel::String(label),
-                            kind: Some(InlayHintKind::TYPE),
-                            padding_left: None,
-                            padding_right: None,
-                            text_edits: None,
-                            tooltip: None,
-                            data: None,
-                        });
-                    }
                 }
             }
 
