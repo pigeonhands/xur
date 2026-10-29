@@ -39,7 +39,7 @@ pub(crate) fn register(registry: &Registry) {
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
         })
         .named_raw_function_returns::<Vec<u8>>("to_bytes", &["value"], struct_to_bytes)
-        .named_raw_function_returns_xur("alloc_page", &["size"], XurType::Ptr(<u8 as facet::Facet>::SHAPE), alloc_page)
+        .named_raw_function_returns_xur("alloc_page", &["size"], XurType::Ptr(Some(<u8 as facet::Facet>::SHAPE)), alloc_page)
         .named_raw_function("protect", &["addr", "size", "mode"], protect_page)
         .named_raw_function("write_bytes", &["addr", "data"], write_bytes)
         .named_raw_function("free_page", &["addr", "size"], free_page);

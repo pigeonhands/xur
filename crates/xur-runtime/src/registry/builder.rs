@@ -25,8 +25,8 @@ impl<T: Facet<'static>> Returns for T {
 /// `_xur` builder methods to annotate return types for the LSP.
 #[derive(Clone, Copy)]
 pub enum XurType {
-    /// Pointer to the given type, displayed as `*inner`.
-    Ptr(&'static Shape),
+    /// Pointer with optional pointee type, displayed as `*T` or `ptr`.
+    Ptr(Option<&'static Shape>),
     /// List with optional element type, displayed as `list` or `list<T>`.
     List(Option<&'static Shape>),
     /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
