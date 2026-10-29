@@ -607,7 +607,7 @@ pub fn infer_expr_type(
             match col_ty {
                 InferredTy::List(Some(inner)) => Some(*inner),
                 InferredTy::Prim(PrimTy::Str) => Some(InferredTy::Prim(PrimTy::Str)),
-                InferredTy::Prim(PrimTy::Bytes) => Some(InferredTy::Prim(PrimTy::I64)),
+                InferredTy::Prim(PrimTy::Bytes) => Some(InferredTy::Prim(PrimTy::U8)),
                 _ => None,
             }
         }
