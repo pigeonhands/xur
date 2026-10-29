@@ -1,0 +1,33 @@
+// Converting between characters and Unicode codepoints.
+//
+//     xur run example/lang/ord_chr.xur
+
+use std::io;
+use std::str;
+
+fn main() -> Result<()> {
+    // ord: single-character string to codepoint.
+    io::println("'A' = {}", "A".ord()?);
+    io::println("'z' = {}", "z".ord()?);
+    io::println("'α' = {}", "α".ord()?);
+
+    // chr: codepoint to single-character string.
+    io::println("65 = '{}'", str::chr(65)?);
+    io::println("0x03B1 = '{}'", str::chr(0x03B1)?);
+    io::println("0x1F600 = '{}'", str::chr(0x1F600)?);
+
+    // Round-trip.
+    let ch = "X";
+    io::println("round-trip: '{}' -> {} -> '{}'", ch, ch.ord()?, str::chr(ch.ord()?)?);
+
+    // Shifting characters: a simple Caesar cipher.
+    let message = "Hello";
+    let shifted = "";
+    for ch in message {
+        let code = ch.ord()?;
+        shifted = shifted + str::chr(code + 1)?;
+    }
+    io::println("shift '{}' by 1 = '{}'", message, shifted);
+
+    Ok(())
+}

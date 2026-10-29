@@ -5,9 +5,23 @@ use xur_runtime::{BuiltinType, Registry};
 
 pub(crate) fn register(registry: &Registry) {
     registry
+        .module("std::str")
+        .named_function("chr", &["codepoint"], |n: u32| -> Result<String, String> {
+            char::from_u32(n)
+                .map(|c| c.to_string())
+                .ok_or_else(|| format!("{n:#x} is not a valid Unicode codepoint"))
+        });
+    registry
         .builtin(BuiltinType::Str)
         .function("len", |s: String| s.chars().count() as i64)
         .function("is_empty", |s: String| s.is_empty())
+        .function("ord", |s: String| -> Result<i64, String> {
+            let mut chars = s.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => Ok(c as i64),
+                _ => Err(format!("`ord` expects a single character, got {}-char string", s.chars().count())),
+            }
+        })
         .function("to_upper", |s: String| s.to_uppercase())
         .function("to_lower", |s: String| s.to_lowercase())
         .function("trim", |s: String| s.trim().to_owned())
@@ -70,6 +84,22 @@ mod tests {
             call("split", &[Value::str("a,b"), Value::str(",")]),
             Value::list(vec![Value::str("a"), Value::str("b")])
         );
+    }
+
+    #[test]
+    fn ord_returns_codepoint() {
+        let registry = registry();
+        let lang = TestCx::new(&registry, crate::PRELUDE).lang;
+        assert_eq!(
+            call("ord", &[Value::str("A")]),
+            Value::adt(lang.ok, vec![Value::Int(65)])
+        );
+    }
+
+    #[test]
+    fn ord_rejects_multi_char() {
+        let result = call("ord", &[Value::str("AB")]);
+        assert!(matches!(result, Value::Adt(_)));
     }
 
     #[test]
