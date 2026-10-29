@@ -349,6 +349,21 @@ impl<'ast> Visitor<'ast> for LetCollector<'ast> {
     }
 }
 
+/// Collects intermediate call expressions in method chains.
+/// Each entry is (receiver_span_end, method_name_start, receiver_expr).
+pub struct ChainCollector<'a>(pub Vec<(usize, usize, &'a Expr)>);
+
+impl<'ast> Visitor<'ast> for ChainCollector<'ast> {
+    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
+        if let ExprKind::MethodCall(mc) = &expr.kind
+            && matches!(mc.receiver.kind, ExprKind::MethodCall(_) | ExprKind::Call(_, _))
+        {
+            self.0.push((mc.receiver.span.end, mc.seg.ident.span.start, &mc.receiver));
+        }
+        visit::walk_expr(self, expr);
+    }
+}
+
 pub struct MatchCollector<'a>(pub Vec<(usize, &'a Expr)>);
 
 impl<'ast> Visitor<'ast> for MatchCollector<'ast> {

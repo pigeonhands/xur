@@ -20,7 +20,7 @@ use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
-    CallCollector, ForLoopCollector, InferredTy, LetCollector, MatchCollector,
+    CallCollector, ChainCollector, ForLoopCollector, InferredTy, LetCollector, MatchCollector,
     build_param_name_map, infer_expr_type, infer_iter_element_type,
     method_at_offset, method_signature,
 };
@@ -418,10 +418,12 @@ impl LanguageServer for Backend {
             let mut let_collector = LetCollector(Vec::new());
             let mut match_collector = MatchCollector(Vec::new());
             let mut for_collector = ForLoopCollector(Vec::new());
+            let mut chain_collector = ChainCollector(Vec::new());
             call_collector.visit_module(module.ast);
             let_collector.visit_module(module.ast);
             match_collector.visit_module(module.ast);
             for_collector.visit_module(module.ast);
+            chain_collector.visit_module(module.ast);
 
             for (callee_id, args) in call_collector.0 {
                 let Some(&res) = resolutions.res.get(&callee_id) else {
@@ -547,6 +549,33 @@ impl LanguageServer for Backend {
                             data: None,
                         });
                     }
+                }
+            }
+
+            for (span_end, method_start, receiver) in &chain_collector.0 {
+                if !in_file(Span { start: *span_end, end: *span_end }) {
+                    continue;
+                }
+                let receiver_end_line = file.line_col(*span_end).line;
+                let method_line = file.line_col(*method_start).line;
+                if receiver_end_line == method_line {
+                    continue;
+                }
+                if let Some(ty) = infer_expr_type(receiver, resolutions, &state.items, &state.registry, &local_types)
+                    && !matches!(ty, InferredTy::Infer | InferredTy::Module)
+                {
+                    let pos = file.line_col(*span_end);
+                    let label = format!(" {}", ty.display(resolutions));
+                    hints.push(InlayHint {
+                        position: Position::new(pos.line - 1, pos.col - 1),
+                        label: InlayHintLabel::String(label),
+                        kind: Some(InlayHintKind::TYPE),
+                        padding_left: None,
+                        padding_right: None,
+                        text_edits: None,
+                        tooltip: None,
+                        data: None,
+                    });
                 }
             }
         }
