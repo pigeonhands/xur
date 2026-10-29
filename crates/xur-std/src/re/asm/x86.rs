@@ -54,10 +54,7 @@ pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
         .raw_function("encode", encode)
         .raw_function("format", format_insn)
         .raw_function("insn", create_insn)
-        .raw_function("mem", create_mem)
-        .raw_function("reg", create_reg);
-
-    x86.ty::<RegOp>("RegOp");
+        .raw_function("mem", create_mem);
 
     register_insn(&mut x86);
     register_enums(&mut x86);
@@ -263,6 +260,11 @@ fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let (code, ops) = match args.split_first() {
         Some((Value::Str(name), rest)) => (parse_code(name)?, rest),
         Some((Value::Int(n), rest)) => (int_to_code(*n)?, rest),
+        Some((Value::Adt(adt), rest)) => {
+            let v = cx.repr_value(adt.ctor)
+                .ok_or_else(|| RuntimeError::new("expected a Code enum value"))?;
+            (int_to_code(v)?, rest)
+        }
         _ => {
             return Err(RuntimeError::new(
                 "`insn` takes a Code (name or enum) and 0–4 operands",
@@ -271,9 +273,9 @@ fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     };
     let insn = match ops.len() {
         0 => Ok(Instruction::with(code)),
-        1 => build1(code, &ops[0]),
-        2 => build2(code, &ops[0], &ops[1]),
-        3 => build3(code, &ops[0], &ops[1], &ops[2]),
+        1 => build1(cx, code, &ops[0]),
+        2 => build2(cx, code, &ops[0], &ops[1]),
+        3 => build3(cx, code, &ops[0], &ops[1], &ops[2]),
         _ => {
             return Err(RuntimeError::new(
                 "`insn` supports at most 3 operands for now",
@@ -286,18 +288,6 @@ fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             Ok(crate::result(cx, Ok(value)))
         }
         Err(e) => Ok(crate::result(cx, Err(e.message))),
-    }
-}
-
-/// A register operand wrapper, so `x86::reg(EAX)` is distinguishable from
-/// the integer `4` (an immediate).
-#[derive(Clone, facet::Facet)]
-#[facet(opaque)]
-struct RegOp(IcedRegister);
-
-impl std::fmt::Display for RegOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
     }
 }
 
@@ -318,16 +308,6 @@ impl std::fmt::Display for MemOp {
         }
         write!(f, "]")
     }
-}
-
-/// `x86::reg(name_or_enum)` → `RegOp`, typed register operand.
-fn create_reg(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let reg = match args {
-        [Value::Str(s)] => parse_reg(s)?,
-        [Value::Int(n)] => int_to_reg(*n)?,
-        _ => return Err(RuntimeError::new("`reg` takes a register name or Register enum")),
-    };
-    into_value(cx, RegOp(reg))
 }
 
 /// `x86::mem(base)` or `x86::mem(base, index, scale, displacement)`.
@@ -365,14 +345,16 @@ enum Operand {
     Mem(MemoryOperand),
 }
 
-fn parse_operand(value: &Value) -> RunResult<Operand> {
+fn parse_operand(cx: &dyn Context, value: &Value) -> RunResult<Operand> {
     match value {
         Value::Str(s) => Ok(Operand::Reg(parse_reg(s)?)),
         Value::Int(n) => Ok(Operand::Imm(*n)),
+        Value::Adt(adt) => {
+            let v = cx.repr_value(adt.ctor)
+                .ok_or_else(|| RuntimeError::new("enum operand has no repr value"))?;
+            Ok(Operand::Reg(int_to_reg(v)?))
+        }
         Value::Native(obj) => {
-            if let Some(r) = obj.with(|r: &RegOp| r.0) {
-                return Ok(Operand::Reg(r));
-            }
             if let Some(m) = obj.with(|m: &MemOp| m.0) {
                 return Ok(Operand::Mem(m));
             }
@@ -387,17 +369,17 @@ fn parse_operand(value: &Value) -> RunResult<Operand> {
 }
 
 
-fn build1(code: Code, op0: &Value) -> RunResult<Instruction> {
-    match parse_operand(op0)? {
+fn build1(cx: &dyn Context, code: Code, op0: &Value) -> RunResult<Instruction> {
+    match parse_operand(cx, op0)? {
         Operand::Reg(r) => Instruction::with1(code, r).map_err(iced_err),
         Operand::Imm(n) => Instruction::with1::<i32>(code, n as i32).map_err(iced_err),
         Operand::Mem(m) => Instruction::with1(code, m).map_err(iced_err),
     }
 }
 
-fn build2(code: Code, op0: &Value, op1: &Value) -> RunResult<Instruction> {
-    let a = parse_operand(op0)?;
-    let b = parse_operand(op1)?;
+fn build2(cx: &dyn Context, code: Code, op0: &Value, op1: &Value) -> RunResult<Instruction> {
+    let a = parse_operand(cx, op0)?;
+    let b = parse_operand(cx, op1)?;
     match (a, b) {
         (Operand::Reg(r0), Operand::Reg(r1)) => Instruction::with2(code, r0, r1),
         (Operand::Reg(r), Operand::Imm(n)) => Instruction::with2::<_, i32>(code, r, n as i32),
@@ -413,10 +395,10 @@ fn build2(code: Code, op0: &Value, op1: &Value) -> RunResult<Instruction> {
     .map_err(iced_err)
 }
 
-fn build3(code: Code, op0: &Value, op1: &Value, op2: &Value) -> RunResult<Instruction> {
-    let a = parse_operand(op0)?;
-    let b = parse_operand(op1)?;
-    let c = parse_operand(op2)?;
+fn build3(cx: &dyn Context, code: Code, op0: &Value, op1: &Value, op2: &Value) -> RunResult<Instruction> {
+    let a = parse_operand(cx, op0)?;
+    let b = parse_operand(cx, op1)?;
+    let c = parse_operand(cx, op2)?;
     match (a, b, c) {
         (Operand::Reg(r0), Operand::Reg(r1), Operand::Reg(r2)) => {
             Instruction::with3(code, r0, r1, r2)
