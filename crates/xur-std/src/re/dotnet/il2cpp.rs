@@ -177,7 +177,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
 
     il2cpp
         .ty::<Il2CppGame>("Game")
-        .raw_function_returns_xur("types", XurType::LIST, |cx, args| {
+        .raw_function_returns_xur("types", XurType::list::<Il2CppTypeView>(), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`types` takes no arguments"));
             };
@@ -298,7 +298,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 .find(|t| t.index() == tv.index)
                 .and_then(|t| t.base_type_name())
         })
-        .raw_function_returns_xur("fields", XurType::LIST, |cx, args| {
+        .raw_function_returns_xur("fields", XurType::list::<Il2CppFieldInfo>(), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`fields` takes no arguments"));
             };
@@ -321,7 +321,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected a `TypeView`"))??;
             Ok(Value::list(list))
         })
-        .raw_function_returns_xur("methods", XurType::LIST, |cx, args| {
+        .raw_function_returns_xur("methods", XurType::list::<Il2CppMethodInfo>(), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`methods` takes no arguments"));
             };

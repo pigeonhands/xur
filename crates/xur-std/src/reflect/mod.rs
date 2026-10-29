@@ -32,7 +32,7 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 Ok(Value::str(&type_name(cx, value)))
             })
-            .named_raw_function_returns_xur("fields", &["value"], XurType::LIST, |cx, args| {
+            .named_raw_function_returns_xur("fields", &["value"], XurType::list::<String>(), |cx, args| {
                 let [value] = args else {
                     return arity("fields", "value");
                 };
@@ -72,7 +72,7 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 Ok(option(cx, variant(cx, value).map(|name| Value::str(&name))))
             })
-            .named_raw_function_returns_xur("methods", &["value"], XurType::LIST, |cx, args| {
+            .named_raw_function_returns_xur("methods", &["value"], XurType::list::<String>(), |cx, args| {
                 let [value] = args else {
                     return arity("methods", "value");
                 };

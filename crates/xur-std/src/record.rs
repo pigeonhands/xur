@@ -72,7 +72,7 @@ pub(crate) fn register(registry: &Registry) {
                 ..Record::clone(record)
             })))
         })
-        .raw_function_returns_xur("fields", XurType::LIST, |_, args| {
+        .raw_function_returns_xur("fields", XurType::list::<String>(), |_, args| {
             let (record, []) = receiver(args)? else {
                 return Err(RuntimeError::new("`fields` takes no arguments"));
             };

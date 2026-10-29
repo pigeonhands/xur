@@ -19,7 +19,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .ok_or_else(|| RuntimeError::new("`reflect::func::params` expects a function"))?;
         Ok(Value::Int(info.param_count as i64))
     })
-    .named_raw_function_returns_xur("param_names", &["f"], XurType::LIST, |cx, args| {
+    .named_raw_function_returns_xur("param_names", &["f"], XurType::list::<String>(), |cx, args| {
         let [value] = args else { return arity("param_names", "f") };
         let info = cx
             .fn_info(value)
