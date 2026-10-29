@@ -28,6 +28,18 @@ pub(crate) fn register(registry: &Registry) {
         .named_raw_function("stringify", &["value"], stringify);
 }
 
+pub(crate) fn parse_str(cx: &dyn Context, text: &str) -> RunResult<Value> {
+    match serde_json::from_str::<JsonValue>(text) {
+        Ok(JsonValue(value)) => Ok(fixup_nulls(cx, &value)),
+        Err(e) => Err(RuntimeError::new(crate::error_text(e))),
+    }
+}
+
+pub(crate) fn stringify_value(cx: &mut dyn Context, value: &Value) -> RunResult<String> {
+    let prepared = prepare_for_json(cx, value)?;
+    serde_json::to_string(&JsonValue(prepared)).map_err(|e| RuntimeError::new(crate::error_text(e)))
+}
+
 /// `std::json::parse(text) -> Result<value, str>`
 fn parse(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [Value::Str(text)] = args else {

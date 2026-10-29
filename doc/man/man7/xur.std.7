@@ -173,6 +173,26 @@ Format strings.
 .B format(template, args...)
 returns a formatted string.
 .TP
+.B std::http
+HTTP client.
+.BR get ,
+.BR post ,
+.BR put ,
+.BR patch ,
+.BR delete ,
+.BR head ,
+.BR request
+(builder).
+.B Response
+type with
+.BR status() ,
+.BR text() ,
+.BR json() ,
+.BR header() ,
+.BR headers() .
+See
+.BR xur.std.http (7).
+.TP
 .B std::json
 JSON serialisation.
 .B parse(text)
@@ -341,4 +361,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.log (7),
 .BR xur.std.path (7),
 .BR xur.std.ptr (7),
-.BR xur.std.cli (7)
+.BR xur.std.cli (7),
+.BR xur.std.http (7)

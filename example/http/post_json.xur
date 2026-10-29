@@ -1,0 +1,30 @@
+// POST a JSON body with bearer authentication.
+//
+// Run it:
+//
+//     xur run example/http/post_json.xur
+//
+// Builds a request with json_body() and bearer_auth(), sends it, and
+// prints what the echo server saw.
+
+use std::http;
+use std::io;
+
+fn main() -> Result<()> {
+    let payload = @{ name: "xur", version: "0.1.2" };
+
+    let resp = http::request("POST", "https://httpbin.org/post")
+        .bearer_auth("my-secret-token")
+        .json_body(payload)
+        .send()?;
+
+    io::println("status: {}", resp.status());
+
+    let body = resp.json()?;
+    io::println("data:   {}", body.data);
+
+    let auth = resp.header("content-type");
+    io::println("content-type: {}", auth);
+
+    Ok(())
+}

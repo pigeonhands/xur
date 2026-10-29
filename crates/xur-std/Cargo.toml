@@ -27,6 +27,7 @@ hao.workspace = true
 hao-il2cpp.workspace = true
 hao-runtime.workspace = true
 iced-x86.workspace = true
+ureq.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

@@ -1,0 +1,22 @@
+// Fetch a URL and print the response.
+//
+// Run it:
+//
+//     xur run example/http/get.xur
+//
+// Makes a GET request, prints the status and body, then parses the
+// JSON response to show a single field.
+
+use std::http;
+use std::io;
+
+fn main() -> Result<()> {
+    let resp = http::get("https://httpbin.org/get")?;
+    io::println("status: {}", resp.status());
+    io::println("url:    {}", resp.url());
+
+    let body = resp.json()?;
+    io::println("origin: {}", body.origin);
+
+    Ok(())
+}

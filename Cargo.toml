@@ -40,6 +40,7 @@ hao-il2cpp-runtime = { version = "0.0.3", features = ["reflect"] }
 hao-il2cpp-unity = { version = "0.0.4", features = ["reflect"] }
 hao-godot = { version = "0.0.3", features = ["reflect"] }
 iced-x86 = "1.21"
+ureq = "3.0"
 libc = "0.2"
 serde = "1"
 serde_json = "1"

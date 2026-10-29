@@ -1,0 +1,125 @@
+.TH XUR.STD.HTTP 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.http \- HTTP client
+.SH SYNOPSIS
+.B use std::http;
+.SH DESCRIPTION
+.B std::http
+provides a synchronous HTTP client backed by ureq.
+Requests return
+.BR "Result<Response, str>" .
+.SH SHORTHAND FUNCTIONS
+.TP
+.B http::get(url) -> Result<Response, str>
+Send a GET request.
+.TP
+.B http::post(url) -> Result<Response, str>
+.TQ
+.B http::post(url, body) -> Result<Response, str>
+Send a POST request, optionally with a string or bytes body.
+.TP
+.B http::put(url) / http::put(url, body)
+Send a PUT request.
+.TP
+.B http::patch(url) / http::patch(url, body)
+Send a PATCH request.
+.TP
+.B http::delete(url) -> Result<Response, str>
+Send a DELETE request.
+.TP
+.B http::head(url) -> Result<Response, str>
+Send a HEAD request.
+.SH REQUEST BUILDER
+.TP
+.B http::request(method, url) -> RequestBuilder
+Create a builder for an arbitrary HTTP method.
+.SS RequestBuilder methods
+All builder methods return a new RequestBuilder (immutable builder pattern).
+.TP
+.B header(name, value) -> RequestBuilder
+Add a header.
+.TP
+.B bearer_auth(token) -> RequestBuilder
+Set the Authorization header to
+.BI "Bearer " token .
+.TP
+.B basic_auth(username, password) -> RequestBuilder
+Set the Authorization header to
+.BI "Basic " base64(username:password) .
+.TP
+.B body(data) -> RequestBuilder
+Set the request body (string or bytes).
+.TP
+.B json_body(value) -> RequestBuilder
+Serialize
+.I value
+as JSON, set the body and Content-Type.
+.TP
+.B query(key, value) -> RequestBuilder
+Append a URL query parameter.
+.TP
+.B timeout(seconds) -> RequestBuilder
+Set the request timeout in seconds (default 30).
+.TP
+.B send() -> Result<Response, str>
+Execute the request.
+.SH RESPONSE
+.TP
+.B status() -> int
+The HTTP status code.
+.TP
+.B status_text() -> str
+The reason phrase (e.g.\& "OK", "Not Found").
+.TP
+.B url() -> str
+The final URL after any redirects.
+.TP
+.B text() -> str
+The response body as a UTF-8 string.
+.TP
+.B bytes() -> bytes
+The response body as raw bytes.
+.TP
+.B json() -> Result<value, str>
+Parse the response body as JSON.
+.TP
+.B header(name) -> Option<str>
+Look up a response header by name (case-insensitive).
+.TP
+.B headers() -> record
+All response headers as a record.
+.SH EXAMPLES
+Simple GET:
+.PP
+.nf
+use std::http;
+use std::io;
+
+fn main() -> Result<()> {
+    let resp = http::get("https://httpbin.org/get")?;
+    io::println("status: {}", resp.status());
+    io::println("body: {}", resp.text());
+    Ok(())
+}
+.fi
+.PP
+POST JSON with authentication:
+.PP
+.nf
+use std::http;
+use std::io;
+
+fn main() -> Result<()> {
+    let data = @{ name: "xur" };
+    let resp = http::request("POST", "https://httpbin.org/post")
+        .bearer_auth("token")
+        .json_body(data)
+        .send()?;
+    io::println("{}", resp.json()?.data);
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.json (7),
+.BR xur.std.net (7)

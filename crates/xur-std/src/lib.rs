@@ -11,6 +11,7 @@ mod bytes;
 mod cli;
 mod fmt;
 mod fs;
+mod http;
 mod io;
 mod json;
 mod list;
@@ -64,6 +65,7 @@ pub fn register(registry: &Registry) {
     any::register(registry);
     assert::register(registry);
     reflect::register(registry);
+    http::register(registry);
     json::register(registry);
     re::register(registry);
     math::register(registry);
