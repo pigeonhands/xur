@@ -361,8 +361,17 @@ impl Registry {
         }
         match f.return_hint {
             Some(ReturnHint::Shape(s)) => Some(self.shape_xur_name(s)),
-            Some(ReturnHint::Xur(xur)) => Some(xur.xur_name()),
+            Some(ReturnHint::Xur(xur)) => Some(self.xur_type_name(xur)),
             None => None,
+        }
+    }
+
+    fn xur_type_name(&self, ty: XurType) -> String {
+        match ty {
+            XurType::Ptr(inner) => format!("*{}", self.shape_xur_name(inner)),
+            XurType::List => "list".into(),
+            XurType::Map => "map".into(),
+            XurType::Unit => "()".into(),
         }
     }
 

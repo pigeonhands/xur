@@ -25,22 +25,11 @@ impl<T: Facet<'static>> Returns for T {
 /// `_xur` builder methods to annotate return types for the LSP.
 #[derive(Clone, Copy)]
 pub enum XurType {
-    /// Pointer to `inner`, displayed as `*inner` (e.g. `*u8`, `*i32`).
-    Ptr(&'static str),
+    /// Pointer to the given type, displayed as `*inner`.
+    Ptr(&'static Shape),
     List,
     Map,
     Unit,
-}
-
-impl XurType {
-    pub fn xur_name(self) -> String {
-        match self {
-            Self::Ptr(inner) => format!("*{inner}"),
-            Self::List => "list".into(),
-            Self::Map => "map".into(),
-            Self::Unit => "()".into(),
-        }
-    }
 }
 
 /// A return-type hint stored on a raw function: either a Facet [`Shape`]
