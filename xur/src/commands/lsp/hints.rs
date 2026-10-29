@@ -326,7 +326,22 @@ pub fn infer_iter_element_type(
     match &iter.kind {
         ExprKind::Range(..) => Some("i64".into()),
         ExprKind::List(elems) => {
-            elems.first().and_then(|e| infer_expr_type(e, resolutions, items, registry))
+            let mut seen = Vec::new();
+            for e in elems {
+                if let Some(ty) = infer_expr_type(e, resolutions, items, registry) {
+                    if !seen.contains(&ty) {
+                        seen.push(ty);
+                    }
+                }
+            }
+            if seen.is_empty() {
+                return None;
+            }
+            if seen.len() <= 2 {
+                Some(seen.join(" | "))
+            } else {
+                Some(format!("{} | {} | ...", seen[0], seen[1]))
+            }
         }
         _ => {
             if let Some(shape) = native_call_return_shape(iter, resolutions, registry) {
