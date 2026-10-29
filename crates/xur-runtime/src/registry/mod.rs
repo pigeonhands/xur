@@ -47,7 +47,7 @@ use crate::convert::{Builder, ConvertCx};
 use crate::value::NativeObject;
 use crate::{AdtInfo, BuiltinType, RunResult, RuntimeError, TypeRef, Value};
 
-pub use builder::{BuiltinBuilder, ModuleBuilder, ReturnHint, Returns, TypeBuilder, XurType};
+pub use builder::{BuiltinBuilder, ElemHint, ModuleBuilder, ReturnHint, Returns, TypeBuilder, XurType};
 pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
 
 use hooks::TypeHooks;
@@ -371,7 +371,8 @@ impl Registry {
             XurType::Ptr(Some(inner)) => format!("*{}", self.shape_xur_name(inner)),
             XurType::Ptr(None) => "ptr".into(),
             XurType::List(None) => "list".into(),
-            XurType::List(Some(elem)) => format!("list<{}>", self.shape_xur_name(elem)),
+            XurType::List(Some(ElemHint::Shape(s))) => format!("list<{}>", self.shape_xur_name(s)),
+            XurType::List(Some(ElemHint::Name(n))) => format!("list<{n}>"),
             XurType::Map(None, None) => "map".into(),
             XurType::Map(Some(k), Some(v)) => {
                 format!("map<{}, {}>", self.shape_xur_name(k), self.shape_xur_name(v))

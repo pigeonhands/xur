@@ -34,7 +34,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             .collect();
         Ok(Value::list(names))
     })
-    .named_raw_function_returns_xur("param_types", &["f"], XurType::LIST, |cx, args| {
+    .named_raw_function_returns_xur("param_types", &["f"], XurType::list_named("type"), |cx, args| {
         let [value] = args else { return arity("param_types", "f") };
         let info = cx
             .fn_info(value)

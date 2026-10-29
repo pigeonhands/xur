@@ -141,15 +141,18 @@ impl InferredTy {
         registry: &Registry,
         resolutions: &Resolutions,
     ) -> Self {
-        use xur_runtime::registry::XurType;
+        use xur_runtime::registry::{ElemHint, XurType};
         match xur {
             XurType::Unit => Self::Unit,
             XurType::Ptr(Some(inner)) => {
                 Self::Ptr(Box::new(Self::from_shape(inner, registry, resolutions)))
             }
             XurType::Ptr(None) => Self::Ptr(Box::new(Self::Infer)),
-            XurType::List(Some(inner)) => {
-                Self::List(Some(Box::new(Self::from_shape(inner, registry, resolutions))))
+            XurType::List(Some(ElemHint::Shape(s))) => {
+                Self::List(Some(Box::new(Self::from_shape(s, registry, resolutions))))
+            }
+            XurType::List(Some(ElemHint::Name(n))) => {
+                Self::List(Some(Box::new(Self::from_name(n))))
             }
             XurType::List(None) => Self::List(None),
             XurType::Map(_, _) => Self::Map,

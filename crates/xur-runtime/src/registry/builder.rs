@@ -22,13 +22,22 @@ impl<T: Facet<'static>> Returns for T {
 }
 
 /// Runtime-only xur types that have no Facet equivalent. Use with the
+/// An element type for compound return-type hints.
+#[derive(Clone, Copy)]
+pub enum ElemHint {
+    /// A Facet shape, introspectable for generics.
+    Shape(&'static Shape),
+    /// A type name for primitives that have no Facet representation (e.g. `type`).
+    Name(&'static str),
+}
+
 /// `_xur` builder methods to annotate return types for the LSP.
 #[derive(Clone, Copy)]
 pub enum XurType {
     /// Pointer with optional pointee type, displayed as `*T` or `ptr`.
     Ptr(Option<&'static Shape>),
-    /// List with optional element type, displayed as `list` or `list<T>`.
-    List(Option<&'static Shape>),
+    /// List with optional element type, displayed as `list` or `list[T]`.
+    List(Option<ElemHint>),
     /// Map with optional key/value types, displayed as `map` or `map<K, V>`.
     Map(Option<&'static Shape>, Option<&'static Shape>),
     Unit,
@@ -41,7 +50,8 @@ impl XurType {
     pub const UNIT: Self = Self::Unit;
 
     pub fn ptr<T: Facet<'static>>() -> Self { Self::Ptr(Some(T::SHAPE)) }
-    pub fn list<T: Facet<'static>>() -> Self { Self::List(Some(T::SHAPE)) }
+    pub fn list<T: Facet<'static>>() -> Self { Self::List(Some(ElemHint::Shape(T::SHAPE))) }
+    pub fn list_named(name: &'static str) -> Self { Self::List(Some(ElemHint::Name(name))) }
     pub fn map<K: Facet<'static>, V: Facet<'static>>() -> Self {
         Self::Map(Some(K::SHAPE), Some(V::SHAPE))
     }
