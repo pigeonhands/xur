@@ -22,7 +22,7 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 let handle = cx.spawn(f.clone())?;
                 into_value(cx, JoinHandle(Arc::new(Mutex::new(Some(handle)))))
-            })
+            }).returns::<JoinHandle>()
             .named_function("sleep", &["millis"], |millis: u64| {
                 thread::sleep(Duration::from_millis(millis))
             })

@@ -51,7 +51,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    });
+    }).returns::<DotnetRuntime>();
 
     // --- Runtime methods ---
 

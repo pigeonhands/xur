@@ -35,7 +35,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
             cx,
             DotnetMethodSig(MethodSig::new_static(ret_sig, param_sigs)),
         )
-    });
+    }).returns::<DotnetMethodSig>();
 
     sig.raw_function("method_instance", |cx, args| {
         let [Value::Native(ret), Value::List(params)] = args else {
@@ -51,7 +51,7 @@ pub(super) fn register(dotnet: &mut ModuleBuilder<'_>) {
             cx,
             DotnetMethodSig(MethodSig::new_instance(ret_sig, param_sigs)),
         )
-    });
+    }).returns::<DotnetMethodSig>();
 }
 
 fn extract_type_sigs(

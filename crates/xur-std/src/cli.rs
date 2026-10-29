@@ -301,7 +301,7 @@ pub(crate) fn register(registry: &Registry) {
                     .unwrap_or_default();
                 let inner = pico_args::Arguments::from_vec(argv);
                 into_value(cx, Args(Mutex::new(inner)))
-            });
+            }).returns::<Args>();
         module
             .ty_borrowing::<Args>("Args")
             .raw_function("contains", |_cx, args| {

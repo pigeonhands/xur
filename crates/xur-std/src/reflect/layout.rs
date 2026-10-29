@@ -587,14 +587,14 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             };
             let layout = layout_of_def(cx, def, 0)?;
             into_value(cx, layout)
-        })
+        }).returns::<Layout>()
         .raw_function("layout_of", |cx, args| {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`layout_of` takes a struct value"));
             };
             let layout = layout_of_def(cx, adt.ctor, 0)?;
             into_value(cx, layout)
-        });
+        }).returns::<Layout>();
     module
         .ty::<Layout>("Layout")
         .function("new", |name: String| {
@@ -629,7 +629,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                 )),
             };
             add_field(args, name, kind, None)
-        })
+        }).returns::<Layout>()
         .raw_function("field_at", |_, args| {
             let (name, kind, at) = match args {
                 [_, Value::Str(name), Value::Type(ty), Value::Int(at)] => {
@@ -647,27 +647,27 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                 )),
             };
             add_field(args, name, kind, Some(usize_arg(at)?))
-        })
+        }).returns::<Layout>()
         .raw_function("bytes", |_, args| {
             let [_, Value::Str(name), Value::Int(len)] = args else {
                 return Err(RuntimeError::new("`bytes` takes a name and a length"));
             };
             add_field(args, name, Kind::Bytes(usize_arg(*len)?), None)
-        })
+        }).returns::<Layout>()
         .raw_function("nested", |_, args| {
             let [_, Value::Str(name), inner] = args else {
                 return Err(RuntimeError::new("`nested` takes a name and a layout"));
             };
             let inner = layout_arg(std::slice::from_ref(inner))?;
             add_field(args, name, Kind::Struct(inner), None)
-        })
-        .raw_function("packed", |_, args| options(args, |data| data.packed = true))
+        }).returns::<Layout>()
+        .raw_function("packed", |_, args| options(args, |data| data.packed = true)).returns::<Layout>()
         .raw_function("big_endian", |_, args| {
             options(args, |data| data.big_endian = true)
-        })
+        }).returns::<Layout>()
         .raw_function("little_endian", |_, args| {
             options(args, |data| data.big_endian = false)
-        })
+        }).returns::<Layout>()
         .raw_function("aligned", |_, args| {
             let [_, Value::Int(align)] = args else {
                 return Err(RuntimeError::new("`aligned` takes an alignment"));
@@ -677,7 +677,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                 return Err(RuntimeError::new("alignments are powers of two"));
             }
             options(args, |data| data.min_align = align)
-        })
+        }).returns::<Layout>()
         .raw_function("read", |_, args| {
             let [_, Value::Bytes(data), Value::Int(offset)] = args else {
                 return Err(RuntimeError::new("`read` takes bytes and an offset"));

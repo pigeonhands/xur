@@ -156,7 +156,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    });
+    }).returns::<Il2CppGame>();
 
     il2cpp.raw_function("from_files", |cx, args| {
         let [Value::Str(metadata), Value::Str(binary)] = args else {
@@ -171,7 +171,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             }
             Err(e) => Ok(result(cx, Err(error_text(e)))),
         }
-    });
+    }).returns::<Il2CppGame>();
 
     // --- Game methods ---
 
@@ -216,7 +216,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 )
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))??;
             Ok(res)
-        })
+        }).returns::<Il2CppTypeView>()
         .method("image_names", |g: &Il2CppGame| -> Vec<String> {
             g.0.image_names().map(|s| s.to_owned()).collect()
         })

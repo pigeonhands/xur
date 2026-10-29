@@ -51,7 +51,7 @@ pub(super) fn register(_registry: &Registry, asm: &mut ModuleBuilder<'_>) {
     let mut x86 = asm.submodule("x86");
 
     x86.raw_function("decode", decode)
-        .raw_function("encode", encode)
+        .raw_function("encode", encode).returns::<Vec<u8>>()
         .raw_function("format", format_insn)
         .raw_function("insn", create_insn).returns::<Insn>()
         .raw_function("mem", create_mem).returns::<MemOp>();
