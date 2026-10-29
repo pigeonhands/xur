@@ -616,6 +616,32 @@ pub fn infer_expr_type(
             match res {
                 Res::Local(node_id) => local_types.get(node_id).cloned(),
                 Res::Def(DefKind::Mod, _) => Some(InferredTy::Module),
+                Res::Def(DefKind::Fn, def) => {
+                    if let Some(ItemRef::Fn { item, .. }) = items.get(*def) {
+                        let params: Vec<_> = item.decl.inputs.iter()
+                            .map(|p| InferredTy::from_ast(&p.ty, resolutions))
+                            .collect();
+                        let ret = match &item.decl.output {
+                            FnRetTy::Ty(ty) => InferredTy::from_ast(ty, resolutions),
+                            FnRetTy::Default(_) => InferredTy::Unit,
+                        };
+                        Some(InferredTy::Fn { params, ret: Box::new(ret) })
+                    } else {
+                        None
+                    }
+                }
+                Res::Def(DefKind::NativeFn(id), _) => {
+                    let f = registry.function(*id);
+                    if let Some(sig) = &f.signature {
+                        let params: Vec<_> = sig.params.iter()
+                            .map(|s| InferredTy::from_shape(s, registry, resolutions))
+                            .collect();
+                        let ret = InferredTy::from_shape(sig.ret, registry, resolutions);
+                        Some(InferredTy::Fn { params, ret: Box::new(ret) })
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             }
         }
