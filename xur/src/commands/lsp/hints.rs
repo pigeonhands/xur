@@ -575,7 +575,9 @@ pub fn infer_expr_type(
             arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry, local_types))
         }
         ExprKind::Try(inner) => {
-            if let Some(shape) = native_call_return_shape(inner, resolutions, registry) {
+            let shape = native_call_return_shape(inner, resolutions, registry)
+                .or_else(|| inferred_return_shape(inner, resolutions, items, registry, local_types));
+            if let Some(shape) = shape {
                 if let Ok(r) = shape.def.into_result() {
                     return Some(InferredTy::from_shape(r.t(), registry, resolutions));
                 }
@@ -700,6 +702,34 @@ fn native_call_return_shape(
     }
 }
 
+/// Fallback for [`native_call_return_shape`]: resolves the callee's return shape
+/// via type inference when the receiver is a local variable.
+fn inferred_return_shape(
+    expr: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<&'static facet::Shape> {
+    match &expr.kind {
+        ExprKind::MethodCall(mc) => {
+            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
+            let method = mc.seg.ident.name.as_str();
+            let id = resolve_method(&receiver_ty, method, resolutions, registry)?;
+            registry.native_return_shape(id)
+        }
+        ExprKind::Call(callee, _) => {
+            if let ExprKind::Path(path) = &callee.kind
+                && let Some(Res::Def(DefKind::NativeFn(id), _)) = resolutions.res.get(&path.id)
+            {
+                return registry.native_return_shape(*id);
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 pub fn infer_iter_element_type(
     iter: &Expr,
     resolutions: &Resolutions,
@@ -730,13 +760,11 @@ pub fn infer_iter_element_type(
                     return Some(InferredTy::from_shape(list.t(), registry, resolutions));
                 }
             }
-            if let Some(ty) = infer_expr_type(iter, resolutions, items, registry, local_types) {
-                if let InferredTy::List(Some(inner)) = ty {
-                    return Some(*inner);
-                }
-                if matches!(ty, InferredTy::Prim(PrimTy::Bytes)) {
-                    return Some(InferredTy::Prim(PrimTy::U8));
-                }
+            match infer_expr_type(iter, resolutions, items, registry, local_types) {
+                Some(InferredTy::List(Some(inner))) => return Some(*inner),
+                Some(InferredTy::Prim(PrimTy::Bytes)) => return Some(InferredTy::Prim(PrimTy::U8)),
+                Some(InferredTy::Prim(PrimTy::Str)) => return Some(InferredTy::Prim(PrimTy::Str)),
+                _ => {}
             }
             None
         }
