@@ -20,8 +20,8 @@ use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
-    CallCollector, ChainCollector, ForLoopCollector, InferredTy, LetBinding, LetCollector, MatchCollector,
-    build_param_name_map, infer_expr_type, infer_iter_element_type,
+    HintCollector, InferredTy, LetBinding,
+    build_param_name_map, infer_expr_type, infer_iter_element_type, return_shape,
     method_at_offset, method_signature,
 };
 use util::*;
@@ -410,22 +410,15 @@ impl LanguageServer for Backend {
         let file_end = file.end();
         let in_file = |span: Span| span.start >= file_start && span.start < file_end;
 
+        let lang = program.lang_items();
         let param_names = build_param_name_map(program);
         let mut hints = Vec::new();
 
         for module in &program.krate.modules {
-            let mut call_collector = CallCollector(Vec::new());
-            let mut let_collector = LetCollector(Vec::new());
-            let mut match_collector = MatchCollector(Vec::new());
-            let mut for_collector = ForLoopCollector(Vec::new());
-            let mut chain_collector = ChainCollector(Vec::new());
-            call_collector.visit_module(module.ast);
-            let_collector.visit_module(module.ast);
-            match_collector.visit_module(module.ast);
-            for_collector.visit_module(module.ast);
-            chain_collector.visit_module(module.ast);
+            let mut collector = HintCollector::new();
+            collector.visit_module(module.ast);
 
-            for (callee_id, args) in call_collector.0 {
+            for (callee_id, args) in collector.calls {
                 let Some(&res) = resolutions.res.get(&callee_id) else {
                     continue;
                 };
@@ -467,7 +460,7 @@ impl LanguageServer for Backend {
             let mut local_types: HashMap<NodeId, InferredTy> = HashMap::new();
             let mut local_inits: HashMap<NodeId, &Expr> = HashMap::new();
 
-            for binding in &let_collector.0 {
+            for binding in &collector.lets {
                 if let Some(id) = binding.binding_id {
                     local_inits.insert(id, binding.init);
                 }
@@ -481,10 +474,10 @@ impl LanguageServer for Backend {
                 For(usize, Option<NodeId>, &'a Expr),
             }
             let mut bindings: Vec<(usize, Binding<'_>)> = Vec::new();
-            for b in &let_collector.0 {
+            for b in &collector.lets {
                 bindings.push((b.pat_end, Binding::Let(b)));
             }
-            for &(pat_end, binding_id, iter) in &for_collector.0 {
+            for &(pat_end, binding_id, iter) in &collector.for_loops {
                 bindings.push((pat_end, Binding::For(pat_end, binding_id, iter)));
             }
             bindings.sort_by_key(|(pos, _)| *pos);
@@ -552,7 +545,7 @@ impl LanguageServer for Backend {
                 }
             }
 
-            for (scrutinee_end, scrutinee) in &match_collector.0 {
+            for (scrutinee_end, scrutinee) in &collector.matches {
                 if !in_file(Span { start: *scrutinee_end, end: *scrutinee_end }) {
                     continue;
                 }
@@ -574,7 +567,51 @@ impl LanguageServer for Backend {
                 }
             }
 
-            for (span_end, method_start, receiver) in &chain_collector.0 {
+            for &(pat_end, binding_id, scrutinee, variant_path_id) in &collector.match_arms {
+                if !in_file(Span { start: pat_end, end: pat_end }) {
+                    continue;
+                }
+                let shape = return_shape(scrutinee, resolutions, &state.items, &state.registry, &local_types);
+                let ty = shape.and_then(|shape| {
+                    let variant_def = match resolutions.res.get(&variant_path_id) {
+                        Some(Res::Def(DefKind::Variant, def)) => *def,
+                        _ => return None,
+                    };
+                    if let Ok(r) = shape.def.into_result() {
+                        if variant_def == lang.ok {
+                            return Some(InferredTy::from_shape(r.t(), &state.registry, resolutions));
+                        }
+                        if variant_def == lang.err {
+                            return Some(InferredTy::from_shape(r.e(), &state.registry, resolutions));
+                        }
+                    }
+                    if let Ok(o) = shape.def.into_option() {
+                        if variant_def == lang.some {
+                            return Some(InferredTy::from_shape(o.t(), &state.registry, resolutions));
+                        }
+                    }
+                    None
+                });
+                if let Some(ty) = ty {
+                    local_types.insert(binding_id, ty.clone());
+                    if !matches!(ty, InferredTy::Infer | InferredTy::Module) {
+                        let pos = file.line_col(pat_end);
+                        let label = format!(": {}", ty.display(resolutions));
+                        hints.push(InlayHint {
+                            position: Position::new(pos.line - 1, pos.col - 1),
+                            label: InlayHintLabel::String(label),
+                            kind: Some(InlayHintKind::TYPE),
+                            padding_left: None,
+                            padding_right: None,
+                            text_edits: None,
+                            tooltip: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+
+            for (span_end, method_start, receiver) in &collector.chains {
                 if !in_file(Span { start: *span_end, end: *span_end }) {
                     continue;
                 }

@@ -160,7 +160,7 @@ impl InferredTy {
         }
     }
 
-    fn from_shape(
+    pub fn from_shape(
         shape: &'static facet::Shape,
         registry: &Registry,
         resolutions: &Resolutions,
@@ -309,20 +309,6 @@ fn def_of_native_type(ty_id: NativeTypeId, resolutions: &Resolutions) -> Option<
     })
 }
 
-pub struct CallCollector(pub Vec<(xur_ast::NodeId, Vec<Span>)>);
-
-impl<'ast> Visitor<'ast> for CallCollector {
-    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
-        if let ExprKind::Call(callee, args) = &expr.kind
-            && let ExprKind::Path(path) = &callee.kind
-        {
-            let arg_spans: Vec<_> = args.iter().map(|a| a.span).collect();
-            self.0.push((path.id, arg_spans));
-        }
-        visit::walk_expr(self, expr);
-    }
-}
-
 pub struct LetBinding<'a> {
     pub pat_end: usize,
     pub binding_id: Option<NodeId>,
@@ -330,16 +316,71 @@ pub struct LetBinding<'a> {
     pub ty: Option<&'a Ty>,
 }
 
-pub struct LetCollector<'a>(pub Vec<LetBinding<'a>>);
+pub struct HintCollector<'a> {
+    pub calls: Vec<(NodeId, Vec<Span>)>,
+    pub lets: Vec<LetBinding<'a>>,
+    pub chains: Vec<(usize, usize, &'a Expr)>,
+    pub matches: Vec<(usize, &'a Expr)>,
+    pub match_arms: Vec<(usize, NodeId, &'a Expr, NodeId)>,
+    pub for_loops: Vec<(usize, Option<NodeId>, &'a Expr)>,
+}
 
-impl<'ast> Visitor<'ast> for LetCollector<'ast> {
+impl<'a> HintCollector<'a> {
+    pub fn new() -> Self {
+        Self {
+            calls: Vec::new(),
+            lets: Vec::new(),
+            chains: Vec::new(),
+            matches: Vec::new(),
+            match_arms: Vec::new(),
+            for_loops: Vec::new(),
+        }
+    }
+}
+
+impl<'ast> Visitor<'ast> for HintCollector<'ast> {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
+        match &expr.kind {
+            ExprKind::Call(callee, args) if matches!(callee.kind, ExprKind::Path(_)) => {
+                if let ExprKind::Path(path) = &callee.kind {
+                    self.calls.push((path.id, args.iter().map(|a| a.span).collect()));
+                }
+            }
+            ExprKind::MethodCall(mc)
+                if matches!(mc.receiver.kind, ExprKind::MethodCall(_) | ExprKind::Call(_, _)) =>
+            {
+                self.chains.push((mc.receiver.span.end, mc.seg.ident.span.start, &mc.receiver));
+            }
+            ExprKind::Match(scrutinee, arms) => {
+                self.matches.push((scrutinee.span.end, scrutinee));
+                for arm in arms {
+                    if let PatKind::TupleStruct(path, pats) = &arm.pat.kind
+                        && pats.len() == 1
+                        && let PatKind::Ident(_) = &pats[0].kind
+                    {
+                        self.match_arms.push((pats[0].span.end, pats[0].id, scrutinee, path.id));
+                    }
+                }
+            }
+            ExprKind::ForLoop { pat, iter, .. } => {
+                let binding_id = match &pat.kind {
+                    PatKind::Ident(_) => Some(pat.id),
+                    _ => None,
+                };
+                self.for_loops.push((pat.span.end, binding_id, iter));
+            }
+            _ => {}
+        }
+        visit::walk_expr(self, expr);
+    }
+
     fn visit_local(&mut self, local: &'ast Local) {
         if let Some(init) = &local.init {
             let binding_id = match &local.pat.kind {
                 PatKind::Ident(_) => Some(local.pat.id),
                 _ => None,
             };
-            self.0.push(LetBinding {
+            self.lets.push(LetBinding {
                 pat_end: local.pat.span.end,
                 binding_id,
                 init,
@@ -347,47 +388,6 @@ impl<'ast> Visitor<'ast> for LetCollector<'ast> {
             });
         }
         visit::walk_local(self, local);
-    }
-}
-
-/// Collects intermediate call expressions in method chains.
-/// Each entry is (receiver_span_end, method_name_start, receiver_expr).
-pub struct ChainCollector<'a>(pub Vec<(usize, usize, &'a Expr)>);
-
-impl<'ast> Visitor<'ast> for ChainCollector<'ast> {
-    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
-        if let ExprKind::MethodCall(mc) = &expr.kind
-            && matches!(mc.receiver.kind, ExprKind::MethodCall(_) | ExprKind::Call(_, _))
-        {
-            self.0.push((mc.receiver.span.end, mc.seg.ident.span.start, &mc.receiver));
-        }
-        visit::walk_expr(self, expr);
-    }
-}
-
-pub struct MatchCollector<'a>(pub Vec<(usize, &'a Expr)>);
-
-impl<'ast> Visitor<'ast> for MatchCollector<'ast> {
-    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
-        if let ExprKind::Match(scrutinee, _) = &expr.kind {
-            self.0.push((scrutinee.span.end, scrutinee));
-        }
-        visit::walk_expr(self, expr);
-    }
-}
-
-pub struct ForLoopCollector<'a>(pub Vec<(usize, Option<NodeId>, &'a Expr)>);
-
-impl<'ast> Visitor<'ast> for ForLoopCollector<'ast> {
-    fn visit_expr(&mut self, expr: &'ast xur_ast::Expr) {
-        if let ExprKind::ForLoop { pat, iter, .. } = &expr.kind {
-            let binding_id = match &pat.kind {
-                PatKind::Ident(_) => Some(pat.id),
-                _ => None,
-            };
-            self.0.push((pat.span.end, binding_id, iter));
-        }
-        visit::walk_expr(self, expr);
     }
 }
 
@@ -576,8 +576,7 @@ pub fn infer_expr_type(
             arms.first().and_then(|arm| infer_expr_type(&arm.body, resolutions, items, registry, local_types))
         }
         ExprKind::Try(inner) => {
-            let shape = native_call_return_shape(inner, resolutions, registry)
-                .or_else(|| inferred_return_shape(inner, resolutions, items, registry, local_types));
+            let shape = return_shape(inner, resolutions, items, registry, local_types);
             if let Some(shape) = shape {
                 if let Ok(r) = shape.def.into_result() {
                     return Some(InferredTy::from_shape(r.t(), registry, resolutions));
@@ -665,6 +664,17 @@ pub fn infer_expr_type(
         }
         _ => None,
     }
+}
+
+pub fn return_shape(
+    expr: &Expr,
+    resolutions: &Resolutions,
+    items: &ItemIndex,
+    registry: &Registry,
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<&'static facet::Shape> {
+    native_call_return_shape(expr, resolutions, registry)
+        .or_else(|| inferred_return_shape(expr, resolutions, items, registry, local_types))
 }
 
 fn native_call_return_shape(
