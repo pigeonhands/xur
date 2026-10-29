@@ -14,14 +14,14 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use xur_ast::{Expr, ExprKind, NodeId};
 use xur_ast::visit::Visitor;
-use xur_bytecode::{ItemIndex, type_name};
+use xur_bytecode::ItemIndex;
 use xur_resolve::{DefKind, Namespace, Program, Res};
 use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
 use hints::{
-    CallCollector, ForLoopCollector, LetCollector, MatchCollector, build_param_name_map,
-    infer_expr_type, infer_iter_element_type,
+    CallCollector, ForLoopCollector, InferredTy, LetCollector, MatchCollector,
+    build_param_name_map, infer_expr_type, infer_iter_element_type,
     method_at_offset, method_signature,
 };
 use util::*;
@@ -462,7 +462,7 @@ impl LanguageServer for Backend {
                 }
             }
 
-            let mut local_types: HashMap<NodeId, String> = HashMap::new();
+            let mut local_types: HashMap<NodeId, InferredTy> = HashMap::new();
             let mut local_inits: HashMap<NodeId, &Expr> = HashMap::new();
 
             for binding in &let_collector.0 {
@@ -470,9 +470,8 @@ impl LanguageServer for Backend {
                     local_inits.insert(id, binding.init);
                 }
                 if let Some(ann) = binding.ty {
-                    // Annotated binding: record the type but don't emit a hint.
                     if let Some(id) = binding.binding_id {
-                        local_types.insert(id, type_name(resolutions, ann));
+                        local_types.insert(id, InferredTy::from_ast(ann, resolutions));
                     }
                 } else if let Some(ty) = infer_expr_type(binding.init, resolutions, &state.items, &state.registry, &local_types) {
                     if let Some(id) = binding.binding_id {

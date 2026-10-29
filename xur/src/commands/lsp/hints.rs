@@ -1,11 +1,182 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use xur_ast::{BinOpKind, Expr, ExprKind, FnRetTy, ItemKind, LitKind, Local, NodeId, PatKind, Ty, TyKind};
 use xur_ast::visit::{self, Visitor};
-use xur_bytecode::{ItemIndex, ItemRef, type_name};
+use xur_bytecode::{ItemIndex, ItemRef};
 use xur_resolve::{DefId, DefKind, NativeFnId, Program, Res, Resolutions};
 use xur_runtime::{BuiltinType, Registry};
 use xur_span::{Ident, Span, Symbol};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InferredTy {
+    Named(String),
+    Unit,
+    Bool,
+    Int,
+    Float,
+    Str,
+    Bytes,
+    Ptr(Box<InferredTy>),
+    List,
+    Map,
+    Tuple(Vec<InferredTy>),
+    Fn { params: Vec<InferredTy>, ret: Box<InferredTy> },
+    Record,
+    Module,
+}
+
+impl InferredTy {
+    fn builtin(&self) -> Option<BuiltinType> {
+        Some(match self {
+            Self::Bool => BuiltinType::Bool,
+            Self::Int => BuiltinType::Int,
+            Self::Float => BuiltinType::Float,
+            Self::Str => BuiltinType::Str,
+            Self::List => BuiltinType::List,
+            Self::Map => BuiltinType::Map,
+            Self::Bytes => BuiltinType::Bytes,
+            Self::Record => BuiltinType::Record,
+            Self::Ptr(_) => BuiltinType::Ptr,
+            _ => return None,
+        })
+    }
+
+    fn call_return(&self) -> Option<InferredTy> {
+        match self {
+            Self::Fn { ret, .. } => Some((**ret).clone()),
+            Self::Ptr(inner) => {
+                if let Self::Fn { ret, .. } = inner.as_ref() {
+                    Some((**ret).clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn deref_target(&self) -> Option<InferredTy> {
+        match self {
+            Self::Ptr(inner) => Some((**inner).clone()),
+            _ => None,
+        }
+    }
+
+    pub fn from_ast(ty: &Ty, resolutions: &Resolutions) -> Self {
+        match &ty.kind {
+            TyKind::Path(path) => {
+                let name = xur_bytecode::type_name(resolutions, ty);
+                match name.as_str() {
+                    "bool" => Self::Bool,
+                    "i64" | "u8" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "u16" => Self::Int,
+                    "f64" | "f32" => Self::Float,
+                    "str" => Self::Str,
+                    "bytes" => Self::Bytes,
+                    "()" => Self::Unit,
+                    _ => {
+                        if let Some(res) = resolutions.res.get(&path.id) {
+                            if let Res::Def(DefKind::Mod, _) = res {
+                                return Self::Module;
+                            }
+                        }
+                        Self::Named(name)
+                    }
+                }
+            }
+            TyKind::Tuple(elems) => {
+                if elems.is_empty() {
+                    Self::Unit
+                } else {
+                    Self::Tuple(elems.iter().map(|t| Self::from_ast(t, resolutions)).collect())
+                }
+            }
+            TyKind::Paren(inner) => Self::from_ast(inner, resolutions),
+            TyKind::List(_) => Self::List,
+            TyKind::Record => Self::Record,
+            TyKind::Ptr(inner) => Self::Ptr(Box::new(Self::from_ast(inner, resolutions))),
+            TyKind::Fn { params, ret } => Self::Fn {
+                params: params.iter().map(|t| Self::from_ast(t, resolutions)).collect(),
+                ret: Box::new(ret.as_ref()
+                    .map(|t| Self::from_ast(t, resolutions))
+                    .unwrap_or(Self::Unit)),
+            },
+            TyKind::Infer => Self::Named("_".into()),
+            _ => Self::Named("_".into()),
+        }
+    }
+
+    fn from_registry(id: NativeFnId, registry: &Registry) -> Option<Self> {
+        let name = registry.native_return_name(id)?;
+        Some(Self::from_name(&name))
+    }
+
+    fn from_shape(shape: &'static facet::Shape, registry: &Registry) -> Self {
+        Self::from_name(&registry.shape_xur_name(shape))
+    }
+
+    fn from_name(name: &str) -> Self {
+        match name {
+            "bool" => Self::Bool,
+            "i64" | "u8" | "u32" | "u64" | "usize" => Self::Int,
+            "f64" => Self::Float,
+            "str" => Self::Str,
+            "bytes" => Self::Bytes,
+            "list" => Self::List,
+            "map" => Self::Map,
+            "record" => Self::Record,
+            "()" => Self::Unit,
+            "module" => Self::Module,
+            _ if name.starts_with('*') => {
+                Self::Ptr(Box::new(Self::from_name(&name[1..])))
+            }
+            _ => Self::Named(name.to_string()),
+        }
+    }
+
+    fn is_uninferrable(&self) -> bool {
+        matches!(self, Self::Named(n) if n == "_")
+    }
+}
+
+impl fmt::Display for InferredTy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Named(n) => f.write_str(n),
+            Self::Unit => f.write_str("()"),
+            Self::Bool => f.write_str("bool"),
+            Self::Int => f.write_str("i64"),
+            Self::Float => f.write_str("f64"),
+            Self::Str => f.write_str("str"),
+            Self::Bytes => f.write_str("bytes"),
+            Self::Ptr(inner) => write!(f, "*{inner}"),
+            Self::List => f.write_str("list"),
+            Self::Map => f.write_str("map"),
+            Self::Tuple(elems) => {
+                write!(f, "(")?;
+                for (i, t) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{t}")?;
+                }
+                write!(f, ")")
+            }
+            Self::Fn { params, ret } => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{p}")?;
+                }
+                if matches!(**ret, Self::Unit) {
+                    write!(f, ")")
+                } else {
+                    write!(f, ") -> {ret}")
+                }
+            }
+            Self::Record => f.write_str("record"),
+            Self::Module => f.write_str("module"),
+        }
+    }
+}
 
 pub struct CallCollector(pub Vec<(xur_ast::NodeId, Vec<Span>)>);
 
@@ -74,14 +245,12 @@ impl<'ast> Visitor<'ast> for ForLoopCollector<'ast> {
     }
 }
 
-/// Info about a method call at a cursor position.
 pub struct MethodAt {
     pub method_name: String,
     pub method_span: Span,
     pub receiver_ty: Option<String>,
 }
 
-/// Finds the method call whose method name contains `offset`.
 pub fn method_at_offset(
     program: &Program,
     items: &ItemIndex,
@@ -115,7 +284,7 @@ struct MethodCallCollector<'a> {
     resolutions: &'a Resolutions,
     items: &'a ItemIndex,
     registry: &'a Registry,
-    local_types: &'a HashMap<NodeId, String>,
+    local_types: &'a HashMap<NodeId, InferredTy>,
     found: Vec<MethodAt>,
 }
 
@@ -131,7 +300,7 @@ impl<'ast> Visitor<'ast> for MethodCallCollector<'_> {
                 self.found.push(MethodAt {
                     method_name: mc.seg.ident.name.to_string(),
                     method_span: ident_span,
-                    receiver_ty,
+                    receiver_ty: receiver_ty.map(|t| t.to_string()),
                 });
             }
         }
@@ -144,34 +313,36 @@ pub fn infer_expr_type(
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
-    local_types: &HashMap<NodeId, String>,
-) -> Option<String> {
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<InferredTy> {
     match &expr.kind {
         ExprKind::Lit(lit) => match &lit.kind {
-            LitKind::Str(_) => Some("str".into()),
-            LitKind::Int(_) => Some("i64".into()),
-            LitKind::Float(_) => Some("f64".into()),
-            LitKind::Bool(_) => Some("bool".into()),
-            LitKind::ByteStr(_) => Some("bytes".into()),
+            LitKind::Str(_) => Some(InferredTy::Str),
+            LitKind::Int(_) => Some(InferredTy::Int),
+            LitKind::Float(_) => Some(InferredTy::Float),
+            LitKind::Bool(_) => Some(InferredTy::Bool),
+            LitKind::ByteStr(_) => Some(InferredTy::Bytes),
             LitKind::Err => None,
         },
-        ExprKind::List(_) => Some("list".into()),
-        ExprKind::Map(_) => Some("map".into()),
-        ExprKind::Record(_) => Some("record".into()),
+        ExprKind::List(_) => Some(InferredTy::List),
+        ExprKind::Map(_) => Some(InferredTy::Map),
+        ExprKind::Record(_) => Some(InferredTy::Record),
         ExprKind::Tuple(elems) => {
             if elems.is_empty() {
-                return Some("()".into());
+                return Some(InferredTy::Unit);
             }
             let types: Vec<_> = elems.iter()
                 .map(|e| infer_expr_type(e, resolutions, items, registry, local_types)
-                    .unwrap_or_else(|| "_".into()))
+                    .unwrap_or(InferredTy::Named("_".into())))
                 .collect();
-            Some(format!("({})", types.join(", ")))
+            Some(InferredTy::Tuple(types))
         }
         ExprKind::Struct(s) => {
             let res = resolutions.res.get(&s.path.id)?;
             match res {
-                Res::Def(_, def) => Some(resolutions.defs.get(*def).name.to_string()),
+                Res::Def(_, def) => {
+                    Some(InferredTy::Named(resolutions.defs.get(*def).name.to_string()))
+                }
                 _ => None,
             }
         }
@@ -182,32 +353,31 @@ pub fn infer_expr_type(
                     Res::Def(DefKind::Fn, def) => {
                         if let Some(ItemRef::Fn { item, .. }) = items.get(*def) {
                             match &item.decl.output {
-                                FnRetTy::Ty(ty) => Some(type_name(resolutions, ty)),
-                                FnRetTy::Default(_) => Some("()".into()),
+                                FnRetTy::Ty(ty) => Some(InferredTy::from_ast(ty, resolutions)),
+                                FnRetTy::Default(_) => Some(InferredTy::Unit),
                             }
                         } else {
                             None
                         }
                     }
                     Res::Def(DefKind::NativeFn(id), _) => {
-                        if let Some(ty) = native_return_type(*id, registry) {
+                        if let Some(ty) = InferredTy::from_registry(*id, registry) {
                             return Some(ty);
                         }
                         path.segments.last()
                             .and_then(|seg| seg.args.as_ref())
                             .and_then(|args| args.args.first())
-                            .map(|ty| type_name(resolutions, ty))
+                            .map(|ty| InferredTy::from_ast(ty, resolutions))
                     }
                     Res::Def(DefKind::Struct | DefKind::NativeType(_), def) => {
-                        Some(resolutions.defs.get(*def).name.to_string())
+                        Some(InferredTy::Named(resolutions.defs.get(*def).name.to_string()))
                     }
                     Res::Def(DefKind::Variant | DefKind::NativeVariant(_), def) => {
                         let parent = resolutions.defs.get(*def).parent?;
-                        Some(resolutions.defs.get(parent).name.to_string())
+                        Some(InferredTy::Named(resolutions.defs.get(parent).name.to_string()))
                     }
                     Res::Local(node_id) => {
-                        let ty = local_types.get(node_id)?;
-                        fn_return_type(ty)
+                        local_types.get(node_id)?.call_return()
                     }
                     _ => None,
                 }
@@ -216,20 +386,20 @@ pub fn infer_expr_type(
             }
         }
         ExprKind::MethodCall(mc) => {
-            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types);
+            let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
             let method = mc.seg.ident.name.as_str();
-            if let Some(ty) = method_return_type(receiver_ty.as_deref(), method, registry) {
+            if let Some(ty) = method_return_type(&receiver_ty, method, registry) {
                 return Some(ty);
             }
-            if let Some(receiver_name) = receiver_ty.as_deref() {
+            if let InferredTy::Named(ref name) = receiver_ty {
                 if let Some(ty) = user_method_return_type(
-                    receiver_name, method, &mc.receiver, resolutions, items, registry,
+                    name, method, &mc.receiver, resolutions, items, registry,
                 ) {
                     return Some(ty);
                 }
-                if resolutions.find_type(receiver_name).is_some() {
+                if resolutions.find_type(name).is_some() {
                     if let Some(id) = registry.builtin_method(BuiltinType::Struct, method) {
-                        return native_return_type(id, registry);
+                        return InferredTy::from_registry(id, registry);
                     }
                 }
             }
@@ -237,7 +407,7 @@ pub fn infer_expr_type(
         }
         ExprKind::Deref(inner) => {
             infer_expr_type(inner, resolutions, items, registry, local_types)
-                .and_then(|t| t.strip_prefix('*').map(|s| s.to_string()))
+                .and_then(|t| t.deref_target())
         }
         ExprKind::Paren(inner) => infer_expr_type(inner, resolutions, items, registry, local_types),
         ExprKind::Block(block) => {
@@ -264,44 +434,40 @@ pub fn infer_expr_type(
         ExprKind::Try(inner) => {
             if let Some(shape) = native_call_return_shape(inner, resolutions, registry) {
                 if let Ok(r) = shape.def.into_result() {
-                    return Some(registry.shape_xur_name(r.t()));
+                    return Some(InferredTy::from_shape(r.t(), registry));
                 }
                 if let Ok(o) = shape.def.into_option() {
-                    return Some(registry.shape_xur_name(o.t()));
+                    return Some(InferredTy::from_shape(o.t(), registry));
                 }
-                return Some(registry.shape_xur_name(shape));
+                return Some(InferredTy::from_shape(shape, registry));
             }
             infer_expr_type(inner, resolutions, items, registry, local_types)
-                .map(|t| match t.as_str() {
-                    "Result" | "Option" => "_".into(),
-                    _ => t,
+                .and_then(|t| match t {
+                    InferredTy::Named(ref n) if n == "Result" || n == "Option" => None,
+                    other => Some(other),
                 })
         }
-        ExprKind::Cast(_, ty) => Some(type_name(resolutions, ty)),
+        ExprKind::Cast(_, ty) => Some(InferredTy::from_ast(ty, resolutions)),
         ExprKind::Closure(closure) => {
             let params: Vec<_> = closure.decl.inputs.iter()
-                .map(|p| type_name(resolutions, &p.ty))
+                .map(|p| InferredTy::from_ast(&p.ty, resolutions))
                 .collect();
             let ret = match &closure.decl.output {
-                FnRetTy::Ty(ty) => type_name(resolutions, ty),
+                FnRetTy::Ty(ty) => InferredTy::from_ast(ty, resolutions),
                 FnRetTy::Default(_) => {
                     infer_expr_type(&closure.body, resolutions, items, registry, local_types)
-                        .unwrap_or_else(|| "_".into())
+                        .unwrap_or(InferredTy::Named("_".into()))
                 }
             };
-            if params.iter().all(|p| p == "_") && ret == "_" {
+            if params.iter().all(|p| p.is_uninferrable()) && ret.is_uninferrable() {
                 return None;
             }
-            if ret == "()" {
-                Some(format!("fn({})", params.join(", ")))
-            } else {
-                Some(format!("fn({}) -> {}", params.join(", "), ret))
-            }
+            Some(InferredTy::Fn { params, ret: Box::new(ret) })
         }
         ExprKind::Binary(op, lhs, rhs) => match op.kind {
             BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le
             | BinOpKind::Gt | BinOpKind::Ge | BinOpKind::And | BinOpKind::Or => {
-                Some("bool".into())
+                Some(InferredTy::Bool)
             }
             _ => {
                 infer_expr_type(lhs, resolutions, items, registry, local_types)
@@ -313,7 +479,7 @@ pub fn infer_expr_type(
             let res = resolutions.res.get(&path.id)?;
             match res {
                 Res::Local(node_id) => local_types.get(node_id).cloned(),
-                Res::Def(DefKind::Mod, _) => Some("module".into()),
+                Res::Def(DefKind::Mod, _) => Some(InferredTy::Module),
                 _ => None,
             }
         }
@@ -321,24 +487,6 @@ pub fn infer_expr_type(
     }
 }
 
-fn fn_return_type(ty: &str) -> Option<String> {
-    let s = ty.strip_prefix('*').unwrap_or(ty);
-    if !s.starts_with("fn(") {
-        return None;
-    }
-    match s.rsplit_once(" -> ") {
-        Some((_, ret)) => Some(ret.to_string()),
-        None => Some("()".into()),
-    }
-}
-
-fn native_return_type(id: NativeFnId, registry: &Registry) -> Option<String> {
-    registry.native_return_name(id)
-}
-
-/// Walk the receiver expression to find a native function call's return Shape.
-/// Handles `native_fn(args)`, chained `.method()` on native results, `(expr)`,
-/// and `expr?` (peels Result/Option).
 fn native_call_return_shape(
     expr: &Expr,
     resolutions: &Resolutions,
@@ -357,7 +505,7 @@ fn native_call_return_shape(
             let receiver_shape = native_call_return_shape(&mc.receiver, resolutions, registry)?;
             let receiver_name = registry.shape_xur_name(receiver_shape);
             let method = mc.seg.ident.name.as_str();
-            let id = resolve_method(&receiver_name, method, registry)?;
+            let id = resolve_method_by_name(&receiver_name, method, registry)?;
             registry.native_return_shape(id)
         }
         ExprKind::Paren(inner) => native_call_return_shape(inner, resolutions, registry),
@@ -380,10 +528,10 @@ pub fn infer_iter_element_type(
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
-    local_types: &HashMap<NodeId, String>,
-) -> Option<String> {
+    local_types: &HashMap<NodeId, InferredTy>,
+) -> Option<InferredTy> {
     match &iter.kind {
-        ExprKind::Range(..) => Some("i64".into()),
+        ExprKind::Range(..) => Some(InferredTy::Int),
         ExprKind::List(elems) => {
             let mut seen = Vec::new();
             for e in elems {
@@ -393,19 +541,16 @@ pub fn infer_iter_element_type(
                     }
                 }
             }
-            if seen.is_empty() {
-                return None;
-            }
-            if seen.len() <= 2 {
-                Some(seen.join(" | "))
+            if seen.len() == 1 {
+                Some(seen.remove(0))
             } else {
-                Some(format!("{} | {} | ...", seen[0], seen[1]))
+                None
             }
         }
         _ => {
             if let Some(shape) = native_call_return_shape(iter, resolutions, registry) {
                 if let Ok(list) = shape.def.into_list() {
-                    return Some(registry.shape_xur_name(list.t()));
+                    return Some(InferredTy::from_shape(list.t(), registry));
                 }
             }
             None
@@ -413,9 +558,6 @@ pub fn infer_iter_element_type(
     }
 }
 
-/// Resolve a user-defined `impl` method's return type through the resolution
-/// system. If the return type is a type parameter (e.g. `T` in `unwrap() -> T`),
-/// tries to resolve it via the receiver's native Shape.
 fn user_method_return_type(
     receiver_name: &str,
     method: &str,
@@ -423,7 +565,7 @@ fn user_method_return_type(
     resolutions: &Resolutions,
     items: &ItemIndex,
     registry: &Registry,
-) -> Option<String> {
+) -> Option<InferredTy> {
     let type_def = resolutions.find_type(receiver_name)?;
     let res = resolutions.assoc_fn(type_def, Symbol::intern(method))?;
     match res {
@@ -438,26 +580,23 @@ fn user_method_return_type(
                         let index = type_param_position(resolutions, param_def)?;
                         let shape =
                             native_call_return_shape(receiver_expr, resolutions, registry)?;
-                        return registry.shape_type_param(shape, index);
+                        let name = registry.shape_type_param(shape, index)?;
+                        return Some(InferredTy::from_name(&name));
                     }
-                    Some(type_name(resolutions, ty))
+                    Some(InferredTy::from_ast(ty, resolutions))
                 }
-                FnRetTy::Default(_) => Some("()".into()),
+                FnRetTy::Default(_) => Some(InferredTy::Unit),
             }
         }
-        Res::Def(DefKind::NativeFn(id), _) => native_return_type(id, registry),
+        Res::Def(DefKind::NativeFn(id), _) => InferredTy::from_registry(id, registry),
         _ => None,
     }
 }
 
-/// Position of a type parameter within its owning generic param list.
-/// Impl block params are created consecutively by `declare_generics`,
-/// so we find the contiguous run of TyParams sharing the same parent.
 fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<usize> {
     let parent = resolutions.defs.get(param_def).parent;
     let all: Vec<_> = resolutions.defs.iter().collect();
     let idx = all.iter().position(|(id, _)| *id == param_def)?;
-    // Walk backwards to find the start of this contiguous TyParam group.
     let mut start = idx;
     while start > 0 {
         let (_, prev) = &all[start - 1];
@@ -470,50 +609,39 @@ fn type_param_position(resolutions: &Resolutions, param_def: DefId) -> Option<us
     Some(idx - start)
 }
 
-fn xur_name_to_builtin(name: &str) -> Option<BuiltinType> {
-    Some(match name {
-        "bool" => BuiltinType::Bool,
-        "i64" | "u8" | "u32" | "u64" | "usize" => BuiltinType::Int,
-        "f64" => BuiltinType::Float,
-        "str" => BuiltinType::Str,
-        "list" => BuiltinType::List,
-        "map" => BuiltinType::Map,
-        "bytes" => BuiltinType::Bytes,
-        "record" => BuiltinType::Record,
-        _ if name.starts_with('*') => BuiltinType::Ptr,
-        _ => return None,
-    })
-}
-
-fn resolve_method(receiver: &str, method: &str, registry: &Registry) -> Option<NativeFnId> {
-    if let Some(builtin) = xur_name_to_builtin(receiver) {
+fn resolve_method(ty: &InferredTy, method: &str, registry: &Registry) -> Option<NativeFnId> {
+    if let Some(builtin) = ty.builtin() {
         return registry.builtin_method(builtin, method);
     }
-    let type_id = registry.type_id_by_name(receiver)?;
-    registry.type_function(type_id, method)
+    if let InferredTy::Named(name) = ty {
+        let type_id = registry.type_id_by_name(name)?;
+        return registry.type_function(type_id, method);
+    }
+    None
 }
 
-/// Look up a method's return type through the registry.
-pub fn method_return_type(
-    receiver_ty: Option<&str>,
+fn resolve_method_by_name(name: &str, method: &str, registry: &Registry) -> Option<NativeFnId> {
+    resolve_method(&InferredTy::from_name(name), method, registry)
+}
+
+fn method_return_type(
+    receiver_ty: &InferredTy,
     method: &str,
     registry: &Registry,
-) -> Option<String> {
-    let id = resolve_method(receiver_ty?, method, registry)?;
-    native_return_type(id, registry)
+) -> Option<InferredTy> {
+    let id = resolve_method(receiver_ty, method, registry)?;
+    InferredTy::from_registry(id, registry)
 }
 
-/// Format a native method's signature for hover display.
 pub fn method_signature(
     receiver_ty: Option<&str>,
     method: &str,
     registry: &Registry,
 ) -> Option<String> {
     let receiver = receiver_ty?;
-    let id = resolve_method(receiver, method, registry)?;
+    let id = resolve_method_by_name(receiver, method, registry)?;
     let native_fn = registry.function(id);
     let sig = native_fn.signature.as_ref()?;
-    // Skip the first param (self/receiver).
     let params: Vec<String> = sig.params.iter().skip(1).enumerate().map(|(i, shape)| {
         let ty = registry.shape_xur_name(shape);
         if let Some(pname) = native_fn.param_names.get(i + 1)
