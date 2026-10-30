@@ -140,9 +140,6 @@ fn snapshot_method(view: MethodView<'_>) -> Il2CppMethodInfo {
 pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
     let mut il2cpp = dotnet.submodule("il2cpp");
 
-    il2cpp.ty::<Il2CppFieldInfo>("Field");
-    il2cpp.ty::<Il2CppMethodInfo>("Method");
-
     // --- open ---
 
     il2cpp.raw_function_returns::<Il2CppGame>("open", |cx, args| {
