@@ -523,7 +523,6 @@ fn draw_gold(ui: egui::Ui, game: GameRuntime, state: UiState) {
 }
 
 fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    // Grid of owned weapons
     let owned = [];
     for entry in game.weapons {
         if entry.name == "None" || entry.name == "Test" { continue; }
@@ -533,22 +532,39 @@ fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
         }
     }
 
-    if owned.len() > 0 {
-        ui.grid("weapons_owned", 4, |g| {
-            for entry in owned {
-                let lvl = game.get_weapon_lvl(entry.value);
-                g.label(fmt::format("{} lv{}", entry.name, lvl));
-                if g.button("+") { game.add_weapon_by_enum(entry.value); }
-                if g.button("+10") { game.add_weapon_n(entry.value, 10); }
-                if g.button("+100") { game.add_weapon_max(entry.value); }
-                g.end_row();
+    ui.horizontal(|row| {
+        if row.button("Add all") {
+            for entry in game.weapons {
+                if entry.name == "None" || entry.name == "Test" { continue; }
+                if game.get_weapon_lvl(entry.value) == 0 {
+                    game.add_weapon_by_enum(entry.value);
+                }
             }
+        }
+        if row.button("+100 all") {
+            for entry in owned {
+                game.add_weapon_n(entry.value, 100);
+            }
+        }
+    });
+
+    if owned.len() > 0 {
+        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
+            section.grid("weapons_owned", 4, |g| {
+                for entry in owned {
+                    let lvl = game.get_weapon_lvl(entry.value);
+                    g.label(fmt::format("{} lv{}", entry.name, lvl));
+                    if g.button("+") { game.add_weapon_by_enum(entry.value); }
+                    if g.button("+10") { game.add_weapon_n(entry.value, 10); }
+                    if g.button("+100") { game.add_weapon_max(entry.value); }
+                    g.end_row();
+                }
+            });
         });
     } else {
         ui.small("no weapons");
     }
 
-    // Search + add
     ui.separator();
     ui.small("Add weapon:");
     let new_search = ui.text_edit(state.weapon_search.get());
@@ -578,23 +594,44 @@ fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
         }
     }
 
-    if owned.len() > 0 {
-        ui.grid("tomes_owned", 5, |g| {
-            for entry in owned {
-                let lvl = game.get_tome_lvl(entry.value);
-                g.label(fmt::format("{} lv{}", entry.name, lvl));
-                if g.button("+") { game.add_tome_by_enum(entry.value); }
-                if g.button("+10") { game.add_tome_n(entry.value, 10); }
-                if g.button("+100") { game.add_tome_n(entry.value, 100); }
-                if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
-                g.end_row();
+    ui.horizontal(|row| {
+        if row.button("Add all") {
+            for entry in game.tomes {
+                if game.get_tome_lvl(entry.value) == 0 {
+                    game.add_tome_by_enum(entry.value);
+                }
             }
+        }
+        if row.button("+100 all") {
+            for entry in owned {
+                game.add_tome_n(entry.value, 100);
+            }
+        }
+        if row.button("Max all") {
+            for entry in owned {
+                game.add_maxed_tome_by_enum(entry.value);
+            }
+        }
+    });
+
+    if owned.len() > 0 {
+        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
+            section.grid("tomes_owned", 5, |g| {
+                for entry in owned {
+                    let lvl = game.get_tome_lvl(entry.value);
+                    g.label(fmt::format("{} lv{}", entry.name, lvl));
+                    if g.button("+") { game.add_tome_by_enum(entry.value); }
+                    if g.button("+10") { game.add_tome_n(entry.value, 10); }
+                    if g.button("+100") { game.add_tome_n(entry.value, 100); }
+                    if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
+                    g.end_row();
+                }
+            });
         });
     } else {
         ui.small("no tomes");
     }
 
-    // Search + add
     ui.separator();
     ui.small("Add tome:");
     let new_search = ui.text_edit(state.tome_search.get());
@@ -615,7 +652,6 @@ fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
 }
 
 fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    // Grid of owned items
     let owned = [];
     for entry in game.items {
         let count = game.get_item_count(entry.value);
@@ -624,23 +660,39 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
         }
     }
 
-    if owned.len() > 0 {
-        ui.grid("items_owned", 5, |g| {
-            for entry in owned {
-                let count = game.get_item_count(entry.value);
-                g.label(fmt::format("{} x{}", entry.name, count));
-                if g.button("+") { game.add_item(entry.value); }
-                if g.button("+10") { game.add_item_n(entry.value, 10); }
-                if g.button("+100") { game.add_item_n(entry.value, 100); }
-                if g.button("-") { game.remove_item(entry.value); }
-                g.end_row();
+    ui.horizontal(|row| {
+        if row.button("Add all") {
+            for entry in game.items {
+                if game.get_item_count(entry.value) == 0 {
+                    game.add_item(entry.value);
+                }
             }
+        }
+        if row.button("+100 all") {
+            for entry in owned {
+                game.add_item_n(entry.value, 100);
+            }
+        }
+    });
+
+    if owned.len() > 0 {
+        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
+            section.grid("items_owned", 5, |g| {
+                for entry in owned {
+                    let count = game.get_item_count(entry.value);
+                    g.label(fmt::format("{} x{}", entry.name, count));
+                    if g.button("+") { game.add_item(entry.value); }
+                    if g.button("+10") { game.add_item_n(entry.value, 10); }
+                    if g.button("+100") { game.add_item_n(entry.value, 100); }
+                    if g.button("-") { game.remove_item(entry.value); }
+                    g.end_row();
+                }
+            });
         });
     } else {
         ui.small("no items");
     }
 
-    // Search + add
     ui.separator();
     ui.small("Add item:");
     let new_search = ui.text_edit(state.item_search.get());
