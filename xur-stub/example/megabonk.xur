@@ -83,9 +83,10 @@ struct GameRuntime {
     dm_get_weapon: il2cpp::Method
     dm_get_item: il2cpp::Method
     dm_get_tome: il2cpp::Method
-    // Godmode state — cell is shared so the hook closure and UI
-    // both see mutations.
+    // Hook state — cells are shared so hook closures and UI both see mutations.
     godmode: cell::Cell<bool>
+    skip_loading: cell::Cell<bool>
+    no_max_level: cell::Cell<bool>
     // Enum entries
     weapons: [EnumEntry]
     items: [EnumEntry]
@@ -195,6 +196,41 @@ impl GameRuntime {
         });
         log::info("DamagePlayer hooked for godmode");
 
+        // Hook LoadingScreen.LoadSceneAsync to skip loading animation
+        let skip_loading = cell::new(false);
+        let loading_cls = rt.class(asm, "", "LoadingScreen")?;
+        let load_async = loading_cls.method("LoadSceneAsync", 0)?;
+        load_async.hook(|ctx| {
+            if skip_loading.get() {
+                log::debug("skipping load animation");
+                Some(il2cpp::null())
+            } else {
+                None
+            }
+        });
+        log::info("LoadSceneAsync hooked for skip loading");
+
+        // Hook IsMaxLevel on weapons and tomes to remove level cap
+        let no_max_level = cell::new(false);
+        let weapon_is_max = weapon_inv_cls.method("IsMaxLevel", 1)?;
+        weapon_is_max.hook(|ctx| {
+            if no_max_level.get() { Some(0) } else { None }
+        });
+        let tome_is_max = tome_inv_cls.method("IsMaxLevel", 1)?;
+        tome_is_max.hook(|ctx| {
+            if no_max_level.get() { Some(0) } else { None }
+        });
+        let inv_util_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "InventoryUtility")?;
+        let get_weapon_max = inv_util_cls.method("GetWeaponMaxLevel", 0)?;
+        get_weapon_max.hook(|ctx| {
+            if no_max_level.get() { Some(999) } else { None }
+        });
+        let get_tome_max = inv_util_cls.method("GetTomeMaxLevel", 0)?;
+        get_tome_max.hook(|ctx| {
+            if no_max_level.get() { Some(999) } else { None }
+        });
+        log::info("IsMaxLevel/GetMaxLevel hooked for no max level");
+
         let weapons = enum_entries(weapon_enum);
         let items = enum_entries(item_enum);
         let tomes = enum_entries(tome_enum);
@@ -230,6 +266,8 @@ impl GameRuntime {
             dm_get_item,
             dm_get_tome,
             godmode,
+            skip_loading,
+            no_max_level,
             weapons,
             items,
             tomes,
@@ -430,9 +468,21 @@ impl GameRuntime {
 fn draw_combat(ui: egui::Ui, game: GameRuntime) {
     ui.heading("Combat");
     let godmode = game.is_godmode();
-    let new_godmode = ui.checkbox(godmode, "Godmode (hook DamagePlayer)");
+    let new_godmode = ui.checkbox(godmode, "Godmode");
     if new_godmode != godmode {
         game.set_godmode(new_godmode);
+    }
+
+    let skip = game.skip_loading.get();
+    let new_skip = ui.checkbox(skip, "Skip loading animation");
+    if new_skip != skip {
+        game.skip_loading.set(new_skip);
+    }
+
+    let no_max = game.no_max_level.get();
+    let new_no_max = ui.checkbox(no_max, "No max level cap");
+    if new_no_max != no_max {
+        game.no_max_level.set(new_no_max);
     }
 
     match game.read_health() {
