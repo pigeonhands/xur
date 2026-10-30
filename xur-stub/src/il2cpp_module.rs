@@ -250,7 +250,7 @@ impl std::fmt::Display for XurObject {
 // Field read/write helpers — dispatch on the Il2Cpp element type
 // ---------------------------------------------------------------------------
 
-use rt::element::*;
+use rt::ElementType;
 
 fn read_instance_field(
     cx: &mut dyn xur_runtime::registry::Context,
@@ -259,56 +259,56 @@ fn read_instance_field(
 ) -> Result<Value, RuntimeError> {
     let elem = field.element_type();
     match elem {
-        BOOLEAN => {
+        ElementType::Boolean => {
             let v: bool = unsafe { field.read(object) };
             Ok(Value::Bool(v))
         }
-        I1 => {
+        ElementType::I1 => {
             let v: i8 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        U1 => {
+        ElementType::U1 => {
             let v: u8 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        I2 => {
+        ElementType::I2 => {
             let v: i16 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        U2 => {
+        ElementType::U2 => {
             let v: u16 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        I4 => {
+        ElementType::I4 => {
             let v: i32 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        U4 => {
+        ElementType::U4 => {
             let v: u32 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        I8 => {
+        ElementType::I8 => {
             let v: i64 = unsafe { field.read(object) };
             Ok(Value::Int(v))
         }
-        U8 => {
+        ElementType::U8 => {
             let v: u64 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
-        R4 => {
+        ElementType::R4 => {
             let v: f32 = unsafe { field.read(object) };
             Ok(Value::Float(v as f64))
         }
-        R8 => {
+        ElementType::R8 => {
             let v: f64 = unsafe { field.read(object) };
             Ok(Value::Float(v))
         }
-        STRING | CLASS | OBJECT | GENERICINST | SZARRAY => {
+        ElementType::String | ElementType::Class | ElementType::Object
+        | ElementType::GenericInst | ElementType::SzArray => {
             let v: rt::Object = unsafe { field.read(object) };
             Ok(into_value(cx, XurObject::from_obj(v))?)
         }
-        // Enums backed by an integer and value types (structs) — read as i32 by default.
-        VALUETYPE => {
+        ElementType::ValueType => {
             let il2cpp_r = Il2Cpp::get().unwrap();
             let api = il2cpp_r.api();
             let ty = unsafe { (api.il2cpp_field_get_type)(field.as_ptr()) };
@@ -316,14 +316,13 @@ fn read_instance_field(
             if !class.is_null() && unsafe { (api.il2cpp_class_is_enum)(class) } {
                 let base_ty = unsafe { (api.il2cpp_class_enum_basetype)(class) };
                 let base_elem = unsafe { (api.il2cpp_type_get_type)(base_ty) };
-                return read_instance_field_by_elem(field, object, base_elem);
+                return read_instance_field_by_elem(field, object, ElementType::from(base_elem));
             }
             let v: i32 = unsafe { field.read(object) };
             Ok(Value::Int(v as i64))
         }
         _ => Err(RuntimeError::new(format!(
-            "unsupported field type (element {})",
-            elem
+            "unsupported field type (element {elem})",
         ))),
     }
 }
@@ -331,17 +330,17 @@ fn read_instance_field(
 fn read_instance_field_by_elem(
     field: &rt::Field,
     object: rt::Object,
-    elem: i32,
+    elem: ElementType,
 ) -> Result<Value, RuntimeError> {
     match elem {
-        I1 => Ok(Value::Int(unsafe { field.read::<i8>(object) } as i64)),
-        U1 => Ok(Value::Int(unsafe { field.read::<u8>(object) } as i64)),
-        I2 => Ok(Value::Int(unsafe { field.read::<i16>(object) } as i64)),
-        U2 => Ok(Value::Int(unsafe { field.read::<u16>(object) } as i64)),
-        I4 => Ok(Value::Int(unsafe { field.read::<i32>(object) } as i64)),
-        U4 => Ok(Value::Int(unsafe { field.read::<u32>(object) } as i64)),
-        I8 => Ok(Value::Int(unsafe { field.read::<i64>(object) })),
-        U8 => Ok(Value::Int(unsafe { field.read::<u64>(object) } as i64)),
+        ElementType::I1 => Ok(Value::Int(unsafe { field.read::<i8>(object) } as i64)),
+        ElementType::U1 => Ok(Value::Int(unsafe { field.read::<u8>(object) } as i64)),
+        ElementType::I2 => Ok(Value::Int(unsafe { field.read::<i16>(object) } as i64)),
+        ElementType::U2 => Ok(Value::Int(unsafe { field.read::<u16>(object) } as i64)),
+        ElementType::I4 => Ok(Value::Int(unsafe { field.read::<i32>(object) } as i64)),
+        ElementType::U4 => Ok(Value::Int(unsafe { field.read::<u32>(object) } as i64)),
+        ElementType::I8 => Ok(Value::Int(unsafe { field.read::<i64>(object) })),
+        ElementType::U8 => Ok(Value::Int(unsafe { field.read::<u64>(object) } as i64)),
         _ => Ok(Value::Int(unsafe { field.read::<i32>(object) } as i64)),
     }
 }
@@ -353,32 +352,32 @@ fn write_instance_field(
 ) -> Result<(), RuntimeError> {
     let elem = field.element_type();
     match (elem, value) {
-        (BOOLEAN, Value::Bool(v)) => unsafe { field.write(object, *v) },
-        (I1, Value::Int(v)) => unsafe { field.write(object, *v as i8) },
-        (U1, Value::Int(v)) => unsafe { field.write(object, *v as u8) },
-        (I2, Value::Int(v)) => unsafe { field.write(object, *v as i16) },
-        (U2, Value::Int(v)) => unsafe { field.write(object, *v as u16) },
-        (I4, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
-        (U4, Value::Int(v)) => unsafe { field.write(object, *v as u32) },
-        (I8, Value::Int(v)) => unsafe { field.write(object, *v) },
-        (U8, Value::Int(v)) => unsafe { field.write(object, *v as u64) },
-        (R4, Value::Float(v)) => unsafe { field.write(object, *v as f32) },
-        (R4, Value::Int(v)) => unsafe { field.write(object, *v as f32) },
-        (R8, Value::Float(v)) => unsafe { field.write(object, *v) },
-        (R8, Value::Int(v)) => unsafe { field.write(object, *v as f64) },
-        (BOOLEAN, Value::Int(v)) => unsafe { field.write(object, *v != 0) },
-        (STRING | CLASS | OBJECT | GENERICINST | SZARRAY, Value::Native(n)) => {
+        (ElementType::Boolean, Value::Bool(v)) => unsafe { field.write(object, *v) },
+        (ElementType::I1, Value::Int(v)) => unsafe { field.write(object, *v as i8) },
+        (ElementType::U1, Value::Int(v)) => unsafe { field.write(object, *v as u8) },
+        (ElementType::I2, Value::Int(v)) => unsafe { field.write(object, *v as i16) },
+        (ElementType::U2, Value::Int(v)) => unsafe { field.write(object, *v as u16) },
+        (ElementType::I4, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
+        (ElementType::U4, Value::Int(v)) => unsafe { field.write(object, *v as u32) },
+        (ElementType::I8, Value::Int(v)) => unsafe { field.write(object, *v) },
+        (ElementType::U8, Value::Int(v)) => unsafe { field.write(object, *v as u64) },
+        (ElementType::R4, Value::Float(v)) => unsafe { field.write(object, *v as f32) },
+        (ElementType::R4, Value::Int(v)) => unsafe { field.write(object, *v as f32) },
+        (ElementType::R8, Value::Float(v)) => unsafe { field.write(object, *v) },
+        (ElementType::R8, Value::Int(v)) => unsafe { field.write(object, *v as f64) },
+        (ElementType::Boolean, Value::Int(v)) => unsafe { field.write(object, *v != 0) },
+        (ElementType::String | ElementType::Class | ElementType::Object
+        | ElementType::GenericInst | ElementType::SzArray, Value::Native(n)) => {
             if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
                 unsafe { field.write(object, obj) };
             } else {
                 return Err(RuntimeError::new("expected an Object"));
             }
         }
-        (VALUETYPE, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
+        (ElementType::ValueType, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
         _ => {
             return Err(RuntimeError::new(format!(
-                "cannot write value to field with element type {}",
-                elem
+                "cannot write value to field with element type {elem}",
             )));
         }
     }
@@ -395,37 +394,38 @@ fn read_static_field(
 
     let elem = field.element_type();
     match elem {
-        BOOLEAN => {
+        ElementType::Boolean => {
             let mut v: bool = false;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut bool as *mut c_void) };
             Ok(Value::Bool(v))
         }
-        I4 | VALUETYPE => {
+        ElementType::I4 | ElementType::ValueType => {
             let mut v: i32 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut i32 as *mut c_void) };
             Ok(Value::Int(v as i64))
         }
-        U4 => {
+        ElementType::U4 => {
             let mut v: u32 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut u32 as *mut c_void) };
             Ok(Value::Int(v as i64))
         }
-        I8 => {
+        ElementType::I8 => {
             let mut v: i64 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut i64 as *mut c_void) };
             Ok(Value::Int(v))
         }
-        R4 => {
+        ElementType::R4 => {
             let mut v: f32 = 0.0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut f32 as *mut c_void) };
             Ok(Value::Float(v as f64))
         }
-        R8 => {
+        ElementType::R8 => {
             let mut v: f64 = 0.0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut f64 as *mut c_void) };
             Ok(Value::Float(v))
         }
-        STRING | CLASS | OBJECT | GENERICINST | SZARRAY => {
+        ElementType::String | ElementType::Class | ElementType::Object
+        | ElementType::GenericInst | ElementType::SzArray => {
             let mut v: *mut c_void = std::ptr::null_mut();
             unsafe {
                 (api.get)(field.as_ptr(), &mut v as *mut *mut c_void as *mut c_void);
@@ -433,8 +433,7 @@ fn read_static_field(
             Ok(into_value(cx, XurObject::from_obj(rt::Object(v)))?)
         }
         _ => Err(RuntimeError::new(format!(
-            "unsupported static field type (element {})",
-            elem
+            "unsupported static field type (element {elem})",
         ))),
     }
 }
@@ -446,21 +445,22 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
 
     let elem = field.element_type();
     match (elem, value) {
-        (BOOLEAN, Value::Bool(v)) => unsafe {
+        (ElementType::Boolean, Value::Bool(v)) => unsafe {
             (api.set)(field.as_ptr(), v as *const bool as *const c_void);
         },
-        (I4 | VALUETYPE, Value::Int(v)) => {
+        (ElementType::I4 | ElementType::ValueType, Value::Int(v)) => {
             let v = *v as i32;
             unsafe { (api.set)(field.as_ptr(), &v as *const i32 as *const c_void) };
         }
-        (R4, Value::Float(v)) => {
+        (ElementType::R4, Value::Float(v)) => {
             let v = *v as f32;
             unsafe { (api.set)(field.as_ptr(), &v as *const f32 as *const c_void) };
         }
-        (R8, Value::Float(v)) => unsafe {
+        (ElementType::R8, Value::Float(v)) => unsafe {
             (api.set)(field.as_ptr(), v as *const f64 as *const c_void);
         },
-        (STRING | CLASS | OBJECT | GENERICINST | SZARRAY, Value::Native(n)) => {
+        (ElementType::String | ElementType::Class | ElementType::Object
+        | ElementType::GenericInst | ElementType::SzArray, Value::Native(n)) => {
             if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
                 let ptr = obj.as_ptr();
                 unsafe { (api.set)(field.as_ptr(), &ptr as *const *mut c_void as *const c_void) };
@@ -470,8 +470,7 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
         }
         _ => {
             return Err(RuntimeError::new(format!(
-                "cannot write value to static field with element type {}",
-                elem
+                "cannot write value to static field with element type {elem}",
             )));
         }
     }
@@ -963,50 +962,50 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
             }
 
             let ret_type = unsafe { (api.il2cpp_method_get_return_type)(method.as_ptr()) };
-            let ret_elem = unsafe { (api.il2cpp_type_get_type)(ret_type) };
+            let ret_elem = ElementType::from(unsafe { (api.il2cpp_type_get_type)(ret_type) });
             match ret_elem {
-                0x01 => Ok(Value::Unit), // void
-                BOOLEAN => {
+                ElementType::Void => Ok(Value::Unit),
+                ElementType::Boolean => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Bool(unsafe { *(ptr as *const bool) }))
                 }
-                I1 => {
+                ElementType::I1 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const i8) } as i64))
                 }
-                U1 => {
+                ElementType::U1 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const u8) } as i64))
                 }
-                I2 => {
+                ElementType::I2 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const i16) } as i64))
                 }
-                U2 => {
+                ElementType::U2 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const u16) } as i64))
                 }
-                I4 | VALUETYPE => {
+                ElementType::I4 | ElementType::ValueType => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const i32) } as i64))
                 }
-                U4 => {
+                ElementType::U4 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const u32) } as i64))
                 }
-                I8 => {
+                ElementType::I8 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const i64) }))
                 }
-                U8 => {
+                ElementType::U8 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Int(unsafe { *(ptr as *const u64) } as i64))
                 }
-                R4 => {
+                ElementType::R4 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Float(unsafe { *(ptr as *const f32) } as f64))
                 }
-                R8 => {
+                ElementType::R8 => {
                     let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
                     Ok(Value::Float(unsafe { *(ptr as *const f64) }))
                 }
