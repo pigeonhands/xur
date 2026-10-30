@@ -11,7 +11,11 @@ use std::re::asm::x86;
 
 fn disasm(game: il2cpp::Game, method: il2cpp::MethodView) {
     let addr = method.code_address();
-    io::println("  {} => {}", method, addr);
+    let hex = match addr {
+        Some(a) => a.to_hex(),
+        None => "none",
+    };
+    io::println("  {} => 0x{}", method, hex);
     match addr {
         Some(a) => {
             let raw = game.bytes_at(a, 256);
