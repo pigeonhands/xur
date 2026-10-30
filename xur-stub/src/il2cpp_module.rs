@@ -478,7 +478,7 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
 }
 
 // ---------------------------------------------------------------------------
-// Error helpers
+// Invoke helpers
 // ---------------------------------------------------------------------------
 
 fn ensure_thread_attached() {
@@ -504,6 +504,131 @@ fn xur_result(cx: &dyn xur_runtime::registry::Context, value: Result<Value, Stri
     match value {
         Ok(v) => Value::adt(lang.ok, vec![v]),
         Err(msg) => Value::adt(lang.err, vec![Value::str(&msg)]),
+    }
+}
+
+/// Core invoke logic shared by `invoke` and `invoke_on_main`.
+fn do_invoke(
+    cx: &dyn ConvertCx,
+    method_ptr: usize,
+    this_ptr: usize,
+    call_args: &[Value],
+) -> Result<Value, RuntimeError> {
+    ensure_thread_attached();
+    let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
+    let api = il2cpp.api();
+
+    let method_raw = method_ptr as *mut c_void;
+    let this_raw = this_ptr as *mut c_void;
+
+    let mut arg_storage: Vec<i64> = Vec::new();
+    let mut invoke_args: Vec<*mut c_void> = Vec::new();
+    for arg in call_args {
+        match arg {
+            Value::Int(v) => {
+                arg_storage.push(*v);
+                invoke_args
+                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+            }
+            Value::Float(v) => {
+                arg_storage.push(v.to_bits() as i64);
+                invoke_args
+                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+            }
+            Value::Bool(v) => {
+                arg_storage.push(*v as i64);
+                invoke_args
+                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+            }
+            Value::Native(n) => {
+                if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
+                    invoke_args.push(obj.as_ptr());
+                } else {
+                    invoke_args.push(std::ptr::null_mut());
+                }
+            }
+            _ => invoke_args.push(std::ptr::null_mut()),
+        }
+    }
+
+    let args_ptr = if invoke_args.is_empty() {
+        std::ptr::null_mut()
+    } else {
+        invoke_args.as_mut_ptr()
+    };
+
+    let mut exception: *mut c_void = std::ptr::null_mut();
+    let result = unsafe {
+        (api.il2cpp_runtime_invoke)(method_raw, this_raw, args_ptr, &mut exception)
+    };
+
+    if !exception.is_null() {
+        let msg = unsafe { il2cpp.exception_message(exception) };
+        return Err(RuntimeError::new(msg));
+    }
+
+    if result.is_null() {
+        return into_value(cx, XurObject(0));
+    }
+
+    let ret_type = unsafe { (api.il2cpp_method_get_return_type)(method_raw) };
+    let ret_elem = ElementType::from(unsafe { (api.il2cpp_type_get_type)(ret_type) });
+    unmarshal_invoke_result(cx, api, result, ret_elem)
+}
+
+fn unmarshal_invoke_result(
+    cx: &dyn ConvertCx,
+    api: &rt::Api,
+    result: *mut c_void,
+    ret_elem: ElementType,
+) -> Result<Value, RuntimeError> {
+    match ret_elem {
+        ElementType::Void => Ok(Value::Unit),
+        ElementType::Boolean => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Bool(unsafe { *(ptr as *const bool) }))
+        }
+        ElementType::I1 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const i8) } as i64))
+        }
+        ElementType::U1 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const u8) } as i64))
+        }
+        ElementType::I2 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const i16) } as i64))
+        }
+        ElementType::U2 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const u16) } as i64))
+        }
+        ElementType::I4 | ElementType::ValueType => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const i32) } as i64))
+        }
+        ElementType::U4 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const u32) } as i64))
+        }
+        ElementType::I8 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const i64) }))
+        }
+        ElementType::U8 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Int(unsafe { *(ptr as *const u64) } as i64))
+        }
+        ElementType::R4 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Float(unsafe { *(ptr as *const f32) } as f64))
+        }
+        ElementType::R8 => {
+            let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
+            Ok(Value::Float(unsafe { *(ptr as *const f64) }))
+        }
+        _ => into_value(cx, XurObject::from_obj(rt::Object(result))),
     }
 }
 
@@ -895,121 +1020,48 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                 return Err(RuntimeError::new("`invoke` takes (object, ...args)"));
             }
             let method = extract_method(&args[0])?;
-
-            ensure_thread_attached();
-            let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-            let api = il2cpp.api();
             let this_obj = if args.len() > 1 {
                 extract_object(&args[1])?
             } else {
                 rt::Object::NULL
             };
+            do_invoke(cx, method.as_ptr() as usize, this_obj.as_ptr() as usize, &args[2..])
+        })
+        .raw_function("invoke_on_main", |cx, args| {
+            #[cfg(not(feature = "il2cpp-unity"))]
+            return Err(RuntimeError::new(
+                "invoke_on_main requires the il2cpp-unity feature",
+            ));
 
-            let mut invoke_args: Vec<*mut c_void> = Vec::new();
-            // For il2cpp_runtime_invoke, args after the object are boxed values.
-            // Integer/float args need to be passed as pointers to their stack values.
-            let mut arg_storage: Vec<i64> = Vec::new();
-            for arg in &args[2..] {
-                match arg {
-                    Value::Int(v) => {
-                        arg_storage.push(*v);
-                        let ptr = arg_storage.last().unwrap() as *const i64 as *mut c_void;
-                        invoke_args.push(ptr);
-                    }
-                    Value::Float(v) => {
-                        arg_storage.push(v.to_bits() as i64);
-                        let ptr = arg_storage.last().unwrap() as *const i64 as *mut c_void;
-                        invoke_args.push(ptr);
-                    }
-                    Value::Bool(v) => {
-                        arg_storage.push(*v as i64);
-                        let ptr = arg_storage.last().unwrap() as *const i64 as *mut c_void;
-                        invoke_args.push(ptr);
-                    }
-                    Value::Native(n) => {
-                        if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
-                            invoke_args.push(obj.as_ptr());
-                        } else {
-                            invoke_args.push(std::ptr::null_mut());
-                        }
-                    }
-                    _ => invoke_args.push(std::ptr::null_mut()),
+            #[cfg(feature = "il2cpp-unity")]
+            {
+                if args.is_empty() {
+                    return Err(RuntimeError::new(
+                        "`invoke_on_main` takes (object, ...args)",
+                    ));
                 }
-            }
+                let method = extract_method(&args[0])?;
+                let this_obj = if args.len() > 1 {
+                    extract_object(&args[1])?
+                } else {
+                    rt::Object::NULL
+                };
 
-            let args_ptr = if invoke_args.is_empty() {
-                std::ptr::null_mut()
-            } else {
-                invoke_args.as_mut_ptr()
-            };
+                let handle: Box<xur_vm::SharedHandle> = cx
+                    .shared_handle()
+                    .and_then(|h| h.downcast().ok())
+                    .ok_or_else(|| {
+                        RuntimeError::new("invoke_on_main requires VM support")
+                    })?;
 
-            let mut exception: *mut c_void = std::ptr::null_mut();
-            let result = unsafe {
-                (api.il2cpp_runtime_invoke)(
-                    method.as_ptr(),
-                    this_obj.as_ptr(),
-                    args_ptr,
-                    &mut exception,
-                )
-            };
+                let method_ptr = method.as_ptr() as usize;
+                let this_ptr = this_obj.as_ptr() as usize;
+                let call_args: Vec<Value> = args[2..].to_vec();
 
-            if !exception.is_null() {
-                return Err(RuntimeError::new("Il2Cpp method threw an exception"));
-            }
-
-            if result.is_null() {
-                return into_value(cx, XurObject(0));
-            }
-
-            let ret_type = unsafe { (api.il2cpp_method_get_return_type)(method.as_ptr()) };
-            let ret_elem = ElementType::from(unsafe { (api.il2cpp_type_get_type)(ret_type) });
-            match ret_elem {
-                ElementType::Void => Ok(Value::Unit),
-                ElementType::Boolean => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Bool(unsafe { *(ptr as *const bool) }))
-                }
-                ElementType::I1 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const i8) } as i64))
-                }
-                ElementType::U1 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const u8) } as i64))
-                }
-                ElementType::I2 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const i16) } as i64))
-                }
-                ElementType::U2 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const u16) } as i64))
-                }
-                ElementType::I4 | ElementType::ValueType => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const i32) } as i64))
-                }
-                ElementType::U4 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const u32) } as i64))
-                }
-                ElementType::I8 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const i64) }))
-                }
-                ElementType::U8 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Int(unsafe { *(ptr as *const u64) } as i64))
-                }
-                ElementType::R4 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Float(unsafe { *(ptr as *const f32) } as f64))
-                }
-                ElementType::R8 => {
-                    let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-                    Ok(Value::Float(unsafe { *(ptr as *const f64) }))
-                }
-                _ => into_value(cx, XurObject::from_obj(rt::Object(result))),
+                hao_il2cpp_unity::dispatch::call(move || {
+                    do_invoke(&*handle, method_ptr, this_ptr, &call_args)
+                })
+                .map_err(rt_err)?
             }
         })
         .method("name", |m: &XurMethod| -> String {

@@ -84,6 +84,15 @@ method is the instance object (or
 .BR null() ).
 Remaining arguments are boxed and passed to the method.
 .TP
+.B invoke_on_main(object, args...) -> value
+Like
+.B invoke
+but dispatches the call to Unity's main thread and blocks until it
+completes. Use this for methods that instantiate GameObjects or fire
+events that touch the Unity API, which is only safe from the main
+thread. The call executes on the next frame's update and the result is
+returned to the caller.
+.TP
 .B hook(callback) -> ()
 Install a generic hook on this method. The callback receives a
 .B HookContext

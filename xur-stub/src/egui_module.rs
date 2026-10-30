@@ -126,6 +126,14 @@ fn init_early() {
             });
         }
 
+        // Let dispatch::call wake our condvar so we drain dispatch
+        // jobs while the script thread runs (avoiding deadlock when
+        // the script calls invoke_on_main).
+        let wake_bridge = Arc::clone(&render_bridge);
+        hao_il2cpp_unity::dispatch::set_waker(move || {
+            wake_bridge.cv.notify_all();
+        });
+
         hao_egui::on_egui(move |ctx| {
             if hao_il2cpp_unity::is_shutting_down() {
                 let mut state = render_bridge.mu.lock().unwrap();
@@ -152,6 +160,11 @@ fn init_early() {
                 let mut state = render_bridge.mu.lock().unwrap();
                 while !state.done {
                     state = render_bridge.cv.wait(state).unwrap();
+                    if !state.done {
+                        drop(state);
+                        hao_il2cpp_unity::dispatch::drain_pending();
+                        state = render_bridge.mu.lock().unwrap();
+                    }
                 }
             }
         })?;
