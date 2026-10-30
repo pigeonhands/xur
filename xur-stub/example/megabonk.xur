@@ -1,115 +1,301 @@
-// Megabonk inspector — Unity Il2Cpp game analysis.
+// Megabonk trainer — Unity Il2Cpp game mod with egui overlay.
 //
-// Loads into the game via LD_PRELOAD, reads Il2Cpp metadata, lists
-// assemblies and types, dumps fields and methods, and writes proxy
-// assemblies for offline analysis.
+// Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
+// menu, which provides godmode, speed control, and inventory cheats.
 //
 //     cargo build --release -p xur-stub
 //     # Steam > Megabonk > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/megabonk.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
-use std::io;
 use std::fmt;
-use std::re::proc;
-use std::re::dotnet::il2cpp;
+use std::io;
+use std::xur;
+use std::stub::il2cpp;
+use std::stub::re::unity::egui;
+use std::stub::re::unity::time;
 use std::stub::tracing;
 
 fn ctor() {
-    tracing::register("file", "/tmp/megabonk-xur.log", "debug");
+    tracing::register("memory", "debug");
+    egui::init();
 }
 
-fn main() -> Result<()> {
-    let pid = proc::current_pid();
-    io::println("[megabonk] pid {}", pid);
+fn stub_main() {
+    let visible = true;
+    let f1_down = false;
 
-    let handle = proc::open_current()?;
-    let modules = handle.modules()?;
-    io::println("[megabonk] {} modules loaded", modules.len());
+    // UI state.
+    let godmode = false;
+    let speed = 1.0;
+    let gold_amount = 1000;
+    let show_game_info = false;
 
-    // Find GameAssembly.so — the Il2Cpp compiled code.
-    let ga_base = 0;
-    let ga_size = 0;
-    let ga_path = "";
-    for m in modules {
-        if m.name.starts_with("GameAssembly") {
-            ga_base = m.base;
-            ga_size = m.size;
-            ga_path = m.path;
+    // Runtime state (initialised lazily after the game loads).
+    let rt = nil;
+    let rt_error = nil;
+
+    egui::run(|ctx| {
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down {
+            visible = !visible;
         }
-    }
+        f1_down = f1;
 
-    if ga_base == 0 {
-        io::println("[megabonk] GameAssembly not found — not running inside the game?");
-        io::println("[megabonk] loaded modules:");
-        for m in modules {
-            io::println("  {} 0x{} ({} bytes)", m.name, m.base.to_hex(), m.size);
-        }
-        return Ok(());
-    }
-
-    io::println("[megabonk] GameAssembly at 0x{} ({} bytes)", ga_base.to_hex(), ga_size);
-
-    // Read the ELF header to confirm it's mapped.
-    let header = handle.read(ga_base, 16)?;
-    io::println("[megabonk] header: {}", header.to_hex());
-
-    // Derive the game directory from the GameAssembly path.
-    let parts = ga_path.split("/");
-    let dir_parts = [];
-    let i = 0;
-    for part in parts {
-        if i < parts.len() - 1 {
-            dir_parts.push(part);
-        }
-        i = i + 1;
-    }
-    let game_dir = dir_parts.join("/");
-    io::println("[megabonk] game dir: {}", game_dir);
-
-    // Open Il2Cpp metadata.
-    let game = il2cpp::open(game_dir)?;
-
-    // List assemblies (images).
-    let images = game.image_names();
-    io::println("[megabonk] {} assemblies:", images.len());
-    for name in images {
-        io::println("  {}", name);
-    }
-
-    // Dump types.
-    let types = game.types();
-    io::println("[megabonk] {} types total", types.len());
-    io::println("");
-
-    let limit = 100;
-    let shown = 0;
-    for ty in types {
-        if shown >= limit { break; }
-        io::println("{}", ty.full_name());
-
-        for field in ty.fields() {
-            let tag = if field.is_static() { " (static)" } else { "" };
-            io::println("  field {} {}{}", field.type_name(), field.name(), tag);
+        if !visible {
+            return;
         }
 
-        for method in ty.methods() {
-            let tag = if method.is_static() { " static" } else { "" };
-            io::println("  method {}({}){}", method.name(),
-                method.parameter_type_names().join(", "), tag);
+        // Lazy-init: wait until Il2Cpp is up.
+        if rt == nil && rt_error == nil {
+            let res = init_runtime();
+            if res.is_ok() {
+                rt = res.unwrap();
+            } else {
+                rt_error = res.unwrap_err();
+            }
         }
 
-        shown = shown + 1;
+        ctx.window("Megabonk Trainer", |ui| {
+            ui.small(fmt::format("frame {} | invoked by: {}",
+                egui::frame_count(), xur::invoked_by()));
+
+            if rt_error != nil {
+                ui.separator();
+                ui.small(fmt::format("il2cpp error: {}", rt_error));
+                return;
+            }
+
+            if rt == nil {
+                ui.separator();
+                ui.small("waiting for Il2Cpp runtime...");
+                return;
+            }
+
+            ui.separator();
+
+            // --- Godmode ---
+            ui.heading("Combat");
+            let prev_godmode = godmode;
+            godmode = ui.checkbox(godmode, "Godmode (invincible)");
+            if godmode != prev_godmode {
+                apply_godmode(rt, godmode);
+            }
+
+            let health = read_health(rt);
+            if health != nil {
+                ui.small(fmt::format("  HP: {}/{} | Shield: {}",
+                    health.hp, health.max_hp, health.shield));
+                if ui.button("Full heal") {
+                    write_health(rt, health.max_hp, health.max_hp);
+                }
+            }
+            ui.separator();
+
+            // --- Speed ---
+            ui.heading("Speed");
+            let scale = time::scale();
+            speed = ui.slider_float("Time scale", scale, 0.0, 5.0);
+            time::set_scale(speed);
+            ui.horizontal(|row| {
+                if row.button("pause") { time::set_scale(0.0); }
+                if row.button("0.5x")  { time::set_scale(0.5); }
+                if row.button("1x")    { time::set_scale(1.0); }
+                if row.button("2x")    { time::set_scale(2.0); }
+                if row.button("5x")    { time::set_scale(5.0); }
+            });
+            ui.separator();
+
+            // --- Inventory ---
+            ui.heading("Inventory");
+            gold_amount = ui.slider_int("Gold", gold_amount, 0, 99999);
+            if ui.button("Set gold") {
+                set_gold(rt, gold_amount);
+            }
+            ui.horizontal(|row| {
+                if row.button("All weapons") { give_all_weapons(rt); }
+                if row.button("All items")   { give_all_items(rt); }
+            });
+            ui.separator();
+
+            // --- Game info ---
+            show_game_info = ui.checkbox(show_game_info, "Show Il2Cpp info");
+            if show_game_info {
+                let info = rt.info;
+                ui.scroll(300.0, |scroll| {
+                    scroll.small(fmt::format("Player class: {}", info.player_cls));
+                    scroll.small(fmt::format("Health class: {}", info.health_cls));
+                    scroll.small(fmt::format("Weapon inv:   {}", info.weapon_inv_cls));
+                    scroll.small(fmt::format("Item inv:     {}", info.item_inv_cls));
+                });
+            }
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Runtime initialisation — look up all the classes and fields we need once.
+// ---------------------------------------------------------------------------
+
+struct GameRuntime {
+    il2cpp,
+    info,
+    // Classes.
+    player_cls,
+    health_cls,
+    weapon_inv_cls,
+    item_inv_cls,
+    // Fields.
+    instance_field,
+    invincible_field,
+    health_field,
+    hp_field,
+    max_hp_field,
+    shield_field,
+    inventory_field,
+    weapon_inv_field,
+    item_inv_field,
+    gold_field,
+    // Methods.
+    add_weapon_method,
+    add_item_method,
+}
+
+fn init_runtime() -> Result<()> {
+    let rt = il2cpp::loaded()?;
+
+    let player_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "MyPlayer")?;
+    let health_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerHealth")?;
+    let weapon_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "WeaponInventory")?;
+    let item_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "ItemInventory")?;
+    let inventory_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerInventory")?;
+
+    let instance_field = player_cls.field("Instance")?;
+    let invincible_field = player_cls.field("isInvincible")?;
+    let health_field = player_cls.field("health")?;
+    let hp_field = health_cls.field("hp")?;
+    let max_hp_field = health_cls.field("maxHp")?;
+    let shield_field = health_cls.field("shield")?;
+    let inventory_field = player_cls.field("inventory")?;
+    let weapon_inv_field = inventory_cls.field("weapons")?;
+    let item_inv_field = inventory_cls.field("items")?;
+    let gold_field = inventory_cls.field("gold")?;
+
+    let add_weapon_method = weapon_inv_cls.method("AddWeapon", 1)?;
+    let add_item_method = item_inv_cls.method("AddItem", 1)?;
+
+    Ok(GameRuntime {
+        il2cpp: rt,
+        info: GameRuntime {
+            player_cls: player_cls,
+            health_cls: health_cls,
+            weapon_inv_cls: weapon_inv_cls,
+            item_inv_cls: item_inv_cls,
+        },
+        player_cls: player_cls,
+        health_cls: health_cls,
+        weapon_inv_cls: weapon_inv_cls,
+        item_inv_cls: item_inv_cls,
+        instance_field: instance_field,
+        invincible_field: invincible_field,
+        health_field: health_field,
+        hp_field: hp_field,
+        max_hp_field: max_hp_field,
+        shield_field: shield_field,
+        inventory_field: inventory_field,
+        weapon_inv_field: weapon_inv_field,
+        item_inv_field: item_inv_field,
+        gold_field: gold_field,
+        add_weapon_method: add_weapon_method,
+        add_item_method: add_item_method,
+    })
+}
+
+fn get_player(rt) {
+    rt.instance_field.read_static()
+}
+
+// ---------------------------------------------------------------------------
+// Godmode
+// ---------------------------------------------------------------------------
+
+fn apply_godmode(rt, enabled) {
+    let player = get_player(rt);
+    if player.is_null() { return; }
+    rt.invincible_field.write(player, enabled);
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+fn read_health(rt) {
+    let player = get_player(rt);
+    if player.is_null() { return nil; }
+
+    let health_obj = rt.health_field.read(player);
+    if health_obj.is_null() { return nil; }
+
+    {
+        hp: rt.hp_field.read(health_obj),
+        max_hp: rt.max_hp_field.read(health_obj),
+        shield: rt.shield_field.read(health_obj),
     }
+}
 
-    if types.len() > limit {
-        io::println("... and {} more types", types.len() - limit);
+fn write_health(rt, hp, max_hp) {
+    let player = get_player(rt);
+    if player.is_null() { return; }
+
+    let health_obj = rt.health_field.read(player);
+    if health_obj.is_null() { return; }
+
+    rt.hp_field.write(health_obj, hp);
+    rt.max_hp_field.write(health_obj, max_hp);
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+fn set_gold(rt, amount) {
+    let player = get_player(rt);
+    if player.is_null() { return; }
+
+    let inv = rt.inventory_field.read(player);
+    if inv.is_null() { return; }
+
+    rt.gold_field.write(inv, amount);
+}
+
+fn give_all_weapons(rt) {
+    let player = get_player(rt);
+    if player.is_null() { return; }
+
+    let inv = rt.inventory_field.read(player);
+    if inv.is_null() { return; }
+
+    let weapons = rt.weapon_inv_field.read(inv);
+    if weapons.is_null() { return; }
+
+    // EWeapon enum values 0..29.
+    for i in 0..30 {
+        rt.add_weapon_method.invoke(weapons, i);
     }
+}
 
-    // Write proxy assemblies for offline analysis with dotPeek / ILSpy.
-    let out = "/tmp/megabonk-proxies";
-    let paths = game.write_assemblies(out)?;
-    io::println("[megabonk] wrote {} proxy assemblies to {}", paths.len(), out);
+fn give_all_items(rt) {
+    let player = get_player(rt);
+    if player.is_null() { return; }
 
-    Ok(())
+    let inv = rt.inventory_field.read(player);
+    if inv.is_null() { return; }
+
+    let items = rt.item_inv_field.read(inv);
+    if items.is_null() { return; }
+
+    // EItem enum values 0..80.
+    for i in 0..80 {
+        rt.add_item_method.invoke(items, i);
+    }
 }
