@@ -12,6 +12,8 @@ use xur_vm::Vm;
 mod egui_module;
 #[cfg(feature = "hooking")]
 mod hooking_module;
+#[cfg(feature = "il2cpp-runtime")]
+mod il2cpp_module;
 mod tracing_module;
 
 const STACK_SIZE: usize = 256 << 20;
@@ -290,6 +292,12 @@ fn register_game_mods(registry: &Registry) {
     registry.lazy_module("std::stub::hooking", |m| {
         let registry = m.registry();
         hooking_module::register(&registry, m);
+    });
+
+    #[cfg(feature = "il2cpp-runtime")]
+    registry.lazy_module("std::stub::il2cpp", |m| {
+        let registry = m.registry();
+        il2cpp_module::register(&registry, m);
     });
 
     registry.lazy_module("std::stub::tracing", |m| {
