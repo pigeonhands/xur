@@ -335,13 +335,9 @@ impl GameRuntime {
     // --- Items ---
 
     fn add_item(self, value: i32) {
-        let dm = self.data_manager();
-        if dm.is_null() { return; }
-        let item_data = self.dm_get_item.invoke(dm, value);
-        if item_data.is_null() { return; }
         let ii = self.item_inv();
         if ii.is_null() { return; }
-        self.add_item_method.invoke(ii, item_data);
+        self.add_item_method.invoke(ii, value);
     }
 
     fn remove_item(self, value: i32) {
@@ -385,26 +381,34 @@ impl GameRuntime {
     fn max_weapon(self, value: i32) {
         let prev = -1;
         let lvl = self.get_weapon_lvl(value);
-        while lvl != prev {
+        let iters = 0;
+        while lvl != prev && iters < 50 {
             prev = lvl;
             self.add_weapon_by_enum(value);
             lvl = self.get_weapon_lvl(value);
+            iters = iters + 1;
         }
     }
 
     // --- Tomes ---
 
     fn upgrade_tome(self, value: i32) {
+        let ti = self.tome_inv();
+        if ti.is_null() { return; }
+        match self.add_tome {
+            Some(method) => { method.invoke(ti, value); }
+            None => { self.add_tome_by_data(value); }
+        }
+    }
+
+    fn add_tome_by_data(self, value: i32) {
         let dm = self.data_manager();
         if dm.is_null() { return; }
         let tome_data = self.dm_get_tome.invoke(dm, value);
         if tome_data.is_null() { return; }
         let ti = self.tome_inv();
         if ti.is_null() { return; }
-        match self.add_tome {
-            Some(method) => { method.invoke(ti, tome_data); }
-            None => { self.add_maxed_tome.invoke(ti, tome_data); }
-        }
+        self.add_maxed_tome.invoke(ti, tome_data);
     }
 
     fn upgrade_tome_n(self, value: i32, n: i32) {
@@ -416,13 +420,7 @@ impl GameRuntime {
     }
 
     fn max_tome(self, value: i32) {
-        let dm = self.data_manager();
-        if dm.is_null() { return; }
-        let tome_data = self.dm_get_tome.invoke(dm, value);
-        if tome_data.is_null() { return; }
-        let ti = self.tome_inv();
-        if ti.is_null() { return; }
-        self.add_maxed_tome.invoke(ti, tome_data);
+        self.add_tome_by_data(value);
     }
 
     fn get_tome_lvl(self, value: i32) -> i32 {
