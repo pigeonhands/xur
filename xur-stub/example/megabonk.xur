@@ -1,7 +1,8 @@
 // Megabonk trainer — Unity Il2Cpp game mod with egui overlay.
 //
 // Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
-// menu, which provides godmode, speed control, and inventory cheats.
+// menu, which provides godmode, speed control, and inventory cheats
+// with searchable weapon/item lists.
 //
 //     cargo build --release -p xur-stub --features egui
 //     # Steam > Megabonk > Properties > Launch options:
@@ -16,20 +17,25 @@ use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
 use std::stub::tracing;
 
+// ---------------------------------------------------------------------------
+// Data types
+// ---------------------------------------------------------------------------
+
 struct HealthInfo {
     hp: i32
     max_hp: i32
     shield: f32
 }
 
+struct EnumEntry {
+    name: str
+    value: i32
+}
+
 struct GameRuntime {
     il2cpp: il2cpp::Runtime
     player_cls: il2cpp::Class
     health_cls: il2cpp::Class
-    weapon_inv_cls: il2cpp::Class
-    item_inv_cls: il2cpp::Class
-    weapon_enum_cls: il2cpp::Class
-    item_enum_cls: il2cpp::Class
     instance_field: il2cpp::Field
     invincible_field: il2cpp::Field
     health_field: il2cpp::Field
@@ -42,11 +48,39 @@ struct GameRuntime {
     gold_field: il2cpp::Field
     add_weapon_method: il2cpp::Method
     add_item_method: il2cpp::Method
+    weapons: _
+    items: _
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn enum_entries(cls: il2cpp::Class) -> _ {
+    let entries = [];
+    for field in cls.fields() {
+        if field.is_static() && field.name() != "value__" {
+            entries.push(EnumEntry {
+                name: field.name(),
+                value: field.read_static(),
+            });
+        }
+    }
+    entries
+}
+
+fn log(msg: str) {
+    tracing::info(msg);
+}
+
+// ---------------------------------------------------------------------------
+// GameRuntime
+// ---------------------------------------------------------------------------
 
 impl GameRuntime {
     fn init() -> Result<GameRuntime> {
         let rt = il2cpp::loaded()?;
+        log("il2cpp runtime loaded");
 
         let player_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "MyPlayer")?;
         let health_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerHealth")?;
@@ -55,6 +89,7 @@ impl GameRuntime {
         let inventory_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerInventory")?;
         let weapon_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EWeapon")?;
         let item_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EItem")?;
+        log("all classes found");
 
         let instance_field = player_cls.field("Instance")?;
         let invincible_field = player_cls.field("isInvincible")?;
@@ -66,18 +101,39 @@ impl GameRuntime {
         let weapon_inv_field = inventory_cls.field("weapons")?;
         let item_inv_field = inventory_cls.field("items")?;
         let gold_field = inventory_cls.field("gold")?;
+        log("all fields found");
 
         let add_weapon_method = weapon_inv_cls.method("AddWeapon", 1)?;
         let add_item_method = item_inv_cls.method("AddItem", 1)?;
+        log("all methods found");
+
+        // Enumerate every weapon and item from their Il2Cpp enum classes.
+        let weapons = enum_entries(weapon_enum_cls);
+        let items = enum_entries(item_enum_cls);
+
+        log(fmt::format("discovered {} weapons, {} items", weapons.len(), items.len()));
+        for w in weapons {
+            log(fmt::format("  weapon: {} = {}", w.name, w.value));
+        }
+        for i in items {
+            log(fmt::format("  item: {} = {}", i.name, i.value));
+        }
+
+        // Log player class structure for diagnostics.
+        log("--- MyPlayer fields ---");
+        for f in player_cls.fields() {
+            let tag = if f.is_static() { " (static)" } else { "" };
+            log(fmt::format("  {}: {}{}", f.name(), f.type_name(), tag));
+        }
+        log("--- MyPlayer methods ---");
+        for m in player_cls.methods() {
+            log(fmt::format("  {}", m.signature()));
+        }
 
         Ok(GameRuntime {
             il2cpp: rt,
             player_cls,
             health_cls,
-            weapon_inv_cls,
-            item_inv_cls,
-            weapon_enum_cls,
-            item_enum_cls,
             instance_field,
             invincible_field,
             health_field,
@@ -90,6 +146,8 @@ impl GameRuntime {
             gold_field,
             add_weapon_method,
             add_item_method,
+            weapons,
+            items,
         })
     }
 
@@ -138,7 +196,7 @@ impl GameRuntime {
         self.gold_field.write(inv, amount);
     }
 
-    fn give_all_weapons(self) {
+    fn add_weapon(self, value: i32) {
         let player = self.player();
         if player.is_null() { return; }
 
@@ -148,15 +206,10 @@ impl GameRuntime {
         let weapons = self.weapon_inv_field.read(inv);
         if weapons.is_null() { return; }
 
-        for field in self.weapon_enum_cls.fields() {
-            if field.is_static() && field.name() != "value__" {
-                let value = field.read_static();
-                self.add_weapon_method.invoke(weapons, value);
-            }
-        }
+        self.add_weapon_method.invoke(weapons, value);
     }
 
-    fn give_all_items(self) {
+    fn add_item(self, value: i32) {
         let player = self.player();
         if player.is_null() { return; }
 
@@ -166,21 +219,34 @@ impl GameRuntime {
         let items = self.item_inv_field.read(inv);
         if items.is_null() { return; }
 
-        for field in self.item_enum_cls.fields() {
-            if field.is_static() && field.name() != "value__" {
-                let value = field.read_static();
-                self.add_item_method.invoke(items, value);
-            }
+        self.add_item_method.invoke(items, value);
+    }
+
+    fn give_all_weapons(self) {
+        for entry in self.weapons {
+            self.add_weapon(entry.value);
+        }
+    }
+
+    fn give_all_items(self) {
+        for entry in self.items {
+            self.add_item(entry.value);
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Entry points
+// ---------------------------------------------------------------------------
+
 fn ctor() {
-    tracing::register("memory", "debug");
+    tracing::register("file", "/tmp/megabonk.log", "debug");
     egui::init();
 }
 
 fn stub_main() {
+    log("megabonk trainer starting");
+
     let visible = true;
     let f1_down = false;
 
@@ -188,7 +254,8 @@ fn stub_main() {
     let godmode = false;
     let speed = 1.0;
     let gold_amount = 1000;
-    let show_game_info = false;
+    let weapon_search = "";
+    let item_search = "";
 
     // Runtime state (initialised lazily after the game loads).
     let rt: Option<GameRuntime> = None;
@@ -209,7 +276,11 @@ fn stub_main() {
         if rt.is_none() && rt_error.is_none() {
             match GameRuntime::init() {
                 Ok(game) => { rt = Some(game); }
-                Err(e) => { rt_error = Some(e.to_string()); }
+                Err(e) => {
+                    let msg = e.to_string();
+                    log(fmt::format("init error: {}", msg));
+                    rt_error = Some(msg);
+                }
             }
         }
 
@@ -283,16 +354,43 @@ fn stub_main() {
             });
             ui.separator();
 
-            // --- Game info ---
-            show_game_info = ui.checkbox(show_game_info, "Show Il2Cpp info");
-            if show_game_info {
-                ui.scroll(300.0, |scroll| {
-                    scroll.small(fmt::format("Player class: {}", game.player_cls));
-                    scroll.small(fmt::format("Health class: {}", game.health_cls));
-                    scroll.small(fmt::format("Weapon inv:   {}", game.weapon_inv_cls));
-                    scroll.small(fmt::format("Item inv:     {}", game.item_inv_cls));
+            // --- Weapon search ---
+            ui.collapsing("Add weapon", |section| {
+                weapon_search = section.text_edit(weapon_search);
+                let query = weapon_search.to_lower();
+                section.scroll(200.0, |scroll| {
+                    for entry in game.weapons {
+                        if query == "" || entry.name.to_lower().contains(query) {
+                            scroll.horizontal(|row| {
+                                if row.button("+") {
+                                    game.add_weapon(entry.value);
+                                    log(fmt::format("added weapon: {}", entry.name));
+                                }
+                                row.label(entry.name);
+                            });
+                        }
+                    }
                 });
-            }
+            });
+
+            // --- Item search ---
+            ui.collapsing("Add item", |section| {
+                item_search = section.text_edit(item_search);
+                let query = item_search.to_lower();
+                section.scroll(200.0, |scroll| {
+                    for entry in game.items {
+                        if query == "" || entry.name.to_lower().contains(query) {
+                            scroll.horizontal(|row| {
+                                if row.button("+") {
+                                    game.add_item(entry.value);
+                                    log(fmt::format("added item: {}", entry.name));
+                                }
+                                row.label(entry.name);
+                            });
+                        }
+                    }
+                });
+            });
         });
     });
 }
