@@ -74,6 +74,7 @@ struct GameRuntime {
     add_weapon: il2cpp::Method
     get_weapon_level: il2cpp::Method
     // TomeInventory
+    add_tome: il2cpp::Method
     add_maxed_tome: il2cpp::Method
     get_tome_level: il2cpp::Method
     has_tome: il2cpp::Method
@@ -169,6 +170,8 @@ impl GameRuntime {
         let get_weapon_level = weapon_inv_cls.method("GetWeaponLevel", 1)?;
         log::debug("  WeaponInventory.GetWeaponLevel(1) found");
 
+        let add_tome = tome_inv_cls.method("AddTome", 3)?;
+        log::debug("  TomeInventory.AddTome(3) found");
         let add_maxed_tome = tome_inv_cls.method("AddMaxedTome", 1)?;
         log::debug("  TomeInventory.AddMaxedTome(1) found");
         let get_tome_level = tome_inv_cls.method("GetTomeLevel", 1)?;
@@ -218,6 +221,7 @@ impl GameRuntime {
             get_item_amount,
             add_weapon,
             get_weapon_level,
+            add_tome,
             add_maxed_tome,
             get_tome_level,
             has_tome,
@@ -380,7 +384,27 @@ impl GameRuntime {
         self.add_weapon_n(value, 100);
     }
 
-    // --- Tomes (only AddMaxedTome is available — AddTome requires 3 params) ---
+    // --- Tomes ---
+    // AddTome(TomeData, List<StatModifier>, ERarity) — pass null modifiers, rarity 0
+    // AddMaxedTome(TomeData) — adds at max level
+
+    fn add_tome_by_enum(self, value: i32) {
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let tome_data = self.dm_get_tome.invoke(dm, value);
+        if tome_data.is_null() { return; }
+        let ti = self.tome_inv();
+        if ti.is_null() { return; }
+        self.add_tome.invoke(ti, tome_data, il2cpp::null(), 0);
+    }
+
+    fn add_tome_n(self, value: i32, n: i32) {
+        let i = 0;
+        while i < n {
+            self.add_tome_by_enum(value);
+            i = i + 1;
+        }
+    }
 
     fn add_maxed_tome_by_enum(self, value: i32) {
         let dm = self.data_manager();
@@ -496,7 +520,6 @@ fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
 }
 
 fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    // Grid of owned tomes (only AddMaxedTome available, no incremental add)
     let owned = [];
     for entry in game.tomes {
         let lvl = game.get_tome_lvl(entry.value);
@@ -506,10 +529,13 @@ fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
     }
 
     if owned.len() > 0 {
-        ui.grid("tomes_owned", 2, |g| {
+        ui.grid("tomes_owned", 5, |g| {
             for entry in owned {
                 let lvl = game.get_tome_lvl(entry.value);
                 g.label(fmt::format("{} lv{}", entry.name, lvl));
+                if g.button("+") { game.add_tome_by_enum(entry.value); }
+                if g.button("+10") { game.add_tome_n(entry.value, 10); }
+                if g.button("+100") { game.add_tome_n(entry.value, 100); }
                 if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
                 g.end_row();
             }
@@ -520,7 +546,7 @@ fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
 
     // Search + add
     ui.separator();
-    ui.small("Add tome (maxed):");
+    ui.small("Add tome:");
     let new_search = ui.text_edit(state.tome_search.get());
     state.tome_search.set(new_search);
     let query = new_search.to_lower();
@@ -531,7 +557,7 @@ fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
                 continue;
             }
             scroll.horizontal(|row| {
-                if row.button("max") { game.add_maxed_tome_by_enum(entry.value); }
+                if row.button("+") { game.add_tome_by_enum(entry.value); }
                 row.label(entry.name);
             });
         }
