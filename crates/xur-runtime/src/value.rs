@@ -115,6 +115,9 @@ pub struct NativeObject {
     /// value's `'static` references stay valid because this never moves or
     /// drops while the value does.
     _keep_alive: Option<Arc<dyn Any + Send + Sync>>,
+    /// Concrete type arguments for generic native types, e.g.
+    /// `[BuiltinType::Bool]` for a `Cell<bool>`.
+    type_args: Vec<BuiltinType>,
 }
 
 impl NativeObject {
@@ -123,6 +126,21 @@ impl NativeObject {
             ty,
             value: Mutex::new(value),
             _keep_alive: None,
+            type_args: Vec::new(),
+        }
+    }
+
+    /// A native object with concrete type arguments for a generic type.
+    pub fn with_type_args(
+        ty: NativeTypeId,
+        value: Box<dyn Any + Send>,
+        type_args: Vec<BuiltinType>,
+    ) -> Self {
+        Self {
+            ty,
+            value: Mutex::new(value),
+            _keep_alive: None,
+            type_args,
         }
     }
 
@@ -137,6 +155,7 @@ impl NativeObject {
             ty,
             value: Mutex::new(value),
             _keep_alive: Some(keep_alive),
+            type_args: Vec::new(),
         }
     }
 
@@ -148,6 +167,12 @@ impl NativeObject {
     /// Calls `f` with the Rust value mutably, if it is a `T`.
     pub fn with_mut<T: 'static, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
         lock(&self.value).downcast_mut().map(f)
+    }
+
+    /// The concrete type arguments of this object, e.g. `[Bool]` for
+    /// `Cell<bool>`. Empty for non-generic types.
+    pub fn type_args(&self) -> &[BuiltinType] {
+        &self.type_args
     }
 
     /// The memory this object keeps alive for its value's borrows, to share
@@ -283,6 +308,25 @@ pub enum BuiltinType {
     /// Every struct and enum variant defined in Xur, for methods they all
     /// have, like `to_bytes`. Their own `impl` functions come first.
     Struct,
+}
+
+impl fmt::Display for BuiltinType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Bool => "bool",
+            Self::Int => "int",
+            Self::Float => "float",
+            Self::Str => "str",
+            Self::Tuple => "tuple",
+            Self::List => "list",
+            Self::Map => "map",
+            Self::Bytes => "bytes",
+            Self::Ptr => "ptr",
+            Self::Range => "range",
+            Self::Record => "record",
+            Self::Struct => "struct",
+        })
+    }
 }
 
 impl Value {
