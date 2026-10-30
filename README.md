@@ -320,7 +320,7 @@ There are complete programs in [`example/`](example):
 | [`xur-stub/example/hooking.xur`](xur-stub/example/hooking.xur) | inline function hooking with hooking-rs |
 | [`xur-stub/example/tracing.xur`](xur-stub/example/tracing.xur) | structured logging with `stub::tracing` |
 | [`xur-stub/example/godot.xur`](xur-stub/example/godot.xur) | Godot (.NET) game inspector |
-| [`xur-stub/example/megabonk.xur`](xur-stub/example/megabonk.xur) | Megabonk (Unity Il2Cpp) game analysis |
+| [`xur-stub/example/megabonk.xur`](xur-stub/example/megabonk.xur) | Megabonk (Unity Il2Cpp) trainer mod with egui overlay |
 | [`xur-stub/example/sts2.xur`](xur-stub/example/sts2.xur) | Slay the Spire 2 (Godot CoreCLR) game analysis |
 
 ## In-process injection with xur-stub
@@ -350,12 +350,13 @@ the payload. The stub adds extra modules for game engines:
 | `std::stub::re::unity::time` | `il2cpp-unity` | `scale`, `set_scale`, `delta`, `frame_count` |
 | `std::stub::re::unity::egui` | `egui` | egui rendering inside a Unity game |
 | `std::stub::re::il2cpp_runtime` | `il2cpp-runtime` | Il2Cpp runtime reflection |
+| `std::stub::il2cpp` | `il2cpp-runtime` | live Il2Cpp class/field/method access (read/write fields, invoke methods) |
 | `std::stub::re::godot` | `godot` | Godot engine reflection |
 | `std::stub::hooking` | `hooking` | inline function hooking via hooking-rs |
 | `std::stub::tracing` | (always) | structured logging via `tracing` |
 
 See [`xur-stub/example/`](xur-stub/example/) for complete examples, including
-a Unity game inspector, egui overlay, Godot inspector, and hooking demo.
+a Unity game trainer, egui overlay, Godot inspector, and hooking demo.
 
 ## Extending Xur with Rust
 
