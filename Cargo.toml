@@ -34,10 +34,10 @@ pewter = { version = "0.0.10", features = ["reflect"] }
 procodile = { version = "0.3.1", default-features = false, features = ["reflect", "inject"] }
 bitflags = "2.13"
 hao = { version = "0.0.9", features = ["reflect"] }
-hao-il2cpp = { version = "0.0.4", features = ["reflect"] }
+hao-il2cpp = { version = "0.0.5", features = ["reflect"] }
 hao-runtime = { version = "0.0.4", features = ["reflect"] }
-hao-il2cpp-runtime = { version = "0.0.4", features = ["reflect"] }
-hao-il2cpp-unity = { version = "0.0.5", features = ["reflect"] }
+hao-il2cpp-runtime = { version = "0.0.5", features = ["reflect"] }
+hao-il2cpp-unity = { version = "0.0.6", features = ["reflect"] }
 hao-godot = { version = "0.0.4", features = ["reflect"] }
 hooking = "0.6"
 iced-x86 = "1.21"
@@ -57,9 +57,3 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # cranelift-jit = "0.137"
 # cranelift-module = "0.137"
-
-[patch.crates-io]
-hao-il2cpp = { path = "../hao/crates/hao-il2cpp" }
-hao-il2cpp-runtime = { path = "../hao/crates/hao-il2cpp-runtime" }
-hao-il2cpp-unity = { path = "../hao/crates/hao-il2cpp-unity" }
-hooking = { path = "../hooking-rs/hooking" }
