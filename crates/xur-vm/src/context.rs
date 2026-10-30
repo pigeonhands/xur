@@ -128,6 +128,10 @@ impl Context for Interp<'_> {
         self.shared.program().resolutions().repr_values.get(&def).copied()
     }
 
+    fn shared_handle(&self) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+        Some(Box::new(crate::SharedHandle(Arc::clone(self.shared))))
+    }
+
     fn fn_info(&self, value: &Value) -> Option<FnInfo> {
         match value {
             Value::Fn(def) => {

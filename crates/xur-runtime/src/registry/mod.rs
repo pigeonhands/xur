@@ -95,6 +95,13 @@ pub trait Context: ConvertCx {
 
     /// Reflection data for a function, closure, or constructor value.
     fn fn_info(&self, value: &Value) -> Option<crate::FnInfo>;
+
+    /// An opaque handle for calling xur closures from outside the normal
+    /// execution path, such as from native hook callbacks. Returns `None`
+    /// if the engine doesn't support it.
+    fn shared_handle(&self) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+        None
+    }
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;

@@ -143,6 +143,47 @@ impl Vm {
     }
 }
 
+/// An opaque handle for calling xur closures from outside the normal
+/// execution path, such as from native hook callbacks. Cheap to clone
+/// (Arc).
+///
+/// ```no_run
+/// # use xur_vm::{Vm, SharedHandle};
+/// # fn example(vm: &Vm) {
+/// let handle = vm.shared_handle();
+/// // Later, from a hook callback on any thread:
+/// // handle.call_closure(&some_closure, &[arg1, arg2]);
+/// # }
+/// ```
+#[derive(Clone)]
+pub struct SharedHandle(pub(crate) Arc<Shared>);
+
+impl Vm {
+    /// Returns a handle for calling xur closures from outside the VM.
+    pub fn shared_handle(&self) -> SharedHandle {
+        SharedHandle(Arc::clone(&self.shared))
+    }
+}
+
+impl xur_runtime::convert::ConvertCx for SharedHandle {
+    fn lang(&self) -> &LangItems {
+        &self.0.lang
+    }
+
+    fn registry(&self) -> &Registry {
+        &self.0.registry
+    }
+}
+
+impl SharedHandle {
+    /// Calls the xur closure `callee` with `args`, using a temporary
+    /// interpreter. Safe to call from any thread.
+    pub fn call_closure(&self, callee: &Value, args: &[Value]) -> RunResult<Value> {
+        let mut interp = Interp::new(&self.0);
+        interp.call_value(callee, args, Vec::new(), xur_span::Span::default())
+    }
+}
+
 impl Shared {
     fn program(&self) -> RwLockReadGuard<'_, Program> {
         self.program.read().unwrap_or_else(PoisonError::into_inner)
