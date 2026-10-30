@@ -1994,8 +1994,6 @@ dependencies = [
 [[package]]
 name = "hao-il2cpp-runtime"
 version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "139d6348200ba2decb7c2986cc9190cca16687e7f0cefc981eed4795602937f0"
 dependencies = [
  "facet",
  "hooking",
@@ -2008,8 +2006,6 @@ dependencies = [
 [[package]]
 name = "hao-il2cpp-unity"
 version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65b68c7076ea9f7d4456cc00d222ffffdd629a48803ae6614be9765e08d7b143"
 dependencies = [
  "egui 0.29.1",
  "facet",
@@ -2102,8 +2098,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hooking"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf6b161015253233252509e8f1a3413dcfdf2c9f4b2315510fafa96aea1a0b7"
 dependencies = [
  "ctor 1.0.13",
  "hooking_macros",
@@ -2116,8 +2110,6 @@ dependencies = [
 [[package]]
 name = "hooking_macros"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "135f02a35c34d1a9b00cf1d3fdf89d70ba13bc0bfdf5b238f6635f8709b82695"
 dependencies = [
  "darling",
  "proc-macro2",
