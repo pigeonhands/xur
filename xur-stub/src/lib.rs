@@ -312,3 +312,46 @@ fn make_registry() -> Arc<Registry> {
         r
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use xur_resolve::Program;
+    use xur_span::MemoryFileLoader;
+
+    use super::make_registry;
+
+    fn compile(name: &str, src: &str) {
+        let registry = make_registry();
+        let loader = MemoryFileLoader::new(std::iter::once((name, src)));
+        let (_, diags) = Program::load(
+            Path::new(name),
+            Box::new(loader),
+            Box::new(Arc::clone(&registry)),
+            Some(xur_std::PRELUDE),
+        )
+        .unwrap();
+        let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+        assert!(diags.is_empty(), "{name}: {messages:#?}");
+    }
+
+    #[test]
+    fn examples_compile() {
+        compile("hello.xur", include_str!("../example/hello.xur"));
+        compile("tracing.xur", include_str!("../example/tracing.xur"));
+        compile("hooking.xur", include_str!("../example/hooking.xur"));
+        compile("game_inspector.xur", include_str!("../example/game_inspector.xur"));
+        compile("godot.xur", include_str!("../example/godot.xur"));
+        compile("sts2.xur", include_str!("../example/sts2.xur"));
+    }
+
+    #[test]
+    #[cfg(feature = "egui")]
+    fn egui_examples_compile() {
+        compile("egui_overlay.xur", include_str!("../example/egui_overlay.xur"));
+        compile("megabonk.xur", include_str!("../example/megabonk.xur"));
+    }
+
+}
