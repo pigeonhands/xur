@@ -80,6 +80,7 @@ struct Il2CppMethodInfo {
     return_type: String,
     parameters: Vec<(String, String)>,
     is_static: bool,
+    code_address: Option<u64>,
 }
 
 impl std::fmt::Display for Il2CppMethodInfo {
@@ -130,6 +131,7 @@ fn snapshot_method(view: MethodView<'_>) -> Il2CppMethodInfo {
             .map(|p| (p.type_name(), p.name().to_owned()))
             .collect(),
         is_static: view.is_static(),
+        code_address: view.code_address(),
     }
 }
 
@@ -241,6 +243,21 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             match res {
                 Ok(paths) => Ok(result(cx, Ok(Value::list(paths)))),
                 Err(e) => Ok(result(cx, Err(e))),
+            }
+        })
+        .raw_function("bytes_at", |_cx, args| {
+            let [this, Value::Int(vaddr), Value::Int(len)] = args else {
+                return Err(RuntimeError::new("`bytes_at` takes (vaddr: int, len: int)"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a `Game`"));
+            };
+            let result = obj
+                .with(|g: &Il2CppGame| g.0.bytes_at(*vaddr as u64, *len as usize))
+                .ok_or_else(|| RuntimeError::new("expected a `Game`"))?;
+            match result {
+                Some(bytes) => Ok(Value::bytes(bytes)),
+                None => Ok(Value::Unit),
             }
         });
 
@@ -363,6 +380,10 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             |m: &Il2CppMethodInfo| -> Vec<String> {
                 m.parameters.iter().map(|(t, _)| t.clone()).collect()
             },
+        )
+        .method(
+            "code_address",
+            |m: &Il2CppMethodInfo| -> Option<i64> { m.code_address.map(|a| a as i64) },
         );
 
     // Walk the remaining reflected shapes (Binary, Metadata, GeneratedAssembly

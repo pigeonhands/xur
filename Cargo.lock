@@ -1957,6 +1957,18 @@ dependencies = [
 [[package]]
 name = "hao"
 version = "0.0.9"
+dependencies = [
+ "bitflags 2.13.2",
+ "facet",
+ "pewter",
+ "strum 0.28.0",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "hao"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78a84b4d6465062d784b8f37c36a2ec1aa8ac094b46621689b85311cc41ea15e"
 dependencies = [
@@ -1982,11 +1994,9 @@ dependencies = [
 [[package]]
 name = "hao-il2cpp"
 version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85e4e28b59caf7e946f68b90d2c1237f1c43a11c58a26f5117d2e71513a59566"
 dependencies = [
  "facet",
- "hao",
+ "hao 0.0.9",
  "pewter",
  "thiserror 2.0.21",
 ]
@@ -2020,7 +2030,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df8ede1cb850734b3905b0c97049ded51e7923ed8ea88b5fba35ce137c8cd3bc"
 dependencies = [
  "facet",
- "hao",
+ "hao 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "hooking",
  "libloading 0.9.0",
  "thiserror 2.0.21",
@@ -5608,7 +5618,7 @@ dependencies = [
  "dashmap 6.2.1",
  "eframe",
  "facet",
- "hao",
+ "hao 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "hao-il2cpp",
  "hao-runtime",
  "iced-x86",

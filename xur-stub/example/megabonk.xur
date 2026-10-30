@@ -158,9 +158,19 @@ impl GameRuntime {
         log::debug("  PlayerInventory fields found (health, weapons, items, tomes, gold)");
 
         let add_item_method = item_inv_cls.method("AddItem", 1)?;
-        log::debug("  ItemInventory.AddItem(1) found");
+        log::debug("  ItemInventory.AddItem(1) found @ {}", add_item_method.code_address());
         let add_item_n_method = item_inv_cls.method("AddItem", 2)?;
-        log::debug("  ItemInventory.AddItem(2) found");
+        log::debug("  ItemInventory.AddItem(2) found @ {}", add_item_n_method.code_address());
+
+        // Debug hook on AddItem to trace calls
+        add_item_method.hook(|ctx| {
+            log::info("[AddItem] args: {}", ctx.args());
+            None
+        });
+        add_item_n_method.hook(|ctx| {
+            log::info("[AddItem(2)] args: {}", ctx.args());
+            None
+        });
         let remove_item_method = item_inv_cls.method("RemoveItem", 2)?;
         log::debug("  ItemInventory.RemoveItem(2) found");
         let get_item_amount = item_inv_cls.method("GetAmount", 1)?;

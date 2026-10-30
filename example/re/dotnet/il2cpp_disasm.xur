@@ -1,0 +1,47 @@
+// Disassemble IL2CPP methods from a Unity game binary.
+//
+//     xur run example/re/dotnet/il2cpp_disasm.xur -- /path/to/game TypeName
+//
+// Opens a Unity IL2CPP game, finds a type by full name, and disassembles
+// the native x86-64 code of each method using `re::asm::x86`.
+
+use std::io;
+use std::re::dotnet::il2cpp;
+use std::re::asm::x86;
+
+fn disasm(game: il2cpp::Game, method: il2cpp::MethodView) {
+    let addr = method.code_address();
+    io::println("  {} => {}", method, addr);
+    match addr {
+        Some(a) => {
+            let raw = game.bytes_at(a, 256);
+            match raw {
+                () => { io::println("    (no bytes at that address)"); }
+                raw => {
+                    for insn in x86::decode(64, raw, a) {
+                        io::println("    {}", insn);
+                    }
+                }
+            }
+        }
+        None => {}
+    }
+}
+
+fn main() -> Result<()> {
+    let args = std::argv();
+    if args.len() < 3 {
+        io::println("usage: xur run example/re/dotnet/il2cpp_disasm.xur -- <game-dir> <type-name>");
+        return Err("missing arguments");
+    }
+
+    let game = il2cpp::open(args[1])?;
+    let ty = game.find_type(args[2])?;
+
+    io::println("=== {} ===", ty.full_name());
+    for method in ty.methods() {
+        disasm(game, method);
+        io::println("");
+    }
+    Ok(())
+}

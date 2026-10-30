@@ -59,6 +59,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # cranelift-module = "0.137"
 
 [patch.crates-io]
+hao-il2cpp = { path = "../hao/crates/hao-il2cpp" }
 hao-il2cpp-runtime = { path = "../hao/crates/hao-il2cpp-runtime" }
 hao-il2cpp-unity = { path = "../hao/crates/hao-il2cpp-unity" }
 hooking = { path = "../hooking-rs/hooking" }
