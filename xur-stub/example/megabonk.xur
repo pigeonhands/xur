@@ -466,7 +466,7 @@ fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
                 g.label(fmt::format("{} lv{}", entry.name, lvl));
                 if g.button("+") { game.add_weapon_by_enum(entry.value); }
                 if g.button("+10") { game.add_weapon_n(entry.value, 10); }
-                if g.button("max") { game.add_weapon_max(entry.value); }
+                if g.button("+100") { game.add_weapon_max(entry.value); }
                 g.end_row();
             }
         });
@@ -555,7 +555,7 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
                 g.label(fmt::format("{} x{}", entry.name, count));
                 if g.button("+") { game.add_item(entry.value); }
                 if g.button("+10") { game.add_item_n(entry.value, 10); }
-                if g.button("max") { game.add_item_n(entry.value, 100); }
+                if g.button("+100") { game.add_item_n(entry.value, 100); }
                 if g.button("-") { game.remove_item(entry.value); }
                 g.end_row();
             }
