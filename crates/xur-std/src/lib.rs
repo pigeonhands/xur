@@ -7,6 +7,7 @@
 mod any;
 mod assert;
 mod bytes;
+mod cell;
 #[cfg(feature = "cli")]
 mod cli;
 #[cfg(feature = "datetime")]
@@ -93,6 +94,7 @@ pub fn register(registry: &Registry) {
     log::register(registry);
     map::register(registry);
     bytes::register(registry);
+    cell::register(registry);
     str::register(registry);
     num::register(registry);
     path::register(registry);

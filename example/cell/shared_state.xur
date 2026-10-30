@@ -1,0 +1,42 @@
+// Shared mutable state with cells — values that can be read and written
+// from any closure scope, unlike plain variables which are copied on
+// capture.
+//
+//     xur run example/cell/shared_state.xur
+
+use std::cell;
+use std::io;
+use std::fmt;
+use std::sync;
+use std::thread;
+
+fn main() -> Result<()> {
+    // A cell holds one value and lets any scope that captured it read
+    // or write it.  The type is locked to the initial value's type:
+    // counter.set("oops") would be a runtime error.
+    let counter = cell::new(0);
+
+    io::println("counter starts at {}", counter.get());
+
+    // Closures capture `counter` by value, but since Cell wraps an
+    // Arc<RwLock>, every copy points to the same underlying storage.
+    let (tx, rx) = sync::channel();
+    for i in 0..4 {
+        thread::spawn(|| {
+            let prev = counter.get();
+            counter.set(prev + 1);
+            tx.send(i).unwrap();
+        });
+    }
+    for _ in 0..4 { rx.recv(); }
+
+    io::println("counter after 4 threads: {}", counter.get());
+
+    // Cells are type-checked at runtime: set() rejects a value of the
+    // wrong kind.
+    let flag = cell::new(false);
+    flag.set(true);
+    io::println("flag: {}", flag.get());
+
+    Ok(())
+}
