@@ -78,6 +78,38 @@ pub(crate) fn register(m: &mut ModuleBuilder<'_>) {
         Ok(Value::Unit)
     });
 
+    m.raw_function("info", |_cx, args| {
+        let [Value::Str(msg)] = args else {
+            return Err(RuntimeError::new("`info` takes a message string"));
+        };
+        tracing::info!("{}", msg.as_ref());
+        Ok(Value::Unit)
+    });
+
+    m.raw_function("debug", |_cx, args| {
+        let [Value::Str(msg)] = args else {
+            return Err(RuntimeError::new("`debug` takes a message string"));
+        };
+        tracing::debug!("{}", msg.as_ref());
+        Ok(Value::Unit)
+    });
+
+    m.raw_function("warn", |_cx, args| {
+        let [Value::Str(msg)] = args else {
+            return Err(RuntimeError::new("`warn` takes a message string"));
+        };
+        tracing::warn!("{}", msg.as_ref());
+        Ok(Value::Unit)
+    });
+
+    m.raw_function("error", |_cx, args| {
+        let [Value::Str(msg)] = args else {
+            return Err(RuntimeError::new("`error` takes a message string"));
+        };
+        tracing::error!("{}", msg.as_ref());
+        Ok(Value::Unit)
+    });
+
     m.raw_function("drain", |_cx, args| {
         if !args.is_empty() {
             return Err(RuntimeError::new("`drain` takes no arguments"));
