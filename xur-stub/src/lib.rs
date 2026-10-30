@@ -23,6 +23,55 @@ fn init_logging() {
     let _ = std::fs::write(LOG_PATH, b"");
 }
 
+#[cfg(unix)]
+fn install_crash_handler() {
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = crash_signal_handler as *const () as usize;
+        sa.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
+        libc::sigaction(libc::SIGSEGV, &sa, std::ptr::null_mut());
+        libc::sigaction(libc::SIGBUS, &sa, std::ptr::null_mut());
+    }
+}
+
+#[cfg(unix)]
+unsafe extern "C" fn crash_signal_handler(
+    sig: libc::c_int,
+    info: *mut libc::siginfo_t,
+    ctx: *mut libc::c_void,
+) {
+    use std::io::Write;
+    let rip = if ctx.is_null() {
+        0u64
+    } else {
+        let uctx = ctx as *const libc::ucontext_t;
+        (*uctx).uc_mcontext.gregs[libc::REG_RIP as usize] as u64
+    };
+    let fault_addr = if info.is_null() {
+        0u64
+    } else {
+        (*info).si_addr() as u64
+    };
+    let sig_name = if sig == libc::SIGSEGV { "SIGSEGV" } else { "SIGBUS" };
+    let msg = format!(
+        "\n[xur-stub] CRASH: {} at rip=0x{:x} fault_addr=0x{:x}\n",
+        sig_name, rip, fault_addr,
+    );
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(LOG_PATH)
+        .and_then(|mut f| f.write_all(msg.as_bytes()));
+    // Also write to stderr for lldb/terminal visibility.
+    let _ = libc::write(2, msg.as_ptr() as *const _, msg.len());
+    // Re-raise with default handler.
+    libc::signal(sig, libc::SIG_DFL);
+    libc::raise(sig);
+}
+
+#[cfg(not(unix))]
+fn install_crash_handler() {}
+
 fn log(msg: std::fmt::Arguments<'_>) {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(LOG_PATH) {
@@ -42,6 +91,7 @@ struct Script {
 fn init() {
     xur_std::set_invoked_by("stub");
     init_logging();
+    install_crash_handler();
     log(format_args!("init"));
 
     // Compile on a big-stack thread, but block until ctor() functions

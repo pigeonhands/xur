@@ -25,6 +25,7 @@ tracing-subscriber.workspace = true
 hooking = { workspace = true, optional = true }
 hao-runtime = { workspace = true, optional = true }
 libloading = { version = "0.9", optional = true }
+libc.workspace = true
 
 [features]
 default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui"]

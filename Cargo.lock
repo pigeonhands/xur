@@ -5651,6 +5651,7 @@ dependencies = [
  "hao-il2cpp-unity",
  "hao-runtime",
  "hooking",
+ "libc",
  "libloading 0.9.0",
  "tracing",
  "tracing-subscriber",
