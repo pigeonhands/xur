@@ -3,7 +3,7 @@
 // Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
 // menu, which provides godmode, speed control, and inventory cheats.
 //
-//     cargo build --release -p xur-stub
+//     cargo build --release -p xur-stub --features egui
 //     # Steam > Megabonk > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/megabonk.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
@@ -15,6 +15,165 @@ use std::stub::il2cpp;
 use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
 use std::stub::tracing;
+
+struct HealthInfo {
+    hp: i32
+    max_hp: i32
+    shield: f32
+}
+
+struct GameRuntime {
+    il2cpp: il2cpp::Runtime
+    player_cls: il2cpp::Class
+    health_cls: il2cpp::Class
+    weapon_inv_cls: il2cpp::Class
+    item_inv_cls: il2cpp::Class
+    weapon_enum_cls: il2cpp::Class
+    item_enum_cls: il2cpp::Class
+    instance_field: il2cpp::Field
+    invincible_field: il2cpp::Field
+    health_field: il2cpp::Field
+    hp_field: il2cpp::Field
+    max_hp_field: il2cpp::Field
+    shield_field: il2cpp::Field
+    inventory_field: il2cpp::Field
+    weapon_inv_field: il2cpp::Field
+    item_inv_field: il2cpp::Field
+    gold_field: il2cpp::Field
+    add_weapon_method: il2cpp::Method
+    add_item_method: il2cpp::Method
+}
+
+impl GameRuntime {
+    fn init() -> Result<GameRuntime> {
+        let rt = il2cpp::loaded()?;
+
+        let player_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "MyPlayer")?;
+        let health_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerHealth")?;
+        let weapon_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "WeaponInventory")?;
+        let item_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "ItemInventory")?;
+        let inventory_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerInventory")?;
+        let weapon_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EWeapon")?;
+        let item_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EItem")?;
+
+        let instance_field = player_cls.field("Instance")?;
+        let invincible_field = player_cls.field("isInvincible")?;
+        let health_field = player_cls.field("health")?;
+        let hp_field = health_cls.field("hp")?;
+        let max_hp_field = health_cls.field("maxHp")?;
+        let shield_field = health_cls.field("shield")?;
+        let inventory_field = player_cls.field("inventory")?;
+        let weapon_inv_field = inventory_cls.field("weapons")?;
+        let item_inv_field = inventory_cls.field("items")?;
+        let gold_field = inventory_cls.field("gold")?;
+
+        let add_weapon_method = weapon_inv_cls.method("AddWeapon", 1)?;
+        let add_item_method = item_inv_cls.method("AddItem", 1)?;
+
+        Ok(GameRuntime {
+            il2cpp: rt,
+            player_cls,
+            health_cls,
+            weapon_inv_cls,
+            item_inv_cls,
+            weapon_enum_cls,
+            item_enum_cls,
+            instance_field,
+            invincible_field,
+            health_field,
+            hp_field,
+            max_hp_field,
+            shield_field,
+            inventory_field,
+            weapon_inv_field,
+            item_inv_field,
+            gold_field,
+            add_weapon_method,
+            add_item_method,
+        })
+    }
+
+    fn player(self) -> il2cpp::Object {
+        self.instance_field.read_static()
+    }
+
+    fn apply_godmode(self, enabled: bool) {
+        let player = self.player();
+        if player.is_null() { return; }
+        self.invincible_field.write(player, enabled);
+    }
+
+    fn read_health(self) -> Option<HealthInfo> {
+        let player = self.player();
+        if player.is_null() { return None; }
+
+        let health_obj = self.health_field.read(player);
+        if health_obj.is_null() { return None; }
+
+        Some(HealthInfo {
+            hp: self.hp_field.read(health_obj),
+            max_hp: self.max_hp_field.read(health_obj),
+            shield: self.shield_field.read(health_obj),
+        })
+    }
+
+    fn write_health(self, hp: i32, max_hp: i32) {
+        let player = self.player();
+        if player.is_null() { return; }
+
+        let health_obj = self.health_field.read(player);
+        if health_obj.is_null() { return; }
+
+        self.hp_field.write(health_obj, hp);
+        self.max_hp_field.write(health_obj, max_hp);
+    }
+
+    fn set_gold(self, amount: i32) {
+        let player = self.player();
+        if player.is_null() { return; }
+
+        let inv = self.inventory_field.read(player);
+        if inv.is_null() { return; }
+
+        self.gold_field.write(inv, amount);
+    }
+
+    fn give_all_weapons(self) {
+        let player = self.player();
+        if player.is_null() { return; }
+
+        let inv = self.inventory_field.read(player);
+        if inv.is_null() { return; }
+
+        let weapons = self.weapon_inv_field.read(inv);
+        if weapons.is_null() { return; }
+
+        for field in self.weapon_enum_cls.fields() {
+            if field.is_static() && field.name() != "value__" {
+                let value = field.read_static();
+                self.add_weapon_method.invoke(weapons, value);
+            }
+        }
+    }
+
+    fn give_all_items(self) {
+        let player = self.player();
+        if player.is_null() { return; }
+
+        let inv = self.inventory_field.read(player);
+        if inv.is_null() { return; }
+
+        let items = self.item_inv_field.read(inv);
+        if items.is_null() { return; }
+
+        for field in self.item_enum_cls.fields() {
+            if field.is_static() && field.name() != "value__" {
+                let value = field.read_static();
+                self.add_item_method.invoke(items, value);
+            }
+        }
+    }
+}
 
 fn ctor() {
     tracing::register("memory", "debug");
@@ -32,8 +191,8 @@ fn stub_main() {
     let show_game_info = false;
 
     // Runtime state (initialised lazily after the game loads).
-    let rt = nil;
-    let rt_error = nil;
+    let rt: Option<GameRuntime> = None;
+    let rt_error: Option<str> = None;
 
     egui::run(|ctx| {
         let f1 = ctx.key("f1");
@@ -47,12 +206,10 @@ fn stub_main() {
         }
 
         // Lazy-init: wait until Il2Cpp is up.
-        if rt == nil && rt_error == nil {
-            let res = init_runtime();
-            if res.is_ok() {
-                rt = res.unwrap();
-            } else {
-                rt_error = res.unwrap_err();
+        if rt.is_none() && rt_error.is_none() {
+            match GameRuntime::init() {
+                Ok(game) => { rt = Some(game); }
+                Err(e) => { rt_error = Some(e.to_string()); }
             }
         }
 
@@ -60,17 +217,23 @@ fn stub_main() {
             ui.small(fmt::format("frame {} | invoked by: {}",
                 egui::frame_count(), xur::invoked_by()));
 
-            if rt_error != nil {
-                ui.separator();
-                ui.small(fmt::format("il2cpp error: {}", rt_error));
-                return;
+            match rt_error {
+                Some(msg) => {
+                    ui.separator();
+                    ui.small(fmt::format("il2cpp error: {}", msg));
+                    return;
+                }
+                None => {}
             }
 
-            if rt == nil {
-                ui.separator();
-                ui.small("waiting for Il2Cpp runtime...");
-                return;
-            }
+            let game = match rt {
+                Some(g) => g,
+                None => {
+                    ui.separator();
+                    ui.small("waiting for Il2Cpp runtime...");
+                    return;
+                }
+            };
 
             ui.separator();
 
@@ -79,16 +242,18 @@ fn stub_main() {
             let prev_godmode = godmode;
             godmode = ui.checkbox(godmode, "Godmode (invincible)");
             if godmode != prev_godmode {
-                apply_godmode(rt, godmode);
+                game.apply_godmode(godmode);
             }
 
-            let health = read_health(rt);
-            if health != nil {
-                ui.small(fmt::format("  HP: {}/{} | Shield: {}",
-                    health.hp, health.max_hp, health.shield));
-                if ui.button("Full heal") {
-                    write_health(rt, health.max_hp, health.max_hp);
+            match game.read_health() {
+                Some(health) => {
+                    ui.small(fmt::format("  HP: {}/{} | Shield: {}",
+                        health.hp, health.max_hp, health.shield));
+                    if ui.button("Full heal") {
+                        game.write_health(health.max_hp, health.max_hp);
+                    }
                 }
+                None => {}
             }
             ui.separator();
 
@@ -110,192 +275,24 @@ fn stub_main() {
             ui.heading("Inventory");
             gold_amount = ui.slider_int("Gold", gold_amount, 0, 99999);
             if ui.button("Set gold") {
-                set_gold(rt, gold_amount);
+                game.set_gold(gold_amount);
             }
             ui.horizontal(|row| {
-                if row.button("All weapons") { give_all_weapons(rt); }
-                if row.button("All items")   { give_all_items(rt); }
+                if row.button("All weapons") { game.give_all_weapons(); }
+                if row.button("All items")   { game.give_all_items(); }
             });
             ui.separator();
 
             // --- Game info ---
             show_game_info = ui.checkbox(show_game_info, "Show Il2Cpp info");
             if show_game_info {
-                let info = rt.info;
                 ui.scroll(300.0, |scroll| {
-                    scroll.small(fmt::format("Player class: {}", info.player_cls));
-                    scroll.small(fmt::format("Health class: {}", info.health_cls));
-                    scroll.small(fmt::format("Weapon inv:   {}", info.weapon_inv_cls));
-                    scroll.small(fmt::format("Item inv:     {}", info.item_inv_cls));
+                    scroll.small(fmt::format("Player class: {}", game.player_cls));
+                    scroll.small(fmt::format("Health class: {}", game.health_cls));
+                    scroll.small(fmt::format("Weapon inv:   {}", game.weapon_inv_cls));
+                    scroll.small(fmt::format("Item inv:     {}", game.item_inv_cls));
                 });
             }
         });
     });
-}
-
-// ---------------------------------------------------------------------------
-// Runtime initialisation — look up all the classes and fields we need once.
-// ---------------------------------------------------------------------------
-
-struct GameRuntime {
-    il2cpp,
-    info,
-    // Classes.
-    player_cls,
-    health_cls,
-    weapon_inv_cls,
-    item_inv_cls,
-    // Fields.
-    instance_field,
-    invincible_field,
-    health_field,
-    hp_field,
-    max_hp_field,
-    shield_field,
-    inventory_field,
-    weapon_inv_field,
-    item_inv_field,
-    gold_field,
-    // Methods.
-    add_weapon_method,
-    add_item_method,
-}
-
-fn init_runtime() -> Result<()> {
-    let rt = il2cpp::loaded()?;
-
-    let player_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "MyPlayer")?;
-    let health_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerHealth")?;
-    let weapon_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "WeaponInventory")?;
-    let item_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "ItemInventory")?;
-    let inventory_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerInventory")?;
-
-    let instance_field = player_cls.field("Instance")?;
-    let invincible_field = player_cls.field("isInvincible")?;
-    let health_field = player_cls.field("health")?;
-    let hp_field = health_cls.field("hp")?;
-    let max_hp_field = health_cls.field("maxHp")?;
-    let shield_field = health_cls.field("shield")?;
-    let inventory_field = player_cls.field("inventory")?;
-    let weapon_inv_field = inventory_cls.field("weapons")?;
-    let item_inv_field = inventory_cls.field("items")?;
-    let gold_field = inventory_cls.field("gold")?;
-
-    let add_weapon_method = weapon_inv_cls.method("AddWeapon", 1)?;
-    let add_item_method = item_inv_cls.method("AddItem", 1)?;
-
-    Ok(GameRuntime {
-        il2cpp: rt,
-        info: GameRuntime {
-            player_cls: player_cls,
-            health_cls: health_cls,
-            weapon_inv_cls: weapon_inv_cls,
-            item_inv_cls: item_inv_cls,
-        },
-        player_cls: player_cls,
-        health_cls: health_cls,
-        weapon_inv_cls: weapon_inv_cls,
-        item_inv_cls: item_inv_cls,
-        instance_field: instance_field,
-        invincible_field: invincible_field,
-        health_field: health_field,
-        hp_field: hp_field,
-        max_hp_field: max_hp_field,
-        shield_field: shield_field,
-        inventory_field: inventory_field,
-        weapon_inv_field: weapon_inv_field,
-        item_inv_field: item_inv_field,
-        gold_field: gold_field,
-        add_weapon_method: add_weapon_method,
-        add_item_method: add_item_method,
-    })
-}
-
-fn get_player(rt) {
-    rt.instance_field.read_static()
-}
-
-// ---------------------------------------------------------------------------
-// Godmode
-// ---------------------------------------------------------------------------
-
-fn apply_godmode(rt, enabled) {
-    let player = get_player(rt);
-    if player.is_null() { return; }
-    rt.invincible_field.write(player, enabled);
-}
-
-// ---------------------------------------------------------------------------
-// Health
-// ---------------------------------------------------------------------------
-
-fn read_health(rt) {
-    let player = get_player(rt);
-    if player.is_null() { return nil; }
-
-    let health_obj = rt.health_field.read(player);
-    if health_obj.is_null() { return nil; }
-
-    {
-        hp: rt.hp_field.read(health_obj),
-        max_hp: rt.max_hp_field.read(health_obj),
-        shield: rt.shield_field.read(health_obj),
-    }
-}
-
-fn write_health(rt, hp, max_hp) {
-    let player = get_player(rt);
-    if player.is_null() { return; }
-
-    let health_obj = rt.health_field.read(player);
-    if health_obj.is_null() { return; }
-
-    rt.hp_field.write(health_obj, hp);
-    rt.max_hp_field.write(health_obj, max_hp);
-}
-
-// ---------------------------------------------------------------------------
-// Inventory
-// ---------------------------------------------------------------------------
-
-fn set_gold(rt, amount) {
-    let player = get_player(rt);
-    if player.is_null() { return; }
-
-    let inv = rt.inventory_field.read(player);
-    if inv.is_null() { return; }
-
-    rt.gold_field.write(inv, amount);
-}
-
-fn give_all_weapons(rt) {
-    let player = get_player(rt);
-    if player.is_null() { return; }
-
-    let inv = rt.inventory_field.read(player);
-    if inv.is_null() { return; }
-
-    let weapons = rt.weapon_inv_field.read(inv);
-    if weapons.is_null() { return; }
-
-    // EWeapon enum values 0..29.
-    for i in 0..30 {
-        rt.add_weapon_method.invoke(weapons, i);
-    }
-}
-
-fn give_all_items(rt) {
-    let player = get_player(rt);
-    if player.is_null() { return; }
-
-    let inv = rt.inventory_field.read(player);
-    if inv.is_null() { return; }
-
-    let items = rt.item_inv_field.read(inv);
-    if items.is_null() { return; }
-
-    // EItem enum values 0..80.
-    for i in 0..80 {
-        rt.add_item_method.invoke(items, i);
-    }
 }

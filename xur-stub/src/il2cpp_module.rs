@@ -561,6 +561,40 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
             Ok(result)
         })
+        .raw_function("fields", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`fields` takes no arguments"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a `Class`"));
+            };
+            let list = obj
+                .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                    c.class()
+                        .fields()
+                        .map(|f| into_value(cx, XurField::new(&f)))
+                        .collect()
+                })
+                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+            Ok(Value::list(list))
+        })
+        .raw_function("methods", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`methods` takes no arguments"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a `Class`"));
+            };
+            let list = obj
+                .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                    c.class()
+                        .methods()
+                        .map(|m| into_value(cx, XurMethod::new(&m)))
+                        .collect()
+                })
+                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+            Ok(Value::list(list))
+        })
         .method("name", |c: &XurClass| -> String {
             c.class().name().to_owned()
         })
