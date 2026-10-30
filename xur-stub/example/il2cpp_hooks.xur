@@ -1,0 +1,95 @@
+// Il2Cpp method hooking patterns — intercept any method, inspect args,
+// modify args, call the original, and override return values.
+//
+// Requires a Unity Il2Cpp game. For a full working example see
+// megabonk.xur which hooks DamagePlayer for godmode.
+//
+//     cargo build --release -p xur-stub --features egui
+//     XUR_STUB_PATH=xur-stub/example/il2cpp_hooks.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so ./some_game
+
+use std::cell;
+use std::stub::il2cpp;
+use std::log;
+
+fn main() -> Result<()> {
+    let rt = il2cpp::loaded()?;
+    let asm = "Assembly-CSharp";
+
+    // --- Pattern 1: Block a method (godmode) --------------------------
+    //
+    // Return Some(value) to skip the original; None to let it run.
+    // For void methods, Some(0) skips, None passes through.
+
+    let health_cls = rt.class(asm, "Game", "PlayerHealth")?;
+    let damage = health_cls.method("DamagePlayer", 3)?;
+
+    let godmode = cell::new(false);
+    damage.hook(|ctx| {
+        if godmode.get() { Some(0) } else { None }
+    });
+
+    // Toggle from UI:
+    // godmode.set(!godmode.get());
+
+    // --- Pattern 2: Log arguments -------------------------------------
+    //
+    // ctx.arg(index) or ctx.arg("name") reads a parameter.
+    // ctx.args() returns all of them as a list.
+    // Return None to pass through without changes.
+
+    let player_cls = rt.class(asm, "Game", "Player")?;
+    let take_hit = player_cls.method("TakeHit", 2)?;
+
+    take_hit.hook(|ctx| {
+        log::info("TakeHit: {} damage from {}",
+            ctx.arg("amount"), ctx.arg("source"));
+        None
+    });
+
+    // --- Pattern 3: Modify arguments ----------------------------------
+    //
+    // ctx.set_arg changes an argument before passing through.
+    // The modified value is written back to the CPU registers.
+
+    let set_speed = player_cls.method("SetSpeed", 1)?;
+
+    set_speed.hook(|ctx| {
+        let speed = ctx.arg("speed");
+        ctx.set_arg("speed", speed * 2.0);
+        None
+    });
+
+    // --- Pattern 4: Call original and modify the return ----------------
+    //
+    // ctx.call() invokes the original method with (possibly modified)
+    // args, returns its result. Then return Some(modified) to override.
+
+    let get_gold = rt.class(asm, "Game", "Inventory")?
+        .method("GetGold", 0)?;
+
+    get_gold.hook(|ctx| {
+        let real_gold = ctx.call();
+        Some(real_gold * 2)
+    });
+
+    // --- Pattern 5: Conditional override ------------------------------
+    //
+    // Call the original, inspect the result, decide whether to change it.
+
+    let loot_roll = rt.class(asm, "Game", "LootTable")?
+        .method("Roll", 1)?;
+
+    let always_legendary = cell::new(false);
+    loot_roll.hook(|ctx| {
+        let result = ctx.call();
+        if always_legendary.get() {
+            Some(5)  // legendary tier
+        } else {
+            Some(result)  // unchanged
+        }
+    });
+
+    log::info("hooks installed");
+    Ok(())
+}

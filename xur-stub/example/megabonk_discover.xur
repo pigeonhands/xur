@@ -1,0 +1,81 @@
+// Megabonk class discovery — reads the game's Il2Cpp metadata offline
+// to find class names, fields, and methods.
+//
+// No game launch needed — parses GameAssembly and global-metadata.dat
+// directly from disk.
+//
+//     xur run xur-stub/example/megabonk_discover.xur
+
+use std::fmt;
+use std::io;
+use std::re::dotnet::il2cpp;
+
+fn dump(game: il2cpp::Game, full_name: str) {
+    match game.find_type(full_name) {
+        Ok(ty) => {
+            io::println(fmt::format("=== {} (ns: {}, image: {}) ===",
+                ty.full_name(), ty.namespace(), ty.image_name()));
+            let base = ty.base_type_name();
+            match base {
+                Some(b) => io::println(fmt::format("  base: {}", b)),
+                None => {}
+            }
+            io::println("  fields:");
+            for f in ty.fields() {
+                let tag = if f.is_static() { " (static)" } else { "" };
+                io::println(fmt::format("    {}: {}{}", f.name(), f.type_name(), tag));
+            }
+            io::println("  methods:");
+            for m in ty.methods() {
+                let tag = if m.is_static() { " (static)" } else { "" };
+                io::println(fmt::format("    {} {}({}){}", m.return_type(), m.name(),
+                    m.parameter_type_names().join(", "), tag));
+            }
+            io::println("");
+        }
+        Err(e) => {
+            io::println(fmt::format("NOT FOUND: {}", full_name));
+        }
+    }
+}
+
+fn main() {
+    let game = match il2cpp::open("/games/SteamLibrary/steamapps/common/Megabonk") {
+        Ok(g) => g,
+        Err(e) => {
+            io::println(e);
+            return;
+        }
+    };
+
+    io::println("=== Assembly-CSharp classes ===");
+    io::println("");
+
+    // Dump every game class (skip Unity/System/.NET framework types).
+    for ty in game.types() {
+        if ty.image_name() != "Assembly-CSharp.dll" { continue; }
+        let name = ty.full_name();
+        // Skip compiler-generated types.
+        if name.contains("<>") { continue; }
+        if name.contains("<Module>") { continue; }
+
+        io::println(fmt::format("{}  (ns: {})", name, ty.namespace()));
+    }
+
+    io::println("");
+    io::println("=== Key classes detail ===");
+    io::println("");
+
+    dump(game, "Assets.Scripts.Actors.Player.MyPlayer");
+    dump(game, "Assets.Scripts.Inventory__Items__Pickups.PlayerHealth");
+    dump(game, "PlayerInventory");
+    dump(game, "Assets.Scripts.Inventory__Items__Pickups.Items.ItemInventory");
+    dump(game, "Assets.Scripts.Inventory__Items__Pickups.Weapons.WeaponInventory");
+    dump(game, "DataManager");
+    dump(game, "EWeapon");
+    dump(game, "Assets.Scripts.Inventory__Items__Pickups.Items.EItem");
+    dump(game, "ECharacter");
+    dump(game, "Assets.Scripts._Data.Tomes.ETome");
+    dump(game, "TomeData");
+    dump(game, "Assets.Scripts.Inventory__Items__Pickups.TomeInventory");
+}

@@ -1,21 +1,20 @@
 // Megabonk trainer — Unity Il2Cpp game mod with egui overlay.
 //
 // Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
-// menu, which provides godmode, speed control, and inventory cheats
-// with searchable weapon/item lists.
+// menu, which provides godmode (via DamagePlayer hook), speed
+// control, gold, and inventory management with a grid slot UI.
 //
 //     cargo build --release -p xur-stub --features egui
 //     # Steam > Megabonk > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/megabonk.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
+use std::cell;
 use std::fmt;
-use std::io;
-use std::xur;
 use std::stub::il2cpp;
 use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
-use std::stub::tracing;
+use std::log;
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -25,6 +24,7 @@ struct HealthInfo {
     hp: i32
     max_hp: i32
     shield: f32
+    max_shield: f32
 }
 
 struct EnumEntry {
@@ -32,24 +32,62 @@ struct EnumEntry {
     value: i32
 }
 
+struct UiState {
+    gold_amount: cell::Cell<i32>
+    weapon_search: cell::Cell<str>
+    tome_search: cell::Cell<str>
+    item_search: cell::Cell<str>
+}
+
+fn new_ui_state() -> UiState {
+    UiState {
+        gold_amount: cell::new(10000),
+        weapon_search: cell::new(""),
+        tome_search: cell::new(""),
+        item_search: cell::new(""),
+    }
+}
+
 struct GameRuntime {
-    il2cpp: il2cpp::Runtime
-    player_cls: il2cpp::Class
-    health_cls: il2cpp::Class
-    instance_field: il2cpp::Field
-    invincible_field: il2cpp::Field
-    health_field: il2cpp::Field
+    rt: il2cpp::Runtime
+    // MyPlayer
+    player_instance: il2cpp::Field
+    inventory_field: il2cpp::Field
+    // PlayerHealth
     hp_field: il2cpp::Field
     max_hp_field: il2cpp::Field
     shield_field: il2cpp::Field
-    inventory_field: il2cpp::Field
+    max_shield_field: il2cpp::Field
+    // PlayerInventory
+    player_health_field: il2cpp::Field
     weapon_inv_field: il2cpp::Field
     item_inv_field: il2cpp::Field
-    gold_field: il2cpp::Field
-    add_weapon_method: il2cpp::Method
+    tome_inv_field: il2cpp::Field
+    gold_int_field: il2cpp::Field
+    gold_float_field: il2cpp::Field
+    // ItemInventory
     add_item_method: il2cpp::Method
-    weapons: _
-    items: _
+    remove_item_method: il2cpp::Method
+    get_item_amount: il2cpp::Method
+    // WeaponInventory
+    add_weapon: il2cpp::Method
+    get_weapon_level: il2cpp::Method
+    // TomeInventory
+    add_maxed_tome: il2cpp::Method
+    get_tome_level: il2cpp::Method
+    has_tome: il2cpp::Method
+    // DataManager
+    dm_instance: il2cpp::Field
+    dm_get_weapon: il2cpp::Method
+    dm_get_item: il2cpp::Method
+    dm_get_tome: il2cpp::Method
+    // Godmode state — cell is shared so the hook closure and UI
+    // both see mutations.
+    godmode: cell::Cell<bool>
+    // Enum entries
+    weapons: list<EnumEntry>
+    items: list<EnumEntry>
+    tomes: list<EnumEntry>
 }
 
 // ---------------------------------------------------------------------------
@@ -69,10 +107,6 @@ fn enum_entries(cls: il2cpp::Class) -> _ {
     entries
 }
 
-fn log(msg: str) {
-    tracing::info(msg);
-}
-
 // ---------------------------------------------------------------------------
 // GameRuntime
 // ---------------------------------------------------------------------------
@@ -80,159 +114,449 @@ fn log(msg: str) {
 impl GameRuntime {
     fn init() -> Result<GameRuntime> {
         let rt = il2cpp::loaded()?;
-        log("il2cpp runtime loaded");
+        log::info("il2cpp runtime loaded");
 
-        let player_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "MyPlayer")?;
-        let health_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerHealth")?;
-        let weapon_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "WeaponInventory")?;
-        let item_inv_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "ItemInventory")?;
-        let inventory_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Player", "PlayerInventory")?;
-        let weapon_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EWeapon")?;
-        let item_enum_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Items", "EItem")?;
-        log("all classes found");
+        let asm = "Assembly-CSharp";
+        let player_cls = rt.class(asm, "Assets.Scripts.Actors.Player", "MyPlayer")?;
+        log::debug("  MyPlayer class found");
+        let health_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
+        log::debug("  PlayerHealth class found");
+        let inv_cls = rt.class(asm, "", "PlayerInventory")?;
+        log::debug("  PlayerInventory class found");
+        let item_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "ItemInventory")?;
+        log::debug("  ItemInventory class found");
+        let weapon_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Weapons", "WeaponInventory")?;
+        log::debug("  WeaponInventory class found");
+        let tome_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "TomeInventory")?;
+        log::debug("  TomeInventory class found");
+        let dm_cls = rt.class(asm, "", "DataManager")?;
+        log::debug("  DataManager class found");
+        let weapon_enum = rt.class(asm, "", "EWeapon")?;
+        let item_enum = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "EItem")?;
+        let tome_enum = rt.class(asm, "Assets.Scripts._Data.Tomes", "ETome")?;
+        log::info("all classes found");
 
-        let instance_field = player_cls.field("Instance")?;
-        let invincible_field = player_cls.field("isInvincible")?;
-        let health_field = player_cls.field("health")?;
+        let player_instance = player_cls.field("Instance")?;
+        let inventory_field = player_cls.field("inventory")?;
+        log::debug("  MyPlayer.Instance, inventory fields found");
+
         let hp_field = health_cls.field("hp")?;
         let max_hp_field = health_cls.field("maxHp")?;
         let shield_field = health_cls.field("shield")?;
-        let inventory_field = player_cls.field("inventory")?;
-        let weapon_inv_field = inventory_cls.field("weapons")?;
-        let item_inv_field = inventory_cls.field("items")?;
-        let gold_field = inventory_cls.field("gold")?;
-        log("all fields found");
+        let max_shield_field = health_cls.field("maxShield")?;
+        log::debug("  PlayerHealth fields found (hp, maxHp, shield, maxShield)");
 
-        let add_weapon_method = weapon_inv_cls.method("AddWeapon", 1)?;
+        let player_health_field = inv_cls.field("playerHealth")?;
+        let weapon_inv_field = inv_cls.field("weaponInventory")?;
+        let item_inv_field = inv_cls.field("itemInventory")?;
+        let tome_inv_field = inv_cls.field("tomeInventory")?;
+        let gold_int_field = inv_cls.field("<goldInt>k__BackingField")?;
+        let gold_float_field = inv_cls.field("<gold>k__BackingField")?;
+        log::debug("  PlayerInventory fields found (health, weapons, items, tomes, gold)");
+
         let add_item_method = item_inv_cls.method("AddItem", 1)?;
-        log("all methods found");
+        log::debug("  ItemInventory.AddItem(1) found");
+        let remove_item_method = item_inv_cls.method("RemoveItem", 2)?;
+        log::debug("  ItemInventory.RemoveItem(2) found");
+        let get_item_amount = item_inv_cls.method("GetAmount", 1)?;
+        log::debug("  ItemInventory.GetAmount(1) found");
 
-        // Enumerate every weapon and item from their Il2Cpp enum classes.
-        let weapons = enum_entries(weapon_enum_cls);
-        let items = enum_entries(item_enum_cls);
+        let add_weapon = weapon_inv_cls.method("AddWeapon", 2)?;
+        log::debug("  WeaponInventory.AddWeapon(2) found");
+        let get_weapon_level = weapon_inv_cls.method("GetWeaponLevel", 1)?;
+        log::debug("  WeaponInventory.GetWeaponLevel(1) found");
 
-        log(fmt::format("discovered {} weapons, {} items", weapons.len(), items.len()));
-        for w in weapons {
-            log(fmt::format("  weapon: {} = {}", w.name, w.value));
-        }
-        for i in items {
-            log(fmt::format("  item: {} = {}", i.name, i.value));
-        }
+        let add_maxed_tome = tome_inv_cls.method("AddMaxedTome", 1)?;
+        log::debug("  TomeInventory.AddMaxedTome(1) found");
+        let get_tome_level = tome_inv_cls.method("GetTomeLevel", 1)?;
+        log::debug("  TomeInventory.GetTomeLevel(1) found");
+        let has_tome = tome_inv_cls.method("HasTome", 1)?;
+        log::debug("  TomeInventory.HasTome(1) found");
 
-        // Log player class structure for diagnostics.
-        log("--- MyPlayer fields ---");
-        for f in player_cls.fields() {
-            let tag = if f.is_static() { " (static)" } else { "" };
-            log(fmt::format("  {}: {}{}", f.name(), f.type_name(), tag));
-        }
-        log("--- MyPlayer methods ---");
-        for m in player_cls.methods() {
-            log(fmt::format("  {}", m.signature()));
-        }
+        let dm_instance = dm_cls.field("Instance")?;
+        let dm_get_weapon = dm_cls.method("GetWeapon", 1)?;
+        let dm_get_item = dm_cls.method("GetItem", 1)?;
+        let dm_get_tome = dm_cls.method("GetTome", 1)?;
+        log::debug("  DataManager fields and methods found");
+
+        // Hook DamagePlayer(Enemy, Vector3, DcFlags) — when godmode is
+        // on the hook returns 0 (skip original), otherwise passes through.
+        let godmode = cell::new(false);
+        let damage_method = health_cls.method("DamagePlayer", 3)?;
+        log::info("DamagePlayer found, hooking...");
+        damage_method.hook(|ctx| {
+            if godmode.get() { Some(0) } else { None }
+        });
+        log::info("DamagePlayer hooked for godmode");
+
+        let weapons = enum_entries(weapon_enum);
+        let items = enum_entries(item_enum);
+        let tomes = enum_entries(tome_enum);
+        log::info("discovered {} weapons, {} items, {} tomes",
+            weapons.len(), items.len(), tomes.len());
 
         Ok(GameRuntime {
-            il2cpp: rt,
-            player_cls,
-            health_cls,
-            instance_field,
-            invincible_field,
-            health_field,
+            rt,
+            player_instance,
+            inventory_field,
             hp_field,
             max_hp_field,
             shield_field,
-            inventory_field,
+            max_shield_field,
+            player_health_field,
             weapon_inv_field,
             item_inv_field,
-            gold_field,
-            add_weapon_method,
+            tome_inv_field,
+            gold_int_field,
+            gold_float_field,
             add_item_method,
+            remove_item_method,
+            get_item_amount,
+            add_weapon,
+            get_weapon_level,
+            add_maxed_tome,
+            get_tome_level,
+            has_tome,
+            dm_instance,
+            dm_get_weapon,
+            dm_get_item,
+            dm_get_tome,
+            godmode,
             weapons,
             items,
+            tomes,
         })
     }
 
     fn player(self) -> il2cpp::Object {
-        self.instance_field.read_static()
+        self.player_instance.read_static()
     }
 
-    fn apply_godmode(self, enabled: bool) {
-        let player = self.player();
-        if player.is_null() { return; }
-        self.invincible_field.write(player, enabled);
+    fn in_game(self) -> bool {
+        !self.player().is_null()
+    }
+
+    fn inventory(self) -> il2cpp::Object {
+        let p = self.player();
+        if p.is_null() { return il2cpp::null(); }
+        self.inventory_field.read(p)
+    }
+
+    fn health_obj(self) -> il2cpp::Object {
+        let inv = self.inventory();
+        if inv.is_null() { return il2cpp::null(); }
+        self.player_health_field.read(inv)
+    }
+
+    fn item_inv(self) -> il2cpp::Object {
+        let inv = self.inventory();
+        if inv.is_null() { return il2cpp::null(); }
+        self.item_inv_field.read(inv)
+    }
+
+    fn weapon_inv(self) -> il2cpp::Object {
+        let inv = self.inventory();
+        if inv.is_null() { return il2cpp::null(); }
+        self.weapon_inv_field.read(inv)
+    }
+
+    fn tome_inv(self) -> il2cpp::Object {
+        let inv = self.inventory();
+        if inv.is_null() { return il2cpp::null(); }
+        self.tome_inv_field.read(inv)
+    }
+
+    fn data_manager(self) -> il2cpp::Object {
+        self.dm_instance.read_static()
+    }
+
+    // --- Combat ---
+
+    fn set_godmode(self, enabled: bool) {
+        self.godmode.set(enabled);
+    }
+
+    fn is_godmode(self) -> bool {
+        self.godmode.get()
     }
 
     fn read_health(self) -> Option<HealthInfo> {
-        let player = self.player();
-        if player.is_null() { return None; }
-
-        let health_obj = self.health_field.read(player);
-        if health_obj.is_null() { return None; }
-
+        let h = self.health_obj();
+        if h.is_null() { return None; }
         Some(HealthInfo {
-            hp: self.hp_field.read(health_obj),
-            max_hp: self.max_hp_field.read(health_obj),
-            shield: self.shield_field.read(health_obj),
+            hp: self.hp_field.read(h),
+            max_hp: self.max_hp_field.read(h),
+            shield: self.shield_field.read(h),
+            max_shield: self.max_shield_field.read(h),
         })
     }
 
-    fn write_health(self, hp: i32, max_hp: i32) {
-        let player = self.player();
-        if player.is_null() { return; }
+    fn full_heal(self) {
+        let h = self.health_obj();
+        if h.is_null() { return; }
+        let max = self.max_hp_field.read(h);
+        self.hp_field.write(h, max);
+    }
 
-        let health_obj = self.health_field.read(player);
-        if health_obj.is_null() { return; }
+    fn max_shield(self) {
+        let h = self.health_obj();
+        if h.is_null() { return; }
+        let max = self.max_shield_field.read(h);
+        self.shield_field.write(h, max);
+    }
 
-        self.hp_field.write(health_obj, hp);
-        self.max_hp_field.write(health_obj, max_hp);
+    // --- Gold (direct field write to avoid ChangeGold event crash) ---
+
+    fn get_gold(self) -> i32 {
+        let inv = self.inventory();
+        if inv.is_null() { return 0; }
+        self.gold_int_field.read(inv)
     }
 
     fn set_gold(self, amount: i32) {
-        let player = self.player();
-        if player.is_null() { return; }
-
-        let inv = self.inventory_field.read(player);
+        let inv = self.inventory();
         if inv.is_null() { return; }
-
-        self.gold_field.write(inv, amount);
+        self.gold_int_field.write(inv, amount);
+        self.gold_float_field.write(inv, amount);
     }
 
-    fn add_weapon(self, value: i32) {
-        let player = self.player();
-        if player.is_null() { return; }
-
-        let inv = self.inventory_field.read(player);
-        if inv.is_null() { return; }
-
-        let weapons = self.weapon_inv_field.read(inv);
-        if weapons.is_null() { return; }
-
-        self.add_weapon_method.invoke(weapons, value);
-    }
+    // --- Items ---
 
     fn add_item(self, value: i32) {
-        let player = self.player();
-        if player.is_null() { return; }
-
-        let inv = self.inventory_field.read(player);
-        if inv.is_null() { return; }
-
-        let items = self.item_inv_field.read(inv);
-        if items.is_null() { return; }
-
-        self.add_item_method.invoke(items, value);
+        let ii = self.item_inv();
+        if ii.is_null() { return; }
+        self.add_item_method.invoke(ii, value);
     }
 
-    fn give_all_weapons(self) {
-        for entry in self.weapons {
-            self.add_weapon(entry.value);
+    fn remove_item(self, value: i32) {
+        let ii = self.item_inv();
+        if ii.is_null() { return; }
+        self.remove_item_method.invoke(ii, value, false);
+    }
+
+    fn get_item_count(self, value: i32) -> i32 {
+        let ii = self.item_inv();
+        if ii.is_null() { return 0; }
+        self.get_item_amount.invoke(ii, value)
+    }
+
+    // --- Weapons ---
+
+    fn add_weapon_by_enum(self, value: i32) {
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let weapon_data = self.dm_get_weapon.invoke(dm, value);
+        if weapon_data.is_null() { return; }
+        let wi = self.weapon_inv();
+        if wi.is_null() { return; }
+        self.add_weapon.invoke(wi, weapon_data, il2cpp::null());
+    }
+
+    fn get_weapon_lvl(self, value: i32) -> i32 {
+        let wi = self.weapon_inv();
+        if wi.is_null() { return 0; }
+        self.get_weapon_level.invoke(wi, value)
+    }
+
+    // --- Tomes ---
+
+    fn add_tome_by_enum(self, value: i32) {
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let tome_data = self.dm_get_tome.invoke(dm, value);
+        if tome_data.is_null() { return; }
+        let ti = self.tome_inv();
+        if ti.is_null() { return; }
+        self.add_maxed_tome.invoke(ti, tome_data);
+    }
+
+    fn get_tome_lvl(self, value: i32) -> i32 {
+        let ti = self.tome_inv();
+        if ti.is_null() { return 0; }
+        self.get_tome_level.invoke(ti, value)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// UI draw helpers
+// ---------------------------------------------------------------------------
+
+fn draw_combat(ui: _, game: GameRuntime) {
+    ui.heading("Combat");
+    let godmode = game.is_godmode();
+    let new_godmode = ui.checkbox(godmode, "Godmode (hook DamagePlayer)");
+    if new_godmode != godmode {
+        game.set_godmode(new_godmode);
+    }
+
+    match game.read_health() {
+        Some(h) => {
+            ui.small(fmt::format("HP: {}/{}  Shield: {}/{}",
+                h.hp, h.max_hp, h.shield, h.max_shield));
+            ui.horizontal(|row| {
+                if row.button("Full heal") { game.full_heal(); }
+                if row.button("Max shield") { game.max_shield(); }
+            });
+        }
+        None => {}
+    }
+}
+
+fn draw_speed(ui: _) {
+    ui.heading("Speed");
+    let speed = ui.slider_float("Time scale", time::scale(), 0.0, 5.0);
+    time::set_scale(speed);
+    ui.horizontal(|row| {
+        if row.button("pause") { time::set_scale(0.0); }
+        if row.button("0.5x")  { time::set_scale(0.5); }
+        if row.button("1x")    { time::set_scale(1.0); }
+        if row.button("2x")    { time::set_scale(2.0); }
+        if row.button("5x")    { time::set_scale(5.0); }
+    });
+}
+
+fn draw_gold(ui: _, game: GameRuntime, state: _) {
+    ui.heading(fmt::format("Gold: {}", game.get_gold()));
+    let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
+    state.gold_amount.set(new_amount);
+    ui.horizontal(|row| {
+        if row.button("Set") { game.set_gold(state.gold_amount.get()); }
+        if row.button("+1k") { game.set_gold(game.get_gold() + 1000); }
+        if row.button("+10k") { game.set_gold(game.get_gold() + 10000); }
+    });
+}
+
+fn draw_weapons(ui: _, game: GameRuntime, state: _) {
+    // Grid of owned weapons
+    let owned = [];
+    for entry in game.weapons {
+        if entry.name == "None" || entry.name == "Test" { continue; }
+        let lvl = game.get_weapon_lvl(entry.value);
+        if lvl > 0 {
+            owned.push(entry);
         }
     }
 
-    fn give_all_items(self) {
-        for entry in self.items {
-            self.add_item(entry.value);
+    if owned.len() > 0 {
+        ui.grid("weapons_owned", 3, |g| {
+            for entry in owned {
+                let lvl = game.get_weapon_lvl(entry.value);
+                g.label(fmt::format("{} lv{}", entry.name, lvl));
+                if g.button("+") { game.add_weapon_by_enum(entry.value); }
+                g.label("");
+                g.end_row();
+            }
+        });
+    } else {
+        ui.small("no weapons");
+    }
+
+    // Search + add
+    ui.separator();
+    ui.small("Add weapon:");
+    let new_search = ui.text_edit(state.weapon_search.get());
+    state.weapon_search.set(new_search);
+    let query = new_search.to_lower();
+    ui.scroll(150.0, |scroll| {
+        for entry in game.weapons {
+            if entry.name == "None" || entry.name == "Test" { continue; }
+            if game.get_weapon_lvl(entry.value) > 0 { continue; }
+            if query != "" && !entry.name.to_lower().contains(query) {
+                continue;
+            }
+            scroll.horizontal(|row| {
+                if row.button("+") { game.add_weapon_by_enum(entry.value); }
+                row.label(entry.name);
+            });
+        }
+    });
+}
+
+fn draw_tomes(ui: _, game: GameRuntime, state: _) {
+    // Grid of owned tomes
+    let owned = [];
+    for entry in game.tomes {
+        let lvl = game.get_tome_lvl(entry.value);
+        if lvl > 0 {
+            owned.push(entry);
         }
     }
+
+    if owned.len() > 0 {
+        ui.grid("tomes_owned", 2, |g| {
+            for entry in owned {
+                let lvl = game.get_tome_lvl(entry.value);
+                g.label(fmt::format("{} lv{}", entry.name, lvl));
+                if g.button("+") { game.add_tome_by_enum(entry.value); }
+                g.end_row();
+            }
+        });
+    } else {
+        ui.small("no tomes");
+    }
+
+    // Search + add
+    ui.separator();
+    ui.small("Add tome:");
+    let new_search = ui.text_edit(state.tome_search.get());
+    state.tome_search.set(new_search);
+    let query = new_search.to_lower();
+    ui.scroll(150.0, |scroll| {
+        for entry in game.tomes {
+            if game.get_tome_lvl(entry.value) > 0 { continue; }
+            if query != "" && !entry.name.to_lower().contains(query) {
+                continue;
+            }
+            scroll.horizontal(|row| {
+                if row.button("+") { game.add_tome_by_enum(entry.value); }
+                row.label(entry.name);
+            });
+        }
+    });
+}
+
+fn draw_items(ui: _, game: GameRuntime, state: _) {
+    // Grid of owned items
+    let owned = [];
+    for entry in game.items {
+        let count = game.get_item_count(entry.value);
+        if count > 0 {
+            owned.push(entry);
+        }
+    }
+
+    if owned.len() > 0 {
+        ui.grid("items_owned", 3, |g| {
+            for entry in owned {
+                let count = game.get_item_count(entry.value);
+                g.label(fmt::format("{} x{}", entry.name, count));
+                if g.button("+") { game.add_item(entry.value); }
+                if g.button("-") { game.remove_item(entry.value); }
+                g.end_row();
+            }
+        });
+    } else {
+        ui.small("no items");
+    }
+
+    // Search + add
+    ui.separator();
+    ui.small("Add item:");
+    let new_search = ui.text_edit(state.item_search.get());
+    state.item_search.set(new_search);
+    let query = new_search.to_lower();
+    ui.scroll(150.0, |scroll| {
+        for entry in game.items {
+            if game.get_item_count(entry.value) > 0 { continue; }
+            if query != "" && !entry.name.to_lower().contains(query) {
+                continue;
+            }
+            scroll.horizontal(|row| {
+                if row.button("+") { game.add_item(entry.value); }
+                row.label(entry.name);
+            });
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,24 +564,21 @@ impl GameRuntime {
 // ---------------------------------------------------------------------------
 
 fn ctor() {
-    tracing::register("file", "/tmp/megabonk.log", "debug");
+    log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
     egui::init();
 }
 
 fn stub_main() {
-    log("megabonk trainer starting");
+    log::info("megabonk trainer starting");
 
     let visible = true;
     let f1_down = false;
 
-    // UI state.
-    let godmode = false;
-    let speed = 1.0;
-    let gold_amount = 1000;
-    let weapon_search = "";
-    let item_search = "";
+    // Mutable UI state in a list — list elements are Arc-shared, so
+    // writes propagate through nested closures (window_sized, etc).
+    let state = new_ui_state();
 
-    // Runtime state (initialised lazily after the game loads).
+    // Runtime (lazy init)
     let rt: Option<GameRuntime> = None;
     let rt_error: Option<str> = None;
 
@@ -268,29 +589,26 @@ fn stub_main() {
         }
         f1_down = f1;
 
-        if !visible {
-            return;
-        }
+        if !visible { return; }
 
-        // Lazy-init: wait until Il2Cpp is up.
+        // Lazy-init after Il2Cpp is ready
         if rt.is_none() && rt_error.is_none() {
             match GameRuntime::init() {
                 Ok(game) => { rt = Some(game); }
                 Err(e) => {
-                    log(fmt::format("init error: {}", e));
+                    log::info("init error: {}", e);
                     rt_error = Some(e);
                 }
             }
         }
 
-        ctx.window("Megabonk Trainer", |ui| {
-            ui.small(fmt::format("frame {} | invoked by: {}",
-                egui::frame_count(), xur::invoked_by()));
+        ctx.window_sized("Megabonk Trainer", 360.0, |ui| {
+            ui.small(fmt::format("frame {} | xur-stub", egui::frame_count()));
 
             match rt_error {
                 Some(msg) => {
                     ui.separator();
-                    ui.small(fmt::format("il2cpp error: {}", msg));
+                    ui.colored_label(255, 80, 80, fmt::format("init error: {}", msg));
                     return;
                 }
                 None => {}
@@ -305,90 +623,28 @@ fn stub_main() {
                 }
             };
 
-            ui.separator();
-
-            // --- Godmode ---
-            ui.heading("Combat");
-            let prev_godmode = godmode;
-            godmode = ui.checkbox(godmode, "Godmode (invincible)");
-            if godmode != prev_godmode {
-                game.apply_godmode(godmode);
+            if !game.in_game() {
+                ui.separator();
+                ui.small("not in game (main menu)");
+                return;
             }
 
-            match game.read_health() {
-                Some(health) => {
-                    ui.small(fmt::format("  HP: {}/{} | Shield: {}",
-                        health.hp, health.max_hp, health.shield));
-                    if ui.button("Full heal") {
-                        game.write_health(health.max_hp, health.max_hp);
-                    }
-                }
-                None => {}
-            }
+            ui.separator();
+            draw_combat(ui, game);
+            ui.separator();
+            draw_speed(ui);
+            ui.separator();
+            draw_gold(ui, game, state);
             ui.separator();
 
-            // --- Speed ---
-            ui.heading("Speed");
-            let scale = time::scale();
-            speed = ui.slider_float("Time scale", scale, 0.0, 5.0);
-            time::set_scale(speed);
-            ui.horizontal(|row| {
-                if row.button("pause") { time::set_scale(0.0); }
-                if row.button("0.5x")  { time::set_scale(0.5); }
-                if row.button("1x")    { time::set_scale(1.0); }
-                if row.button("2x")    { time::set_scale(2.0); }
-                if row.button("5x")    { time::set_scale(5.0); }
+            ui.collapsing("Weapons", |section| {
+                draw_weapons(section, game, state);
             });
-            ui.separator();
-
-            // --- Inventory ---
-            ui.heading("Inventory");
-            gold_amount = ui.slider_int("Gold", gold_amount, 0, 99999);
-            if ui.button("Set gold") {
-                game.set_gold(gold_amount);
-            }
-            ui.horizontal(|row| {
-                if row.button("All weapons") { game.give_all_weapons(); }
-                if row.button("All items")   { game.give_all_items(); }
+            ui.collapsing("Tomes", |section| {
+                draw_tomes(section, game, state);
             });
-            ui.separator();
-
-            // --- Weapon search ---
-            ui.collapsing("Add weapon", |section| {
-                weapon_search = section.text_edit(weapon_search);
-                let query = weapon_search.to_lower();
-                section.scroll(200.0, |scroll| {
-                    for entry in game.weapons {
-                        if query == "" || entry.name.to_lower().contains(query) {
-                            scroll.horizontal(|row| {
-                                if row.button("+") {
-                                    game.add_weapon(entry.value);
-                                    log(fmt::format("added weapon: {}", entry.name));
-                                }
-                                row.label(entry.name);
-                            });
-                        }
-                    }
-                });
-            });
-
-            // --- Item search ---
-            ui.collapsing("Add item", |section| {
-                item_search = section.text_edit(item_search);
-                let query = item_search.to_lower();
-                section.scroll(200.0, |scroll| {
-                    for entry in game.items {
-                        if query == "" || entry.name.to_lower().contains(query) {
-                            scroll.horizontal(|row| {
-                                if row.button("+") {
-                                    game.add_item(entry.value);
-                                    log(fmt::format("added item: {}", entry.name));
-                                }
-                                row.label(entry.name);
-                            });
-                        }
-                    }
-                });
+            ui.collapsing("Items", |section| {
+                draw_items(section, game, state);
             });
         });
     });

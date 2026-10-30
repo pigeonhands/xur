@@ -1,7 +1,7 @@
 // An egui overlay like hao's egui_demo, but written entirely in Xur.
 //
-// The script creates its own windows, handles F1 toggling, and routes
-// tracing output to a separate log window.
+// The script creates its own windows, handles F1 toggling, and shows
+// process info alongside time-scale controls.
 //
 //     cargo build --release -p xur-stub --features egui
 //     XUR_STUB_PATH=xur-stub/example/egui_overlay.xur \
@@ -9,26 +9,20 @@
 
 use std::fmt;
 use std::xur;
+use std::log;
 use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
-use std::stub::tracing;
 
 fn ctor() {
-    tracing::register("memory", "debug");
+    log::subscriber().to_file("/tmp/egui_overlay.log").with_max_level("debug").init();
     egui::init();
 }
 
 fn stub_main() {
     let visible = true;
     let f1_down = false;
-    let note = "";
-    let log_lines = [];
 
     egui::run(|ctx| {
-        for line in tracing::drain() {
-            log_lines.push(line);
-        }
-
         let f1 = ctx.key("f1");
         if f1 && !f1_down {
             visible = !visible;
@@ -58,14 +52,6 @@ fn stub_main() {
                 }
                 if row.button("fast (2x)") {
                     time::set_scale(2.0);
-                }
-            });
-        });
-
-        ctx.window("log", |ui| {
-            ui.scroll(400.0, |scroll| {
-                for line in log_lines {
-                    scroll.small(line);
                 }
             });
         });

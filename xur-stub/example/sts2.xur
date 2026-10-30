@@ -12,10 +12,10 @@ use std::io;
 use std::fmt;
 use std::fs;
 use std::re::proc;
-use std::stub::tracing;
+use std::log;
 
 fn ctor() {
-    tracing::register("file", "/tmp/sts2-xur.log", "debug");
+    log::subscriber().to_file("/tmp/sts2-xur.log").with_max_level("debug").init();
 }
 
 fn main() -> Result<()> {

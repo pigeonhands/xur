@@ -13,10 +13,10 @@ use std::io;
 use std::fmt;
 use std::re::proc;
 use std::stub::re::godot;
-use std::stub::tracing;
+use std::log;
 
 fn ctor() {
-    tracing::register("stdout", "info");
+    log::subscriber().with_max_level("info").init();
 }
 
 fn main() -> Result<()> {
