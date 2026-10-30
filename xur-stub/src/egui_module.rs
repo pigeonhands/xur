@@ -10,7 +10,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use facet::Facet;
 use hao_il2cpp_unity::egui as hao_egui;
-use hao_il2cpp_unity::egui::{Color32, Context, Frame, ScrollArea, Slider, Window};
+use hao_il2cpp_unity::egui::{Color32, Context, Frame, Grid, ScrollArea, Slider, Window};
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
@@ -32,6 +32,7 @@ struct Bridge {
 struct BridgeState {
     ctx: Option<Context>,
     done: bool,
+    shutdown: bool,
 }
 
 fn get_or_init_bridge() -> Arc<Bridge> {
@@ -40,6 +41,7 @@ fn get_or_init_bridge() -> Arc<Bridge> {
             mu: Mutex::new(BridgeState {
                 ctx: None,
                 done: false,
+                shutdown: false,
             }),
             cv: Condvar::new(),
             ready: AtomicBool::new(false),
@@ -106,8 +108,34 @@ fn init_early() {
     let bridge = get_or_init_bridge();
     let render_bridge = Arc::clone(&bridge);
 
-    hao_il2cpp_unity::on_init(move |_il2cpp| {
+    let quit_bridge = Arc::clone(&bridge);
+    hao_il2cpp_unity::on_init(move |il2cpp| {
+        let quit_bridge = Arc::clone(&quit_bridge);
+        let quit_result = il2cpp
+            .class("UnityEngine.CoreModule", "UnityEngine", "Application")
+            .and_then(|app| app.method("Quit", 1));
+        if let Ok(quit) = quit_result {
+            let _ = quit.hook(move |exit_code: i32, original: hao_il2cpp_runtime::Original<_, ()>| {
+                hao_il2cpp_unity::shutdown();
+                {
+                    let mut state = quit_bridge.mu.lock().unwrap();
+                    state.shutdown = true;
+                    quit_bridge.cv.notify_all();
+                }
+                original.call((exit_code,));
+            });
+        }
+
         hao_egui::on_egui(move |ctx| {
+            if hao_il2cpp_unity::is_shutting_down() {
+                let mut state = render_bridge.mu.lock().unwrap();
+                if !state.shutdown {
+                    state.shutdown = true;
+                    render_bridge.cv.notify_all();
+                }
+                return;
+            }
+
             render_bridge.frames.fetch_add(1, Ordering::Relaxed);
 
             if !render_bridge.ready.load(Ordering::Relaxed) {
@@ -171,8 +199,11 @@ fn register_run(m: &mut ModuleBuilder<'_>) {
         loop {
             let ctx = {
                 let mut state = bridge.mu.lock().unwrap();
-                while state.ctx.is_none() {
+                while state.ctx.is_none() && !state.shutdown {
                     state = bridge.cv.wait(state).unwrap();
+                }
+                if state.shutdown {
+                    return Ok(Value::Unit);
                 }
                 state.ctx.take().unwrap()
             };
@@ -225,17 +256,51 @@ fn register_ctx_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ctx(this, |ctx| {
             let frame = Frame::window(&ctx.style()).fill(Color32::from_rgb(24, 24, 28));
+            let mut ret = Value::Unit;
             Window::new(title.as_ref())
                 .frame(frame)
                 .default_width(400.0)
                 .show(ctx, |ui| {
                     let cx = unsafe { &mut *cx_ptr };
                     let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
-                    if let Err(e) = cx.call(&body, &[ui_val]) {
-                        ui.colored_label(Color32::RED, format!("error: {}", e.message));
+                    match cx.call(&body, &[ui_val]) {
+                        Ok(val) => { ret = val; }
+                        Err(e) => { ui.colored_label(Color32::RED, format!("error: {}", e.message)); }
                     }
                 });
-            Ok(Value::Unit)
+            Ok(ret)
+        })
+    });
+
+    ty.raw_function("window_sized", |cx, args| {
+        let [this, Value::Str(title), Value::Float(width), body] = args else {
+            return Err(RuntimeError::new(
+                "`window_sized` takes (title: str, width: float, body: fn(ui))",
+            ));
+        };
+        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+            return Err(RuntimeError::new("body must be a function"));
+        }
+        let body = body.clone();
+        let title = title.clone();
+        let w = *width as f32;
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        with_ctx(this, |ctx| {
+            let frame = Frame::window(&ctx.style()).fill(Color32::from_rgb(24, 24, 28));
+            let mut ret = Value::Unit;
+            Window::new(title.as_ref())
+                .frame(frame)
+                .default_width(w)
+                .max_width(w)
+                .show(ctx, |ui| {
+                    let cx = unsafe { &mut *cx_ptr };
+                    let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
+                    match cx.call(&body, &[ui_val]) {
+                        Ok(val) => { ret = val; }
+                        Err(e) => { ui.colored_label(Color32::RED, format!("error: {}", e.message)); }
+                    }
+                });
+            Ok(ret)
         })
     });
 
@@ -411,12 +476,16 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         let body = body.clone();
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
+            let mut ret = Value::Unit;
             ui.horizontal(|inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, &[inner]);
+                match cx.call(&body, &[inner]) {
+                    Ok(val) => ret = val,
+                    Err(e) => { let _ = e; }
+                }
             });
-            Ok(Value::Unit)
+            Ok(ret)
         })
     });
 
@@ -433,12 +502,16 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         let heading = heading.clone();
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
+            let mut ret = Value::Unit;
             ui.collapsing(heading.as_ref(), |inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, &[inner]);
+                match cx.call(&body, &[inner]) {
+                    Ok(val) => ret = val,
+                    Err(e) => { let _ = e; }
+                }
             });
-            Ok(Value::Unit)
+            Ok(ret)
         })
     });
 
@@ -455,11 +528,71 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         let body = body.clone();
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
+            let mut ret = Value::Unit;
             ScrollArea::vertical().max_height(max_height).show(ui, |inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, &[inner]);
+                match cx.call(&body, &[inner]) {
+                    Ok(val) => ret = val,
+                    Err(e) => { let _ = e; }
+                }
             });
+            Ok(ret)
+        })
+    });
+
+    ty.raw_function("grid", |cx, args| {
+        let [this, Value::Str(id), Value::Int(cols), body] = args else {
+            return Err(RuntimeError::new(
+                "`grid` takes (id: str, columns: int, body: fn(ui))",
+            ));
+        };
+        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+            return Err(RuntimeError::new("body must be a function"));
+        }
+        let id = id.clone();
+        let cols = *cols as usize;
+        let body = body.clone();
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        with_ui(this, |ui| {
+            let mut ret = Value::Unit;
+            Grid::new(id.as_ref())
+                .num_columns(cols)
+                .striped(true)
+                .show(ui, |grid_ui| {
+                    let cx = unsafe { &mut *cx_ptr };
+                    let inner =
+                        into_value(cx, EguiUi::from_ui(grid_ui)).expect("EguiUi registered");
+                    match cx.call(&body, &[inner]) {
+                        Ok(val) => ret = val,
+                        Err(e) => { let _ = e; }
+                    }
+                });
+            Ok(ret)
+        })
+    });
+
+    ty.raw_function("end_row", |_cx, args| {
+        let [this] = args else {
+            return Err(RuntimeError::new("`end_row` takes no arguments"));
+        };
+        with_ui(this, |ui| {
+            ui.end_row();
+            Ok(Value::Unit)
+        })
+    });
+
+    ty.raw_function("colored_label", |_cx, args| {
+        let [this, Value::Int(r), Value::Int(g), Value::Int(b), Value::Str(text)] = args else {
+            return Err(RuntimeError::new(
+                "`colored_label` takes (r, g, b, text)",
+            ));
+        };
+        with_ui(this, |ui| {
+            ui.colored_label(
+                Color32::from_rgb(*r as u8, *g as u8, *b as u8),
+                text.as_ref(),
+            );
             Ok(Value::Unit)
         })
     });
