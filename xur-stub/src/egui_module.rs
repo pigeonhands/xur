@@ -178,7 +178,7 @@ fn register_run(m: &mut ModuleBuilder<'_>) {
             };
 
             let ctx_val = into_value(cx, EguiCtx::from_ctx(&ctx)).expect("EguiCtx registered");
-            if let Err(e) = cx.call(&draw, vec![ctx_val]) {
+            if let Err(e) = cx.call(&draw, &[ctx_val]) {
                 Window::new("xur error").show(&ctx, |ui| {
                     ui.colored_label(Color32::RED, format!("draw error: {}", e.message));
                 });
@@ -231,7 +231,7 @@ fn register_ctx_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                 .show(ctx, |ui| {
                     let cx = unsafe { &mut *cx_ptr };
                     let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
-                    if let Err(e) = cx.call(&body, vec![ui_val]) {
+                    if let Err(e) = cx.call(&body, &[ui_val]) {
                         ui.colored_label(Color32::RED, format!("error: {}", e.message));
                     }
                 });
@@ -414,7 +414,7 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
             ui.horizontal(|inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, vec![inner]);
+                let _ = cx.call(&body, &[inner]);
             });
             Ok(Value::Unit)
         })
@@ -436,7 +436,7 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
             ui.collapsing(heading.as_ref(), |inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, vec![inner]);
+                let _ = cx.call(&body, &[inner]);
             });
             Ok(Value::Unit)
         })
@@ -458,7 +458,7 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
             ScrollArea::vertical().max_height(max_height).show(ui, |inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                let _ = cx.call(&body, vec![inner]);
+                let _ = cx.call(&body, &[inner]);
             });
             Ok(Value::Unit)
         })
