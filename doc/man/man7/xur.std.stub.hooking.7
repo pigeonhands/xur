@@ -1,0 +1,62 @@
+.TH XUR.STD.STUB.HOOKING 7 "2026-10-30" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.stub.hooking \- low-level inline function hooking
+.SH SYNOPSIS
+.B use std::stub::hooking;
+.SH DESCRIPTION
+.B std::stub::hooking
+provides low-level inline function hooking by address or symbol name.
+For Il2Cpp method hooking, prefer
+.BR Method.hook() " or " Method.hook_void_block()
+from
+.BR std::stub::il2cpp ,
+which handle ABI marshalling automatically. This module is for hooking
+arbitrary native functions where you manage the calling convention
+yourself.
+.SH FUNCTIONS
+.TP
+.B create(target, destination) -> Hook
+Create a hook that redirects calls from
+.I target
+address to
+.I destination
+address. The hook is not active until
+.BR apply() " is called."
+.TP
+.B by_name(symbol, destination) -> Hook
+.TQ
+.B by_name(module, symbol, destination) -> Hook
+Create a hook by looking up a symbol name, optionally in a specific
+shared library. Returns the hook or an error if the symbol is not found.
+.SH Hook METHODS
+.TP
+.B apply() -> ()
+Activate the hook. Calls to the target are redirected to the
+destination.
+.TP
+.B remove() -> ()
+Remove the hook and restore the original code.
+.TP
+.B original() -> int
+Get the address of the trampoline that calls the original function.
+.TP
+.B target() -> int
+Get the target address being hooked.
+.SH EXAMPLES
+.nf
+use std::stub::hooking;
+
+// Hook a function by address
+let hook = hooking::create(0x7f0001000, my_detour_addr);
+hook.apply();
+let orig = hook.original();
+
+// Hook by symbol name
+let hook = hooking::by_name("libgame.so", "GameUpdate", detour_addr);
+hook.apply();
+
+// Remove when done
+hook.remove();
+.fi
+.SH SEE ALSO
+.BR xur.std.stub.il2cpp (7)

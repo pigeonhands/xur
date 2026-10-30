@@ -1,0 +1,171 @@
+.TH XUR.STD.STUB.IL2CPP 7 "2026-10-30" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.stub.il2cpp \- interact with a live Unity Il2Cpp game
+.SH SYNOPSIS
+.B use std::stub::il2cpp;
+.SH DESCRIPTION
+.B std::stub::il2cpp
+provides runtime access to a Unity Il2Cpp game's types, fields,
+methods, and objects from inside the injected process. It is the
+primary module for writing game mods and trainers.
+.PP
+Fields can be read/written, methods can be invoked, and methods can
+be hooked with closures that intercept calls at runtime.
+.SH FUNCTIONS
+.TP
+.B loaded() -> Result<Runtime>
+Get the Il2Cpp runtime handle. Fails if Il2Cpp has not initialised yet.
+.TP
+.B null() -> Object
+Return a null managed object reference.
+.SH Runtime METHODS
+.TP
+.B class(assembly, namespace, name) -> Result<Class>
+Look up a managed class by assembly name, namespace, and class name.
+.TP
+.B string(value) -> Object
+Create a managed System.String from a xur string.
+.TP
+.B assemblies() -> [Image]
+List all loaded assemblies as Image objects.
+.SH Class METHODS
+.TP
+.B field(name) -> Result<Field>
+Look up a field by name.
+.TP
+.B method(name, param_count) -> Result<Method>
+Look up a method by name and parameter count.
+.TP
+.B new_object() -> Object
+Allocate a new managed object of this class (does not call a constructor).
+.TP
+.B fields() -> [Field]
+List all fields on the class.
+.TP
+.B methods() -> [Method]
+List all methods on the class.
+.TP
+.B name() -> str
+The class name.
+.TP
+.B namespace() -> str
+The class namespace.
+.SH Field METHODS
+.TP
+.B read(object) -> value
+Read this instance field's value from an object. The return type depends
+on the field's element type (bool, int, float, or Object).
+.TP
+.B write(object, value) -> ()
+Write a value to this instance field on an object.
+.TP
+.B read_static() -> value
+Read a static field's value.
+.TP
+.B write_static(value) -> ()
+Write a value to a static field.
+.TP
+.B name() -> str
+The field name.
+.TP
+.B type_name() -> str
+The field's type name.
+.TP
+.B offset() -> int
+The field's offset in the object layout.
+.TP
+.B is_static() -> bool
+Whether the field is static.
+.SH Method METHODS
+.TP
+.B invoke(object, args...) -> value
+Call the method via il2cpp_runtime_invoke. The first argument after the
+method is the instance object (or
+.BR null() ).
+Remaining arguments are boxed and passed to the method.
+.TP
+.B hook(callback) -> ()
+Install a generic hook on this method. The callback receives a
+.B HookContext
+and returns
+.B Option<value>
+\(em
+.B None
+passes through to the original,
+.B Some(value)
+overrides the return value.
+.TP
+.B hook_void_block() -> VoidBlockHook
+Install a simple block/unblock hook. When blocked, the method returns
+immediately without executing. Useful for void methods where you just
+want to prevent execution.
+.TP
+.B name() -> str
+The method name.
+.TP
+.B signature() -> str
+The full method signature string.
+.TP
+.B code_address() -> int
+The native code address of the method.
+.SH HookContext METHODS
+Available inside a
+.BR hook() " callback:"
+.TP
+.B arg(index_or_name) -> value
+Read a marshalled argument by index (int) or parameter name (str).
+.TP
+.B args() -> [value]
+All marshalled arguments as a list.
+.TP
+.B set_arg(index_or_name, value) -> ()
+Mark an argument as modified. Changes are written back to the
+saved registers before the original is called.
+.TP
+.B signature() -> str
+The hooked method's signature string.
+.TP
+.B call() -> value
+Call the original method with the (possibly modified) arguments.
+Can only be called once per hook invocation. Returns the original's
+return value.
+.SH VoidBlockHook METHODS
+.TP
+.B set_blocked(blocked: bool) -> ()
+Enable or disable blocking.
+.TP
+.B is_blocked() -> bool
+Whether the hook is currently blocking.
+.SH Image METHODS
+.TP
+.B name() -> str
+The assembly image name.
+.TP
+.B classes() -> [Class]
+All classes in this assembly image.
+.SH EXAMPLES
+.nf
+use std::stub::il2cpp;
+use std::log;
+
+fn ctor() {
+    log::subscriber().to_file("/tmp/mod.log").init();
+}
+
+fn stub_main() {
+    let rt = il2cpp::loaded().unwrap();
+    let cls = rt.class("Assembly-CSharp", "", "PlayerHealth").unwrap();
+    let hp = cls.field("hp").unwrap();
+    let damage = cls.method("DamagePlayer", 3).unwrap();
+
+    // Godmode: intercept damage calls
+    damage.hook(|ctx| {
+        log::info("blocked damage");
+        Some(0)
+    });
+}
+.fi
+.SH SEE ALSO
+.BR xur.std.stub.re.unity.egui (7),
+.BR xur.std.stub.re.unity.time (7),
+.BR xur.std.stub.hooking (7)

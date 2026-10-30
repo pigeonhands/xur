@@ -1,0 +1,141 @@
+.TH XUR.STD.STUB.RE.UNITY.EGUI 7 "2026-10-30" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.stub.re.unity.egui \- egui overlay for Unity games
+.SH SYNOPSIS
+.B use std::stub::re::unity::egui;
+.SH DESCRIPTION
+.B std::stub::re::unity::egui
+hooks into a Unity game's render loop and provides an
+.B egui
+immediate-mode GUI overlay. Call
+.B init()
+in
+.B ctor()
+to set up the render hooks, then
+.B run()
+in
+.B stub_main()
+to enter the draw loop.
+.SH FUNCTIONS
+.TP
+.B init() -> ()
+Initialise the egui render hooks. Must be called in
+.BR ctor() ,
+before the game's Il2Cpp runtime starts.
+.TP
+.B run(draw: fn(Ctx)) -> ()
+Enter the draw loop. Calls
+.I draw
+once per frame with a
+.BR Ctx .
+This function blocks forever.
+.TP
+.B frame_count() -> int
+The number of frames rendered since
+.BR run() " started."
+.SH Ctx METHODS
+The context object passed to the draw callback.
+.TP
+.B window(title, body: fn(Ui)) -> ()
+Create an egui window with default width.
+.TP
+.B window_sized(title, width, body: fn(Ui)) -> ()
+Create an egui window with a fixed max width.
+.TP
+.B key(name) -> bool
+Check if a key is currently pressed. Supported names:
+.BR f1 \- f6 ,
+.BR escape ,
+.BR space ,
+.BR tab ,
+.BR return ,
+.BR backspace ,
+.BR insert ,
+.BR delete ,
+.BR home ,
+.BR end ,
+.BR left / right / up / down ,
+.BR lshift / rshift ,
+.BR lctrl / rctrl ,
+.BR lalt / ralt .
+.SH Ui METHODS
+.TP
+.B label(text) -> ()
+Display a text label.
+.TP
+.B small(text) -> ()
+Display small text.
+.TP
+.B heading(text) -> ()
+Display a heading.
+.TP
+.B button(text) -> bool
+Display a button. Returns true when clicked.
+.TP
+.B separator() -> ()
+Draw a horizontal separator line.
+.TP
+.B checkbox(checked, label) -> bool
+Display a checkbox. Returns the new checked state.
+.TP
+.B slider_float(label, value, min, max) -> float
+Display a float slider. Returns the new value.
+.TP
+.B slider_int(label, value, min, max) -> int
+Display an integer slider. Returns the new value.
+.TP
+.B text_edit(text) -> str
+Display a single-line text input. Returns the edited text.
+.TP
+.B horizontal(body: fn(Ui)) -> ()
+Lay out children horizontally.
+.TP
+.B collapsing(heading, body: fn(Ui)) -> ()
+A collapsible section with a heading.
+.TP
+.B scroll(max_height, body: fn(Ui)) -> ()
+A vertical scroll area with the given max height.
+.TP
+.B grid(id, columns, body: fn(Ui)) -> ()
+A striped grid layout. Call
+.B end_row()
+after each row.
+.TP
+.B end_row() -> ()
+End the current row in a
+.BR grid() .
+.TP
+.B colored_label(r, g, b, text) -> ()
+Display a label with an RGB colour.
+.SH EXAMPLES
+.nf
+use std::stub::re::unity::egui;
+use std::log;
+
+fn ctor() {
+    log::subscriber().to_file("/tmp/mod.log").init();
+    egui::init();
+}
+
+fn stub_main() {
+    let visible = true;
+    let f1_down = false;
+
+    egui::run(|ctx| {
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down { visible = !visible; }
+        f1_down = f1;
+        if !visible { return; }
+
+        ctx.window_sized("My Mod", 300.0, |ui| {
+            ui.heading("Hello");
+            if ui.button("Click me") {
+                log::info("clicked!");
+            }
+        });
+    });
+}
+.fi
+.SH SEE ALSO
+.BR xur.std.stub.il2cpp (7),
+.BR xur.std.stub.re.unity.time (7)

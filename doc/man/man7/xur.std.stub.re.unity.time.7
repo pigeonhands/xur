@@ -1,0 +1,44 @@
+.TH XUR.STD.STUB.RE.UNITY.TIME 7 "2026-10-30" "xur 0.1.2" "Xur Manual"
+.SH NAME
+xur.std.stub.re.unity.time \- Unity time control
+.SH SYNOPSIS
+.B use std::stub::re::unity::time;
+.SH DESCRIPTION
+.B std::stub::re::unity::time
+reads and writes Unity's
+.B Time.timeScale
+and
+.BR Time.deltaTime .
+Useful for speed hacks and pause functionality.
+.SH FUNCTIONS
+.TP
+.B scale() -> float
+Get the current time scale (1.0 = normal speed).
+.TP
+.B set_scale(value: float) -> ()
+Set the time scale. 0.0 pauses, 2.0 is double speed.
+.TP
+.B delta() -> float
+Get the current frame delta time in seconds.
+.TP
+.B frame_count() -> int
+Get Unity's frame count.
+.SH EXAMPLES
+.nf
+use std::stub::re::unity::time;
+
+// Pause the game
+time::set_scale(0.0);
+
+// Double speed
+time::set_scale(2.0);
+
+// Restore normal speed
+time::set_scale(1.0);
+
+// Read frame timing
+let dt = time::delta();
+.fi
+.SH SEE ALSO
+.BR xur.std.stub.re.unity.egui (7),
+.BR xur.std.stub.il2cpp (7)
