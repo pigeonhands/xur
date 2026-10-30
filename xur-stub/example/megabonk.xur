@@ -73,6 +73,7 @@ struct GameRuntime {
     add_weapon: il2cpp::Method
     get_weapon_level: il2cpp::Method
     // TomeInventory
+    add_tome: Option<il2cpp::Method>
     add_maxed_tome: il2cpp::Method
     get_tome_level: il2cpp::Method
     has_tome: il2cpp::Method
@@ -166,6 +167,16 @@ impl GameRuntime {
         let get_weapon_level = weapon_inv_cls.method("GetWeaponLevel", 1)?;
         log::debug("  WeaponInventory.GetWeaponLevel(1) found");
 
+        let add_tome = match tome_inv_cls.method("AddTome", 1) {
+            Ok(m) => {
+                log::debug("  TomeInventory.AddTome(1) found");
+                Some(m)
+            }
+            Err(_) => {
+                log::debug("  TomeInventory.AddTome(1) not found, level-up will use AddMaxedTome");
+                None
+            }
+        };
         let add_maxed_tome = tome_inv_cls.method("AddMaxedTome", 1)?;
         log::debug("  TomeInventory.AddMaxedTome(1) found");
         let get_tome_level = tome_inv_cls.method("GetTomeLevel", 1)?;
@@ -214,6 +225,7 @@ impl GameRuntime {
             get_item_amount,
             add_weapon,
             get_weapon_level,
+            add_tome,
             add_maxed_tome,
             get_tome_level,
             has_tome,
@@ -323,9 +335,13 @@ impl GameRuntime {
     // --- Items ---
 
     fn add_item(self, value: i32) {
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let item_data = self.dm_get_item.invoke(dm, value);
+        if item_data.is_null() { return; }
         let ii = self.item_inv();
         if ii.is_null() { return; }
-        self.add_item_method.invoke(ii, value);
+        self.add_item_method.invoke(ii, item_data);
     }
 
     fn remove_item(self, value: i32) {
@@ -358,9 +374,48 @@ impl GameRuntime {
         self.get_weapon_level.invoke(wi, value)
     }
 
+    fn add_weapon_n(self, value: i32, n: i32) {
+        let i = 0;
+        while i < n {
+            self.add_weapon_by_enum(value);
+            i = i + 1;
+        }
+    }
+
+    fn max_weapon(self, value: i32) {
+        let prev = -1;
+        let lvl = self.get_weapon_lvl(value);
+        while lvl != prev {
+            prev = lvl;
+            self.add_weapon_by_enum(value);
+            lvl = self.get_weapon_lvl(value);
+        }
+    }
+
     // --- Tomes ---
 
-    fn add_tome_by_enum(self, value: i32) {
+    fn upgrade_tome(self, value: i32) {
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let tome_data = self.dm_get_tome.invoke(dm, value);
+        if tome_data.is_null() { return; }
+        let ti = self.tome_inv();
+        if ti.is_null() { return; }
+        match self.add_tome {
+            Some(method) => { method.invoke(ti, tome_data); }
+            None => { self.add_maxed_tome.invoke(ti, tome_data); }
+        }
+    }
+
+    fn upgrade_tome_n(self, value: i32, n: i32) {
+        let i = 0;
+        while i < n {
+            self.upgrade_tome(value);
+            i = i + 1;
+        }
+    }
+
+    fn max_tome(self, value: i32) {
         let dm = self.data_manager();
         if dm.is_null() { return; }
         let tome_data = self.dm_get_tome.invoke(dm, value);
@@ -381,7 +436,7 @@ impl GameRuntime {
 // UI draw helpers
 // ---------------------------------------------------------------------------
 
-fn draw_combat(ui: _, game: GameRuntime) {
+fn draw_combat(ui: egui::Ui, game: GameRuntime) {
     ui.heading("Combat");
     let godmode = game.is_godmode();
     let new_godmode = ui.checkbox(godmode, "Godmode (hook DamagePlayer)");
@@ -402,7 +457,7 @@ fn draw_combat(ui: _, game: GameRuntime) {
     }
 }
 
-fn draw_speed(ui: _) {
+fn draw_speed(ui: egui::Ui) {
     ui.heading("Speed");
     let speed = ui.slider_float("Time scale", time::scale(), 0.0, 5.0);
     time::set_scale(speed);
@@ -415,7 +470,7 @@ fn draw_speed(ui: _) {
     });
 }
 
-fn draw_gold(ui: _, game: GameRuntime, state: _) {
+fn draw_gold(ui: egui::Ui, game: GameRuntime, state: UiState) {
     ui.heading(fmt::format("Gold: {}", game.get_gold()));
     let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
     state.gold_amount.set(new_amount);
@@ -426,7 +481,7 @@ fn draw_gold(ui: _, game: GameRuntime, state: _) {
     });
 }
 
-fn draw_weapons(ui: _, game: GameRuntime, state: _) {
+fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
     // Grid of owned weapons
     let owned = [];
     for entry in game.weapons {
@@ -438,12 +493,13 @@ fn draw_weapons(ui: _, game: GameRuntime, state: _) {
     }
 
     if owned.len() > 0 {
-        ui.grid("weapons_owned", 3, |g| {
+        ui.grid("weapons_owned", 4, |g| {
             for entry in owned {
                 let lvl = game.get_weapon_lvl(entry.value);
                 g.label(fmt::format("{} lv{}", entry.name, lvl));
                 if g.button("+") { game.add_weapon_by_enum(entry.value); }
-                g.label("");
+                if g.button("+10") { game.add_weapon_n(entry.value, 10); }
+                if g.button("max") { game.max_weapon(entry.value); }
                 g.end_row();
             }
         });
@@ -472,7 +528,7 @@ fn draw_weapons(ui: _, game: GameRuntime, state: _) {
     });
 }
 
-fn draw_tomes(ui: _, game: GameRuntime, state: _) {
+fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
     // Grid of owned tomes
     let owned = [];
     for entry in game.tomes {
@@ -483,11 +539,13 @@ fn draw_tomes(ui: _, game: GameRuntime, state: _) {
     }
 
     if owned.len() > 0 {
-        ui.grid("tomes_owned", 2, |g| {
+        ui.grid("tomes_owned", 4, |g| {
             for entry in owned {
                 let lvl = game.get_tome_lvl(entry.value);
                 g.label(fmt::format("{} lv{}", entry.name, lvl));
-                if g.button("+") { game.add_tome_by_enum(entry.value); }
+                if g.button("+") { game.upgrade_tome(entry.value); }
+                if g.button("+10") { game.upgrade_tome_n(entry.value, 10); }
+                if g.button("max") { game.max_tome(entry.value); }
                 g.end_row();
             }
         });
@@ -508,14 +566,14 @@ fn draw_tomes(ui: _, game: GameRuntime, state: _) {
                 continue;
             }
             scroll.horizontal(|row| {
-                if row.button("+") { game.add_tome_by_enum(entry.value); }
+                if row.button("+") { game.upgrade_tome(entry.value); }
                 row.label(entry.name);
             });
         }
     });
 }
 
-fn draw_items(ui: _, game: GameRuntime, state: _) {
+fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
     // Grid of owned items
     let owned = [];
     for entry in game.items {
