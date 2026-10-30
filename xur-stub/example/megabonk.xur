@@ -85,9 +85,9 @@ struct GameRuntime {
     // both see mutations.
     godmode: cell::Cell<bool>
     // Enum entries
-    weapons: list<EnumEntry>
-    items: list<EnumEntry>
-    tomes: list<EnumEntry>
+    weapons: [EnumEntry]
+    items: [EnumEntry]
+    tomes: [EnumEntry]
 }
 
 // ---------------------------------------------------------------------------
