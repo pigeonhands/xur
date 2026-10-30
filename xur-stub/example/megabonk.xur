@@ -158,19 +158,9 @@ impl GameRuntime {
         log::debug("  PlayerInventory fields found (health, weapons, items, tomes, gold)");
 
         let add_item_method = item_inv_cls.method("AddItem", 1)?;
-        log::debug("  ItemInventory.AddItem(1) found @ {}", add_item_method.code_address());
+        log::debug("  ItemInventory.AddItem(1) found");
         let add_item_n_method = item_inv_cls.method("AddItem", 2)?;
-        log::debug("  ItemInventory.AddItem(2) found @ {}", add_item_n_method.code_address());
-
-        // Debug hook on AddItem to trace calls
-        add_item_method.hook(|ctx| {
-            log::info("[AddItem] args: {}", ctx.args());
-            None
-        });
-        add_item_n_method.hook(|ctx| {
-            log::info("[AddItem(2)] args: {}", ctx.args());
-            None
-        });
+        log::debug("  ItemInventory.AddItem(2) found");
         let remove_item_method = item_inv_cls.method("RemoveItem", 2)?;
         log::debug("  ItemInventory.RemoveItem(2) found");
         let get_item_amount = item_inv_cls.method("GetAmount", 1)?;
@@ -381,19 +371,19 @@ impl GameRuntime {
     fn add_item(self, value: i32) {
         let ii = self.item_inv();
         if ii.is_null() { return; }
-        self.add_item_method.invoke(ii, value);
+        self.add_item_method.invoke_on_main(ii, value);
     }
 
     fn add_item_n(self, value: i32, n: i32) {
         let ii = self.item_inv();
         if ii.is_null() { return; }
-        self.add_item_n_method.invoke(ii, value, n);
+        self.add_item_n_method.invoke_on_main(ii, value, n);
     }
 
     fn remove_item(self, value: i32) {
         let ii = self.item_inv();
         if ii.is_null() { return; }
-        self.remove_item_method.invoke(ii, value, false);
+        self.remove_item_method.invoke_on_main(ii, value, false);
     }
 
     fn get_item_count(self, value: i32) -> i32 {
@@ -411,7 +401,7 @@ impl GameRuntime {
         if weapon_data.is_null() { return; }
         let wi = self.weapon_inv();
         if wi.is_null() { return; }
-        self.add_weapon.invoke(wi, weapon_data, il2cpp::null());
+        self.add_weapon.invoke_on_main(wi, weapon_data, il2cpp::null());
     }
 
     fn get_weapon_lvl(self, value: i32) -> i32 {
@@ -443,7 +433,7 @@ impl GameRuntime {
         if tome_data.is_null() { return; }
         let ti = self.tome_inv();
         if ti.is_null() { return; }
-        self.add_tome.invoke(ti, tome_data, il2cpp::null(), 0);
+        self.add_tome.invoke_on_main(ti, tome_data, il2cpp::null(), 0);
     }
 
     fn add_tome_n(self, value: i32, n: i32) {
@@ -461,7 +451,7 @@ impl GameRuntime {
         if tome_data.is_null() { return; }
         let ti = self.tome_inv();
         if ti.is_null() { return; }
-        self.add_maxed_tome.invoke(ti, tome_data);
+        self.add_maxed_tome.invoke_on_main(ti, tome_data);
     }
 
     fn get_tome_lvl(self, value: i32) -> i32 {
