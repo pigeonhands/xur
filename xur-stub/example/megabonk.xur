@@ -277,9 +277,8 @@ fn stub_main() {
             match GameRuntime::init() {
                 Ok(game) => { rt = Some(game); }
                 Err(e) => {
-                    let msg = e.to_string();
-                    log(fmt::format("init error: {}", msg));
-                    rt_error = Some(msg);
+                    log(fmt::format("init error: {}", e));
+                    rt_error = Some(e);
                 }
             }
         }
