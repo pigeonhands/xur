@@ -14,7 +14,7 @@ mod egui_module;
 mod hooking_module;
 #[cfg(feature = "il2cpp-runtime")]
 mod il2cpp_module;
-mod tracing_module;
+
 
 const STACK_SIZE: usize = 256 << 20;
 const LOG_PATH: &str = "/tmp/xur-stub.log";
@@ -300,9 +300,6 @@ fn register_game_mods(registry: &Registry) {
         il2cpp_module::register(&registry, m);
     });
 
-    registry.lazy_module("std::stub::tracing", |m| {
-        tracing_module::register(m);
-    });
 }
 
 fn make_registry() -> Arc<Registry> {
@@ -345,6 +342,7 @@ mod tests {
         compile("game_inspector.xur", include_str!("../example/game_inspector.xur"));
         compile("godot.xur", include_str!("../example/godot.xur"));
         compile("sts2.xur", include_str!("../example/sts2.xur"));
+        compile("megabonk_discover.xur", include_str!("../example/megabonk_discover.xur"));
     }
 
     #[test]

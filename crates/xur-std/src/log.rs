@@ -46,6 +46,7 @@ struct SubscriberConfig {
     with_file: bool,
     with_line_number: bool,
     with_ansi: bool,
+    truncate: bool,
     format: Format,
     filter: Option<String>,
     output: Output,
@@ -59,6 +60,7 @@ impl Default for SubscriberConfig {
             with_file: false,
             with_line_number: false,
             with_ansi: true,
+            truncate: false,
             format: Format::Full,
             filter: None,
             output: Output::Stderr,
@@ -195,7 +197,9 @@ fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
         Output::File(path) => {
             let file = std::fs::OpenOptions::new()
                 .create(true)
-                .append(true)
+                .write(true)
+                .truncate(config.truncate)
+                .append(!config.truncate)
                 .open(path)
                 .map_err(|e| RuntimeError::new(format!("log init: {e}")))?;
             let writer = std::sync::Mutex::new(file);
@@ -299,6 +303,9 @@ pub(crate) fn register(registry: &Registry) {
             .raw_function_returns::<SubscriberBuilder>("with_filter", |_cx, args| {
                 let filter = str_arg(args, 1, "with_filter")?;
                 with_config(args, |c| c.filter = Some(filter.to_string()))
+            })
+            .raw_function_returns::<SubscriberBuilder>("truncate", |_cx, args| {
+                with_config(args, |c| c.truncate = true)
             })
             .raw_function_returns::<SubscriberBuilder>("to_file", |_cx, args| {
                 let path = str_arg(args, 1, "to_file")?;

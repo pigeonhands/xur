@@ -1,32 +1,37 @@
-// Structured logging with stub::tracing.
+// Structured logging with std::log.
 //
-// Registers a memory-backed log sink, drains buffered lines, and
-// prints them.  Works in any process.
+// Sets up a subscriber with file output, then emits log messages at
+// various levels.
 //
 //     cargo build -p xur-stub
 //     XUR_STUB_PATH=xur-stub/example/tracing.xur \
 //         LD_PRELOAD=target/debug/libxur_stub.so /bin/true
 
 use std::io;
-use std::stub::tracing;
+use std::log;
 
 fn ctor() {
-    tracing::register("memory", "debug");
+    log::subscriber().with_max_level("debug").init();
 }
 
 fn main() -> Result<()> {
-    io::println("[tracing] draining buffered log lines:");
-    let lines = tracing::drain();
-    for line in lines {
-        io::println("  {}", line);
-    }
-    io::println("[tracing] {} line(s) captured", lines.len());
+    log::info("application started");
+    log::debug("debug details: x={}", 42);
+    log::warn("something to watch");
+    log::error("this would be an error");
 
-    // Other sinks:
-    //   tracing::register("file", "/tmp/game.log")          — log to file
-    //   tracing::register("file", "/tmp/game.log", "trace") — with level
-    //   tracing::register("stdout")                          — log to stdout
-    //   tracing::register("stdout", "debug")                 — with level
+    io::println("[tracing] log messages emitted — check stderr or log file");
+
+    // To log to a file instead:
+    //   log::subscriber().to_file("/tmp/game.log").with_max_level("debug").init();
+    //
+    // Other subscriber options:
+    //   .with_target(false)       — hide module path
+    //   .with_ansi(false)         — no ANSI colors
+    //   .json()                   — JSON output format
+    //   .compact()                — compact format
+    //   .pretty()                 — pretty-printed format
+    //   .with_filter("my_mod=debug")  — per-module filtering
 
     Ok(())
 }
