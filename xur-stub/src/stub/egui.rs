@@ -176,19 +176,22 @@ fn init_early() {
 // Module registration
 // -----------------------------------------------------------------------
 
-pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
-    m.raw_function("init", |_cx, args| {
-        if !args.is_empty() {
-            return Err(RuntimeError::new("`init` takes no arguments"));
-        }
-        init_early();
-        Ok(Value::Unit)
-    });
+pub(crate) fn register(registry: &Registry) {
+    registry.lazy_module("std::stub::re::unity::egui", |m| {
+        let registry = m.registry();
+        m.raw_function("init", |_cx, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new("`init` takes no arguments"));
+            }
+            init_early();
+            Ok(Value::Unit)
+        });
 
-    register_run(m);
-    register_frame_count(m);
-    register_ctx_methods(registry, m);
-    register_ui_methods(registry, m);
+        register_run(m);
+        register_frame_count(m);
+        register_ctx_methods(&registry, m);
+        register_ui_methods(&registry, m);
+    });
 }
 
 /// `egui::run(fn(ctx))` — blocks forever, calling draw each frame.

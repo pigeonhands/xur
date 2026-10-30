@@ -35,7 +35,8 @@ impl Clone for XurHook {
     }
 }
 
-pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
+pub(crate) fn register(registry: &Registry) {
+    registry.lazy_module("std::stub::hooking", |m| {
     m.raw_function("create", |_cx, args| {
         let [Value::Int(target), Value::Int(dest)] = args else {
             return Err(RuntimeError::new(
@@ -120,7 +121,7 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         })
     });
 
-    let _ = registry;
+    });
 }
 
 fn with_hook(

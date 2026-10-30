@@ -799,7 +799,8 @@ fn marshal_call_result(
 // Registration
 // ---------------------------------------------------------------------------
 
-pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
+pub(crate) fn register(registry: &Registry) {
+    registry.lazy_module("std::stub::il2cpp", |m| {
     // --- loaded() ---
     m.raw_function_returns::<XurIl2Cpp>("loaded", |cx, args| {
         if !args.is_empty() {
@@ -1353,7 +1354,7 @@ pub(crate) fn register(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         .method("address", |o: &XurObject| -> i64 { o.0 as i64 })
         .method("is_null", |o: &XurObject| -> bool { o.0 == 0 });
 
-    let _ = registry;
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -8,12 +8,7 @@ use xur_runtime::Registry;
 use xur_span::RealFileLoader;
 use xur_vm::Vm;
 
-#[cfg(feature = "egui")]
-mod egui_module;
-#[cfg(feature = "hooking")]
-mod hooking_module;
-#[cfg(feature = "il2cpp-runtime")]
-mod il2cpp_module;
+mod stub;
 
 
 const STACK_SIZE: usize = 256 << 20;
@@ -178,27 +173,15 @@ fn compile_script(path: &Path) -> Result<Vm, String> {
 }
 
 fn run_main(script: &Script) -> Result<(), String> {
-    let result = thread::scope(|scope| {
-        thread::Builder::new()
-            .name(script.path.display().to_string())
-            .stack_size(STACK_SIZE)
-            .spawn_scoped(scope, || {
-                // Prefer stub_main() so a script can serve as both a CLI
-                // program and a stub payload.
-                match script.vm.run_fn("stub_main") {
-                    Some(r) => r,
-                    None => script.vm.run_main(),
-                }
-            })
-            .map(|h| h.join())
-    });
-
-    match result {
-        Ok(Ok(Ok(_))) => Ok(()),
-        Ok(Ok(Err(e))) => Err(format!("runtime error: {}", e.message)),
-        Ok(Err(_)) => Err("interpreter panicked".into()),
-        Err(e) => Err(format!("failed to start: {e}")),
-    }
+    // Prefer stub_main() so a script can serve as both a CLI
+    // program and a stub payload.
+    let result = match script.vm.run_fn("stub_main") {
+        Some(r) => r,
+        None => script.vm.run_main(),
+    };
+    result
+        .map(|_| ())
+        .map_err(|e| format!("runtime error: {}", e.message))
 }
 
 fn script_dir() -> Result<PathBuf, String> {
@@ -236,126 +219,11 @@ fn find_scripts(path: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(scripts)
 }
 
-fn register_game_mods(registry: &Registry) {
-    #[cfg(feature = "il2cpp-runtime")]
-    registry.lazy_module("std::stub::re::il2cpp_runtime", |m| {
-        let registry = m.registry();
-        xur_std::re::walk::register(
-            registry,
-            m,
-            hao_il2cpp_runtime::reflect::roots(),
-            |shape| {
-                let path = shape.module_path?;
-                if path.starts_with("hao_il2cpp_runtime") {
-                    Some("")
-                } else {
-                    None
-                }
-            },
-            &[],
-        );
-    });
-
-    #[cfg(feature = "il2cpp-unity")]
-    registry.lazy_module("std::stub::re::unity", |m| {
-        let registry = m.registry();
-        xur_std::re::walk::register(
-            registry,
-            m,
-            hao_il2cpp_unity::reflect::roots(),
-            |shape| {
-                let path = shape.module_path?;
-                if path.starts_with("hao_il2cpp_unity") {
-                    Some("")
-                } else {
-                    None
-                }
-            },
-            &[],
-        );
-    });
-
-    #[cfg(feature = "godot")]
-    registry.lazy_module("std::stub::re::godot", |m| {
-        let registry = m.registry();
-        xur_std::re::walk::register(
-            registry,
-            m,
-            &hao_godot::reflect::roots(),
-            |shape| {
-                let path = shape.module_path?;
-                if path.starts_with("hao_runtime") {
-                    Some("")
-                } else {
-                    None
-                }
-            },
-            &[],
-        );
-    });
-
-    #[cfg(feature = "il2cpp-unity")]
-    registry.lazy_module("std::stub::re::unity::time", |m| {
-        use hao_il2cpp_unity::time;
-        use xur_runtime::{RuntimeError, Value};
-
-        m.raw_function("scale", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`scale` takes no arguments"));
-            }
-            let scale = time::scale().unwrap_or(1.0);
-            Ok(Value::Float(scale as f64))
-        });
-
-        m.raw_function("set_scale", |_cx, args| {
-            let [Value::Float(scale)] = args else {
-                return Err(RuntimeError::new("`set_scale` takes a float"));
-            };
-            let _ = time::set_scale(*scale as f32);
-            Ok(Value::Unit)
-        });
-
-        m.raw_function("delta", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`delta` takes no arguments"));
-            }
-            let dt = time::delta().unwrap_or(0.0);
-            Ok(Value::Float(dt as f64))
-        });
-
-        m.raw_function("frame_count", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`frame_count` takes no arguments"));
-            }
-            let count = time::frame_count().unwrap_or(0);
-            Ok(Value::Int(count as i64))
-        });
-    });
-
-    #[cfg(feature = "egui")]
-    registry.lazy_module("std::stub::re::unity::egui", |m| {
-        let registry = m.registry();
-        egui_module::register(registry, m);
-    });
-
-    #[cfg(feature = "hooking")]
-    registry.lazy_module("std::stub::hooking", |m| {
-        let registry = m.registry();
-        hooking_module::register(&registry, m);
-    });
-
-    #[cfg(feature = "il2cpp-runtime")]
-    registry.lazy_module("std::stub::il2cpp", |m| {
-        let registry = m.registry();
-        il2cpp_module::register(&registry, m);
-    });
-
-}
 
 fn make_registry() -> Arc<Registry> {
     Arc::new({
         let r = xur_std::registry();
-        register_game_mods(&r);
+        stub::register(&r);
         r
     })
 }
