@@ -135,6 +135,16 @@ impl std::fmt::Display for DotnetTypeRef {
     }
 }
 
+#[derive(Facet, Clone)]
+#[facet(opaque)]
+struct DotnetField(Entry<Field>);
+
+impl std::fmt::Display for DotnetField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Field({})", self.0.get().name)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -186,10 +196,12 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
     dotnet.ty::<DotnetToken>("MemberToken");
     dotnet.ty::<DotnetTypeSig>("TypeSigDef");
     dotnet.ty::<DotnetMethodSig>("MethodSigDef");
-    dotnet.ty::<DotnetTypeDef>("TypeDefEntry");
-    dotnet.ty::<DotnetMethodEntry>("MethodEntry");
     dotnet.ty::<DotnetMethodBody>("MethodBody");
     dotnet.ty::<DotnetTypeRef>("BaseTypeRef");
+
+    register_type_def_methods(dotnet);
+    register_method_entry_methods(dotnet);
+    register_field_methods(dotnet);
 
     // --- module creation / loading ---
 
@@ -250,29 +262,66 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         .method("runtime_version", |m: &DotnetModule| {
             m.0.lock().unwrap().runtime_version.clone()
         })
-        .method("all_types", |m: &DotnetModule| {
-            m.0.lock().unwrap().all_types()
+        .raw_function("all_types", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`all_types` takes no arguments"));
+            };
+            with_module(this, |m| {
+                let types: Vec<DotnetTypeDef> =
+                    m.all_types().into_iter().map(DotnetTypeDef).collect();
+                into_value(cx, types)
+            })
         })
-        .method("all_methods", |m: &DotnetModule| {
-            m.0.lock().unwrap().all_methods()
+        .raw_function("all_methods", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`all_methods` takes no arguments"));
+            };
+            with_module(this, |m| {
+                let methods: Vec<DotnetMethodEntry> =
+                    m.all_methods().into_iter().map(DotnetMethodEntry).collect();
+                into_value(cx, methods)
+            })
         })
-        .method("all_fields", |m: &DotnetModule| {
-            m.0.lock().unwrap().all_fields()
+        .raw_function("all_fields", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`all_fields` takes no arguments"));
+            };
+            with_module(this, |m| {
+                let fields: Vec<DotnetField> =
+                    m.all_fields().into_iter().map(DotnetField).collect();
+                into_value(cx, fields)
+            })
         })
-        .method(
-            "find_type",
-            |m: &DotnetModule, namespace: String, name: String| {
-                m.0.lock().unwrap().find_type(&namespace, &name)
-            },
-        )
-        .method(
-            "find_type_by_full_name",
-            |m: &DotnetModule, full_name: String| {
-                m.0.lock().unwrap().find_type_by_full_name(&full_name)
-            },
-        )
-        .method("global_type", |m: &DotnetModule| {
-            m.0.lock().unwrap().global_type()
+        .raw_function("find_type", |cx, args| {
+            let [this, Value::Str(namespace), Value::Str(name)] = args else {
+                return Err(RuntimeError::new(
+                    "`find_type` takes (namespace: str, name: str)",
+                ));
+            };
+            with_module(this, |m| match m.find_type(namespace, name) {
+                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
+                None => Ok(Value::Unit),
+            })
+        })
+        .raw_function("find_type_by_full_name", |cx, args| {
+            let [this, Value::Str(full_name)] = args else {
+                return Err(RuntimeError::new(
+                    "`find_type_by_full_name` takes a string",
+                ));
+            };
+            with_module(this, |m| match m.find_type_by_full_name(full_name) {
+                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
+                None => Ok(Value::Unit),
+            })
+        })
+        .raw_function("global_type", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`global_type` takes no arguments"));
+            };
+            with_module(this, |m| match m.global_type() {
+                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
+                None => Ok(Value::Unit),
+            })
         })
         .method("original_image", |m: &DotnetModule| {
             m.0.lock().unwrap().original_image().to_vec()
@@ -583,4 +632,149 @@ fn register_flags(registry: &Registry) {
         GenericParamFlags,
         SignatureFlags,
     );
+}
+
+fn register_type_def_methods(dotnet: &mut ModuleBuilder<'_>) {
+    dotnet
+        .ty::<DotnetTypeDef>("TypeDefEntry")
+        .method("name", |t: &DotnetTypeDef| t.0.get().name.clone())
+        .method("namespace", |t: &DotnetTypeDef| t.0.get().namespace.clone())
+        .method("full_name", |t: &DotnetTypeDef| t.0.get().full_name())
+        .method("is_interface", |t: &DotnetTypeDef| t.0.get().is_interface())
+        .method("is_enum", |t: &DotnetTypeDef| t.0.get().is_enum())
+        .method("is_value_type", |t: &DotnetTypeDef| {
+            t.0.get().is_value_type()
+        })
+        .method("is_visible", |t: &DotnetTypeDef| t.0.get().is_visible())
+        .raw_function("base_type", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`base_type` takes no arguments"));
+            };
+            with_type_def(this, |td| match &td.extends {
+                Some(e) => into_value(cx, DotnetTypeRef(e.clone())),
+                None => Ok(Value::Unit),
+            })
+        })
+        .raw_function("fields", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`fields` takes no arguments"));
+            };
+            with_type_def(this, |td| {
+                let fields: Vec<DotnetField> =
+                    td.fields.iter().cloned().map(DotnetField).collect();
+                into_value(cx, fields)
+            })
+        })
+        .raw_function("methods", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`methods` takes no arguments"));
+            };
+            with_type_def(this, |td| {
+                let methods: Vec<DotnetMethodEntry> =
+                    td.methods.iter().cloned().map(DotnetMethodEntry).collect();
+                into_value(cx, methods)
+            })
+        })
+        .raw_function("nested_types", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`nested_types` takes no arguments"));
+            };
+            with_type_def(this, |td| {
+                let nested: Vec<DotnetTypeDef> =
+                    td.nested_types.iter().cloned().map(DotnetTypeDef).collect();
+                into_value(cx, nested)
+            })
+        });
+}
+
+fn register_method_entry_methods(dotnet: &mut ModuleBuilder<'_>) {
+    dotnet
+        .ty::<DotnetMethodEntry>("MethodEntry")
+        .method("name", |m: &DotnetMethodEntry| m.0.get().name.clone())
+        .method("is_static", |m: &DotnetMethodEntry| {
+            m.0.get().flags.contains(MethodFlags::Static)
+        })
+        .method("is_public", |m: &DotnetMethodEntry| {
+            m.0.get().flags & MethodFlags::MemberAccessMask == MethodFlags::Public
+        })
+        .raw_function("signature", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`signature` takes no arguments"));
+            };
+            with_method_entry(this, |m| into_value(cx, DotnetMethodSig(m.signature.clone())))
+        })
+        .raw_function("params", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`params` takes no arguments"));
+            };
+            with_method_entry(this, |m| {
+                let names: Vec<String> = m.params.iter().map(|p| p.get().name.clone()).collect();
+                into_value(cx, names)
+            })
+        })
+        .raw_function("return_type", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`return_type` takes no arguments"));
+            };
+            with_method_entry(this, |m| {
+                into_value(cx, DotnetTypeSig(m.signature.ret.clone()))
+            })
+        });
+}
+
+fn register_field_methods(dotnet: &mut ModuleBuilder<'_>) {
+    dotnet
+        .ty::<DotnetField>("FieldEntry")
+        .method("name", |f: &DotnetField| f.0.get().name.clone())
+        .method("is_static", |f: &DotnetField| f.0.get().is_static())
+        .raw_function("signature", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`signature` takes no arguments"));
+            };
+            with_field(this, |f| into_value(cx, DotnetTypeSig(f.signature.ty.clone())))
+        });
+}
+
+fn with_type_def(
+    val: &Value,
+    f: impl FnOnce(&TypeDef) -> Result<Value, RuntimeError>,
+) -> Result<Value, RuntimeError> {
+    let Value::Native(obj) = val else {
+        return Err(RuntimeError::new("expected a `TypeDefEntry`"));
+    };
+    obj.with(|t: &DotnetTypeDef| f(&t.0.get()))
+        .ok_or_else(|| RuntimeError::new("expected a `TypeDefEntry`"))?
+}
+
+fn with_method_entry(
+    val: &Value,
+    f: impl FnOnce(&Method) -> Result<Value, RuntimeError>,
+) -> Result<Value, RuntimeError> {
+    let Value::Native(obj) = val else {
+        return Err(RuntimeError::new("expected a `MethodEntry`"));
+    };
+    obj.with(|m: &DotnetMethodEntry| f(&m.0.get()))
+        .ok_or_else(|| RuntimeError::new("expected a `MethodEntry`"))?
+}
+
+fn with_field(
+    val: &Value,
+    f: impl FnOnce(&Field) -> Result<Value, RuntimeError>,
+) -> Result<Value, RuntimeError> {
+    let Value::Native(obj) = val else {
+        return Err(RuntimeError::new("expected a `Field`"));
+    };
+    obj.with(|fi: &DotnetField| f(&fi.0.get()))
+        .ok_or_else(|| RuntimeError::new("expected a `Field`"))?
+}
+
+fn with_module(
+    val: &Value,
+    f: impl FnOnce(&hao::Module) -> Result<Value, RuntimeError>,
+) -> Result<Value, RuntimeError> {
+    let Value::Native(obj) = val else {
+        return Err(RuntimeError::new("expected a `Module`"));
+    };
+    obj.with(|m: &DotnetModule| f(&m.0.lock().unwrap()))
+        .ok_or_else(|| RuntimeError::new("expected a `Module`"))?
 }
