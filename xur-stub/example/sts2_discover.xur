@@ -40,9 +40,9 @@ fn main() -> Result<()> {
     io::println("");
 
     let targets = [
-        "MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState",
-        "MegaCrit.Sts2.Core.Combat.CombatManager",
-        "MegaCrit.Sts2.Core.Entities.Players.Player",
+        "MegaCrit.Sts2.Core.Runs.RunManager",
+        "MegaCrit.Sts2.Core.Runs.RunState",
+        "MegaCrit.Sts2.Core.Combat.CombatRoom",
     ];
 
     for name in targets {

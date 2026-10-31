@@ -13,7 +13,6 @@ use std::ffi::CString;
 use std::sync::Mutex;
 
 use facet::Facet;
-use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
 
 #[derive(Facet)]

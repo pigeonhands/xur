@@ -40,12 +40,12 @@ unsafe extern "C" fn crash_signal_handler(
         0u64
     } else {
         let uctx = ctx as *const libc::ucontext_t;
-        (*uctx).uc_mcontext.gregs[libc::REG_RIP as usize] as u64
+        unsafe { (*uctx).uc_mcontext.gregs[libc::REG_RIP as usize] as u64 }
     };
     let fault_addr = if info.is_null() {
         0u64
     } else {
-        (*info).si_addr() as u64
+        unsafe { (*info).si_addr() as u64 }
     };
     let sig_name = if sig == libc::SIGSEGV { "SIGSEGV" } else { "SIGBUS" };
     let msg = format!(
@@ -57,11 +57,11 @@ unsafe extern "C" fn crash_signal_handler(
         .append(true)
         .open(LOG_PATH)
         .and_then(|mut f| f.write_all(msg.as_bytes()));
-    // Also write to stderr for lldb/terminal visibility.
-    let _ = libc::write(2, msg.as_ptr() as *const _, msg.len());
-    // Re-raise with default handler.
-    libc::signal(sig, libc::SIG_DFL);
-    libc::raise(sig);
+    unsafe {
+        let _ = libc::write(2, msg.as_ptr() as *const _, msg.len());
+        libc::signal(sig, libc::SIG_DFL);
+        libc::raise(sig);
+    }
 }
 
 #[cfg(not(unix))]

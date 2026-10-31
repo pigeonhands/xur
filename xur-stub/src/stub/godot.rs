@@ -201,17 +201,19 @@ unsafe fn call_native(ptr: usize, args: &[u64]) -> u64 {
     type F5 = unsafe extern "C" fn(u64, u64, u64, u64, u64) -> u64;
     type F6 = unsafe extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64;
 
-    match args.len() {
-        0 => std::mem::transmute::<usize, F0>(ptr)(),
-        1 => std::mem::transmute::<usize, F1>(ptr)(args[0]),
-        2 => std::mem::transmute::<usize, F2>(ptr)(args[0], args[1]),
-        3 => std::mem::transmute::<usize, F3>(ptr)(args[0], args[1], args[2]),
-        4 => std::mem::transmute::<usize, F4>(ptr)(args[0], args[1], args[2], args[3]),
-        5 => std::mem::transmute::<usize, F5>(ptr)(args[0], args[1], args[2], args[3], args[4]),
-        6 => std::mem::transmute::<usize, F6>(ptr)(
-            args[0], args[1], args[2], args[3], args[4], args[5],
-        ),
-        _ => panic!("too many arguments for call (max 6)"),
+    unsafe {
+        match args.len() {
+            0 => std::mem::transmute::<usize, F0>(ptr)(),
+            1 => std::mem::transmute::<usize, F1>(ptr)(args[0]),
+            2 => std::mem::transmute::<usize, F2>(ptr)(args[0], args[1]),
+            3 => std::mem::transmute::<usize, F3>(ptr)(args[0], args[1], args[2]),
+            4 => std::mem::transmute::<usize, F4>(ptr)(args[0], args[1], args[2], args[3]),
+            5 => std::mem::transmute::<usize, F5>(ptr)(args[0], args[1], args[2], args[3], args[4]),
+            6 => std::mem::transmute::<usize, F6>(ptr)(
+                args[0], args[1], args[2], args[3], args[4], args[5],
+            ),
+            _ => panic!("too many arguments for call (max 6)"),
+        }
     }
 }
 
@@ -222,12 +224,14 @@ unsafe fn call_native_float(ptr: usize, args: &[u64]) -> f64 {
     type F2 = unsafe extern "C" fn(u64, u64) -> f64;
     type F3 = unsafe extern "C" fn(u64, u64, u64) -> f64;
 
-    match args.len() {
-        0 => std::mem::transmute::<usize, F0>(ptr)(),
-        1 => std::mem::transmute::<usize, F1>(ptr)(args[0]),
-        2 => std::mem::transmute::<usize, F2>(ptr)(args[0], args[1]),
-        3 => std::mem::transmute::<usize, F3>(ptr)(args[0], args[1], args[2]),
-        _ => panic!("too many arguments for call_float (max 3)"),
+    unsafe {
+        match args.len() {
+            0 => std::mem::transmute::<usize, F0>(ptr)(),
+            1 => std::mem::transmute::<usize, F1>(ptr)(args[0]),
+            2 => std::mem::transmute::<usize, F2>(ptr)(args[0], args[1]),
+            3 => std::mem::transmute::<usize, F3>(ptr)(args[0], args[1], args[2]),
+            _ => panic!("too many arguments for call_float (max 3)"),
+        }
     }
 }
 

@@ -16,7 +16,6 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use hao_il2cpp_runtime::{self as rt, Il2Cpp};
 use xur_runtime::convert::{ConvertCx, into_value};
-use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
 
 // ---------------------------------------------------------------------------
