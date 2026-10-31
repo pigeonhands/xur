@@ -2,6 +2,8 @@
 pub(crate) mod egui;
 #[cfg(feature = "hooking")]
 pub(crate) mod hooking;
+#[cfg(feature = "godot")]
+mod godot;
 #[cfg(feature = "il2cpp-runtime")]
 pub(crate) mod il2cpp;
 mod re;
@@ -20,4 +22,6 @@ pub(crate) fn register(registry: &Registry) {
     hooking::register(registry);
     #[cfg(feature = "il2cpp-runtime")]
     il2cpp::register(registry);
+    #[cfg(feature = "godot")]
+    godot::register(registry);
 }
