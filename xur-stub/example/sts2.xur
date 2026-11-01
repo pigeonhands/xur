@@ -22,16 +22,19 @@ use std::stub::godot;
 
 struct GameMethods {
     rt: godot::Runtime
-    // RunManager
+    // RunManager → RunState → Player
     get_rm_instance: godot::MethodPtr
-    // RunManager → RunState (private getter, resolved via NonPublic binding)
     get_state: godot::MethodPtr
+    get_debug_state: godot::MethodPtr
+    get_in_progress: godot::MethodPtr
+    get_players: godot::MethodPtr
     // Player properties
     get_gold: godot::MethodPtr
     set_gold: godot::MethodPtr
     get_max_energy: godot::MethodPtr
     set_max_energy: godot::MethodPtr
     get_combat_state: godot::MethodPtr
+    get_creature: godot::MethodPtr
     // PlayerCombatState
     get_energy: godot::MethodPtr
     set_energy: godot::MethodPtr
@@ -46,12 +49,9 @@ struct GameMethods {
     heal_internal: godot::MethodPtr
     set_max_hp_internal: godot::MethodPtr
     gain_block_internal: godot::MethodPtr
-    // Player → Creature
-    get_creature: godot::MethodPtr
-    // Captured references
-    player_ref: godot::CapturedRef
-    // Godmode toggle (affects all creatures — blocks LoseHpInternal globally)
+    // Godmode toggle
     godmode: cell::Cell<bool>
+    player_creature_addr: cell::Cell<i64>
 }
 
 struct UiState {
@@ -78,9 +78,19 @@ impl GameMethods {
         let creature_t = "MegaCrit.Sts2.Core.Entities.Creatures.Creature";
         let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
 
+        let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+
         log::info("resolving RunManager...");
         let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
+        log::info(fmt::format("  get_Instance @ {}", get_rm_instance.address()));
         let get_state = rt.method(asm, rm_t, "get_State")?;
+        log::info(fmt::format("  get_State @ {}", get_state.address()));
+        let get_debug_state = rt.method(asm, rm_t, "DebugOnlyGetState")?;
+        log::info(fmt::format("  DebugOnlyGetState @ {}", get_debug_state.address()));
+        let get_in_progress = rt.method(asm, rm_t, "get_IsInProgress")?;
+        log::info(fmt::format("  get_IsInProgress @ {}", get_in_progress.address()));
+        let get_players = rt.method(asm, rs_t, "get_Players")?;
+        log::info(fmt::format("  get_Players @ {}", get_players.address()));
 
         log::info("resolving Player methods...");
         let get_gold = rt.method(asm, player_t, "get_Gold")?;
@@ -106,21 +116,24 @@ impl GameMethods {
         let set_max_hp_internal = rt.method(asm, creature_t, "SetMaxHpInternal")?;
         let gain_block_internal = rt.method(asm, creature_t, "GainBlockInternal")?;
 
-        log::info("setting up capture hooks...");
-        let player_ref = get_creature.capture_this();
-        log::info("player capture hook installed");
-
         // Godmode — hook LoseHpInternal and DamageBlockInternal on
         // Creature. When godmode is on, returns Some(0) to skip the
         // method for all creatures.
         let godmode = cell::new(false);
-        let lose_hp_ptr = rt.method(asm, creature_t, "LoseHpInternal")?;
-        let damage_block_ptr = rt.method(asm, creature_t, "DamageBlockInternal")?;
-        lose_hp_ptr.hook(|| {
-            if godmode.get() { Some(0) } else { None }
+        let player_creature_addr = cell::new(0);
+        let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
+        let damage_block_raw = rt.method(asm, creature_t, "DamageBlockInternal")?;
+        let lose_hp_ptr = lose_hp_raw.resolve_jit();
+        let damage_block_ptr = damage_block_raw.resolve_jit();
+        log::info(fmt::format("LoseHpInternal: precode={} jit={}", lose_hp_raw.address(), lose_hp_ptr.address()));
+        log::info(fmt::format("  jit bytes: {}", lose_hp_ptr.peek_bytes(32)));
+        log::info(fmt::format("DamageBlockInternal: precode={} jit={}", damage_block_raw.address(), damage_block_ptr.address()));
+        log::info(fmt::format("  jit bytes: {}", damage_block_ptr.peek_bytes(32)));
+        lose_hp_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
         });
-        damage_block_ptr.hook(|| {
-            if godmode.get() { Some(0) } else { None }
+        damage_block_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
         });
         log::info("godmode hooks installed");
 
@@ -128,11 +141,15 @@ impl GameMethods {
             rt,
             get_rm_instance,
             get_state,
+            get_debug_state,
+            get_in_progress,
+            get_players,
             get_gold,
             set_gold,
             get_max_energy,
             set_max_energy,
             get_combat_state,
+            get_creature,
             get_energy,
             set_energy,
             get_max_energy_combat,
@@ -145,14 +162,29 @@ impl GameMethods {
             heal_internal,
             set_max_hp_internal,
             gain_block_internal,
-            get_creature,
-            player_ref,
             godmode,
+            player_creature_addr,
         })
     }
 
+    fn player_inner(self) -> godot::ManagedObject {
+        let rm = self.get_rm_instance.call_ptr();
+        if rm.is_null() { return godot::null(); }
+        let state = self.get_state.call_ptr(rm);
+        if state.is_null() { return godot::null(); }
+        // get_Players returns List<Player>: _items at +8, _size at +16
+        // Array element 0 at +16 in the array object
+        let players_list = self.get_players.call_ptr(state);
+        if players_list.is_null() { return godot::null(); }
+        let count = players_list.read_i64(16);
+        if count <= 0 { return godot::null(); }
+        let items_array = players_list.deref(8);
+        if items_array.is_null() { return godot::null(); }
+        items_array.deref(16)
+    }
+
     fn player(self) -> godot::ManagedObject {
-        self.player_ref.get()
+        self.player_inner()
     }
 
     fn in_game(self) -> bool {
@@ -286,6 +318,10 @@ impl GameMethods {
 // ---------------------------------------------------------------------------
 
 fn draw_status(ui: gui::Ui, game: GameMethods) {
+    let c = game.creature();
+    if !c.is_null() {
+        game.player_creature_addr.set(c.address());
+    }
     let hp = game.hp();
     let max = game.max_hp();
     let blk = game.block();
@@ -311,7 +347,7 @@ fn draw_combat(ui: gui::Ui, game: GameMethods) {
     ui.heading("Combat");
 
     let godmode = game.is_godmode();
-    let new_godmode = ui.checkbox(godmode, "Godmode (all creatures)");
+    let new_godmode = ui.checkbox(godmode, "Godmode");
     if new_godmode != godmode {
         game.set_godmode(new_godmode);
     }
@@ -365,7 +401,7 @@ fn draw_player(ui: gui::Ui, game: GameMethods) {
 // ---------------------------------------------------------------------------
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level("debug").init();
+    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level("info").init();
 }
 
 fn stub_main() {
@@ -383,7 +419,6 @@ fn stub_main() {
     let game: Option<GameMethods> = None;
     let game_error: Option<str> = None;
     let state = new_ui_state();
-
     gui::run("STS2 Trainer", |ui| {
         // Lazy init — resolve methods after CLR is ready.
         if game.is_none() && game_error.is_none() {
