@@ -196,7 +196,6 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
     dotnet.ty::<DotnetToken>("MemberToken");
     dotnet.ty::<DotnetTypeSig>("TypeSigDef");
     dotnet.ty::<DotnetMethodSig>("MethodSigDef");
-    dotnet.ty::<DotnetMethodBody>("MethodBody");
     dotnet.ty::<DotnetTypeRef>("BaseTypeRef");
 
     register_type_def_methods(dotnet);
@@ -719,6 +718,104 @@ fn register_method_entry_methods(dotnet: &mut ModuleBuilder<'_>) {
             with_method_entry(this, |m| {
                 into_value(cx, DotnetTypeSig(m.signature.ret.clone()))
             })
+        })
+        .method("is_virtual", |m: &DotnetMethodEntry| {
+            m.0.get().flags.contains(MethodFlags::Virtual)
+        })
+        .method("is_abstract", |m: &DotnetMethodEntry| {
+            m.0.get().flags.contains(MethodFlags::Abstract)
+        })
+        .method("flags", |m: &DotnetMethodEntry| m.0.get().flags.bits() as i64)
+        .raw_function("body", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`body` takes no arguments"));
+            };
+            with_method_entry(this, |m| match &m.body {
+                Some(body) => into_value(cx, DotnetMethodBody(body.clone())),
+                None => Ok(Value::Unit),
+            })
+        });
+
+    register_method_body(dotnet);
+}
+
+fn register_method_body(dotnet: &mut ModuleBuilder<'_>) {
+    use hao::dotnet::il::{Operand, MemberToken as MT};
+
+    dotnet
+        .ty::<DotnetMethodBody>("MethodBody")
+        .method("size", |b: &DotnetMethodBody| {
+            b.0.instructions.len() as i64
+        })
+        .raw_function("instructions", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`instructions` takes no arguments"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a MethodBody"));
+            };
+            let lines = obj
+                .with(|b: &DotnetMethodBody| {
+                    b.0.instructions
+                        .iter()
+                        .enumerate()
+                        .map(|(i, instr)| {
+                            let op = &instr.operand;
+                            let operand_str = match op {
+                                Operand::None => String::new(),
+                                Operand::Int32(v) => format!(" {v}"),
+                                Operand::Int64(v) => format!(" {v}"),
+                                Operand::Float32(v) => format!(" {v}"),
+                                Operand::Float64(v) => format!(" {v}"),
+                                Operand::Target(l) => format!(" IL_{:04x}", l.0),
+                                Operand::Switch(targets) => {
+                                    let labels: Vec<String> =
+                                        targets.iter().map(|l| format!("IL_{:04x}", l.0)).collect();
+                                    format!(" ({})", labels.join(", "))
+                                }
+                                Operand::Local(idx) => format!(" V_{idx}"),
+                                Operand::Arg(idx) => format!(" A_{idx}"),
+                                Operand::String(s) => format!(" \"{s}\""),
+                                Operand::Sig(_) => " <sig>".into(),
+                                Operand::Token(token) => {
+                                    let desc = match token {
+                                        MT::Method(m) => {
+                                            let g = m.get();
+                                            let ty = g.declaring_type.upgrade()
+                                                .map(|t| t.get().full_name())
+                                                .unwrap_or_default();
+                                            format!(" {ty}::{}", g.name)
+                                        }
+                                        MT::Field(f) => {
+                                            let g = f.get();
+                                            let ty = g.declaring_type.upgrade()
+                                                .map(|t| t.get().full_name())
+                                                .unwrap_or_default();
+                                            format!(" {ty}::{}", g.name)
+                                        }
+                                        MT::MemberRef(mr) => {
+                                            let g = mr.get();
+                                            let class = match &g.parent {
+                                                hao::dotnet::entries::MemberRefParent::TypeRef(tr) => tr.get().full_name(),
+                                                hao::dotnet::entries::MemberRefParent::TypeDef(td) => td.get().full_name(),
+                                                _ => String::new(),
+                                            };
+                                            format!(" {class}::{}", g.name)
+                                        }
+                                        MT::TypeDef(t) => format!(" {}", t.get().full_name()),
+                                        MT::TypeRef(t) => format!(" {}", t.get().full_name()),
+                                        MT::TypeSpec(_) => " <typespec>".into(),
+                                        MT::MethodSpec(_) => " <methodspec>".into(),
+                                    };
+                                    desc
+                                }
+                            };
+                            format!("IL_{i:04x}: {}{operand_str}", instr.opcode)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .ok_or_else(|| RuntimeError::new("expected a MethodBody"))?;
+            into_value(cx, lines)
         });
 }
 
@@ -727,6 +824,12 @@ fn register_field_methods(dotnet: &mut ModuleBuilder<'_>) {
         .ty::<DotnetField>("FieldEntry")
         .method("name", |f: &DotnetField| f.0.get().name.clone())
         .method("is_static", |f: &DotnetField| f.0.get().is_static())
+        .raw_function("field_type", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`field_type` takes no arguments"));
+            };
+            with_field(this, |f| into_value(cx, DotnetTypeSig(f.signature.ty.clone())))
+        })
         .raw_function("signature", |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`signature` takes no arguments"));
