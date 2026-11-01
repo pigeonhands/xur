@@ -91,6 +91,7 @@ impl std::fmt::Display for CapturedRef {
 // ---------------------------------------------------------------------------
 
 /// Per-hook state, stored in a global map keyed by original function address.
+#[derive(Clone)]
 enum HookEntry {
     Capture(&'static AtomicUsize),
     Callback {
@@ -100,6 +101,17 @@ enum HookEntry {
 }
 
 static HOOKS: OnceLock<Mutex<HashMap<usize, HookEntry>>> = OnceLock::new();
+
+/// Use ProtectPatcher instead of the default AliasPatcher. CoreCLR's JIT
+/// code pages should not be replaced with memfd-backed copies, as the
+/// runtime may still need to modify other code on the same page.
+#[cfg(target_arch = "x86_64")]
+static PROTECT_PATCHER: hooking::patch::ProtectPatcher = hooking::patch::ProtectPatcher::new();
+
+#[cfg(target_arch = "x86_64")]
+fn hook_writer() -> hooking::HookWriter<'static> {
+    hooking::HookWriter::from_static().with_patcher(&PROTECT_PATCHER)
+}
 
 fn hooks() -> &'static Mutex<HashMap<usize, HookEntry>> {
     HOOKS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -112,20 +124,26 @@ extern "C" fn godot_hook_dispatch(
     _sse_regs: *mut [u8; 16],
     result: *mut hooking::DispatchResult,
 ) {
-    let map = hooks().lock().unwrap_or_else(|e| e.into_inner());
-    let Some(entry) = map.get(&original) else {
+    // Clone the entry and release the mutex before calling the callback.
+    // This prevents deadlocks if the callback re-enters a hooked function.
+    let entry = {
+        let map = hooks().lock().unwrap_or_else(|e| e.into_inner());
+        map.get(&original).cloned()
+    };
+    let Some(entry) = entry else {
         unsafe { *result = hooking::DispatchResult::passthrough(); }
         return;
     };
-    let dr = match entry {
+    let dr = match &entry {
         HookEntry::Capture(slot) => {
             let this_ptr = unsafe { *int_regs };
             slot.store(this_ptr as usize, Ordering::Relaxed);
             hooking::DispatchResult::passthrough()
         }
         HookEntry::Callback { closure, handle } => {
-            match handle.call_closure(closure, &[]) {
-                Ok(val) => interpret_hook_result(val, handle.lang()),
+            let this_addr = unsafe { *int_regs } as i64;
+            match handle.call_closure(closure, &[Value::Int(this_addr)]) {
+                Ok(val) => interpret_hook_result(val, handle.lang(), int_regs),
                 Err(e) => {
                     tracing::error!("godot hook callback error: {}", e.message);
                     hooking::DispatchResult::passthrough()
@@ -136,41 +154,32 @@ extern "C" fn godot_hook_dispatch(
     unsafe { *result = dr; }
 }
 
-/// Interprets a hook callback's return value: None → passthrough, Some(val) → override.
+/// Interprets a hook callback's return value:
+///   None  → passthrough (original runs unchanged)
+///   Some(_) → zero non-this int arg registers, then passthrough
+///             (original runs with zeroed args, e.g. Decimal amount = 0)
+///   Unit  → passthrough
 #[cfg(target_arch = "x86_64")]
 fn interpret_hook_result(
     result: Value,
     lang: &xur_resolve::LangItems,
+    int_regs: *mut u64,
 ) -> hooking::DispatchResult {
     if let Value::Adt(ref adt) = result {
         if adt.ctor == lang.none {
             return hooking::DispatchResult::passthrough();
         }
         if adt.ctor == lang.some {
-            let inner = adt.fields.first().cloned().unwrap_or(Value::Unit);
-            return value_to_override(inner);
+            unsafe {
+                *int_regs.add(1) = 0; // rsi
+                *int_regs.add(2) = 0; // rdx
+            }
+            return hooking::DispatchResult::passthrough();
         }
     }
-    if matches!(result, Value::Unit) {
-        return hooking::DispatchResult::passthrough();
-    }
-    value_to_override(result)
+    hooking::DispatchResult::passthrough()
 }
 
-#[cfg(target_arch = "x86_64")]
-fn value_to_override(val: Value) -> hooking::DispatchResult {
-    match val {
-        Value::Unit => hooking::DispatchResult::override_int(0),
-        Value::Bool(b) => hooking::DispatchResult::override_int(b as u64),
-        Value::Int(i) => hooking::DispatchResult::override_int(i as u64),
-        Value::Float(f) => hooking::DispatchResult::override_float(f),
-        Value::Native(ref n) => {
-            let ptr = n.with(|o: &ManagedObject| o.0 as u64).unwrap_or(0);
-            hooking::DispatchResult::override_int(ptr)
-        }
-        _ => hooking::DispatchResult::override_int(0),
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Calling helpers
@@ -298,7 +307,10 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
                 .get()
                 .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
             let lang = cx.lang();
-            match rt.method_pointer(assembly, type_name, method) {
+            let result = rt
+                .method_pointer_from_loaded(assembly, type_name, method)
+                .or_else(|_| rt.method_pointer(assembly, type_name, method));
+            match result {
                 Ok(ptr) => {
                     let v = into_value(cx, MethodPtr(ptr as usize))?;
                     Ok(Value::adt(lang.ok, vec![v]))
@@ -374,10 +386,11 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             {
                 let slot: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
                 let mut hook = unsafe {
-                    hooking::Hook::create_save_registers(
-                        ptr.0 as *mut u8,
-                        godot_hook_dispatch,
-                    )
+                    hook_writer()
+                        .create_save_registers(
+                            ptr.0 as *mut u8,
+                            godot_hook_dispatch,
+                        )
                 }
                 .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
                 let orig = hook.original_function().as_ptr() as usize;
@@ -411,10 +424,11 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(target_arch = "x86_64")]
             {
                 let mut hook = unsafe {
-                    hooking::Hook::create_save_registers(
-                        ptr.0 as *mut u8,
-                        godot_hook_dispatch,
-                    )
+                    hook_writer()
+                        .create_save_registers(
+                            ptr.0 as *mut u8,
+                            godot_hook_dispatch,
+                        )
                 }
                 .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
                 let orig = hook.original_function().as_ptr() as usize;
@@ -430,13 +444,121 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("hook only supported on x86_64"))
         })
-        .method("address", |p: &MethodPtr| -> i64 { p.0 as i64 });
+        .method("address", |p: &MethodPtr| -> i64 { p.0 as i64 })
+        .raw_function("resolve_jit", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`resolve_jit` takes no arguments"));
+            };
+            let ptr = extract_ptr(this)?;
+            let addr = ptr.0 as *const u8;
+            let resolved = unsafe {
+                let b0 = *addr;
+                let b1 = *addr.add(1);
+                if b0 == 0xff && b1 == 0x25 {
+                    let disp = std::ptr::read_unaligned(addr.add(2) as *const i32);
+                    let target_ptr = addr.add(6).offset(disp as isize) as *const usize;
+                    *target_ptr
+                } else if b0 == 0xe9 {
+                    let disp = std::ptr::read_unaligned(addr.add(1) as *const i32);
+                    addr.add(5).offset(disp as isize) as usize
+                } else {
+                    ptr.0
+                }
+            };
+            into_value(cx, MethodPtr(resolved))
+        })
+        .raw_function("patch_precode_target", |_cx, args| {
+            let [this, Value::Native(target_obj)] = args else {
+                return Err(RuntimeError::new(
+                    "`patch_precode_target` takes (new_target: MethodPtr)",
+                ));
+            };
+            let ptr = extract_ptr(this)?;
+            let new_target = target_obj
+                .with(|o: &MethodPtr| o.0)
+                .ok_or_else(|| RuntimeError::new("expected a MethodPtr"))?;
+            let addr = ptr.0 as *const u8;
+            unsafe {
+                let b0 = *addr;
+                let b1 = *addr.add(1);
+                if b0 == 0xff && b1 == 0x25 {
+                    let disp = std::ptr::read_unaligned(addr.add(2) as *const i32);
+                    let slot = addr.add(6).offset(disp as isize) as *mut usize;
+                    *slot = new_target;
+                    Ok(Value::Unit)
+                } else {
+                    Err(RuntimeError::new("not a precode (expected ff 25)"))
+                }
+            }
+        })
+        .raw_function("peek_bytes", |_cx, args| {
+            let [this, Value::Int(count)] = args else {
+                return Err(RuntimeError::new("`peek_bytes` takes (count: int)"));
+            };
+            let ptr = extract_ptr(this)?;
+            let n = (*count).min(64).max(0) as usize;
+            let bytes: Vec<u8> =
+                (0..n).map(|i| unsafe { *((ptr.0 + i) as *const u8) }).collect();
+            let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            Ok(Value::str(&hex.join(" ")))
+        });
 }
 
 fn register_managed_object(m: &mut ModuleBuilder<'_>) {
     m.ty::<ManagedObject>("ManagedObject")
         .method("address", |o: &ManagedObject| -> i64 { o.0 as i64 })
-        .method("is_null", |o: &ManagedObject| -> bool { o.0 == 0 });
+        .method("is_null", |o: &ManagedObject| -> bool { o.0 == 0 })
+        .raw_function("read_i64", |_cx, args| {
+            let [this, Value::Int(offset)] = args else {
+                return Err(RuntimeError::new("`read_i64` takes (offset: int)"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a ManagedObject"));
+            };
+            let addr = obj
+                .with(|o: &ManagedObject| o.0)
+                .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
+            if addr == 0 {
+                return Err(RuntimeError::new("null pointer"));
+            }
+            let ptr = (addr as isize + *offset as isize) as *const i64;
+            let val = unsafe { std::ptr::read_unaligned(ptr) };
+            Ok(Value::Int(val))
+        })
+        .raw_function("deref", |cx, args| {
+            let [this, Value::Int(offset)] = args else {
+                return Err(RuntimeError::new("`deref` takes (offset: int)"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a ManagedObject"));
+            };
+            let addr = obj
+                .with(|o: &ManagedObject| o.0)
+                .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
+            if addr == 0 {
+                return Err(RuntimeError::new("null pointer"));
+            }
+            let ptr = (addr as isize + *offset as isize) as *const usize;
+            let val = unsafe { std::ptr::read_unaligned(ptr) };
+            into_value(cx, ManagedObject(val))
+        })
+        .raw_function("read_u8", |_cx, args| {
+            let [this, Value::Int(offset)] = args else {
+                return Err(RuntimeError::new("`read_u8` takes (offset: int)"));
+            };
+            let Value::Native(obj) = this else {
+                return Err(RuntimeError::new("expected a ManagedObject"));
+            };
+            let addr = obj
+                .with(|o: &ManagedObject| o.0)
+                .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
+            if addr == 0 {
+                return Err(RuntimeError::new("null pointer"));
+            }
+            let ptr = (addr as isize + *offset as isize) as *const u8;
+            let val = unsafe { std::ptr::read(ptr) };
+            Ok(Value::Int(val as i64))
+        });
 }
 
 fn register_captured_ref(m: &mut ModuleBuilder<'_>) {
