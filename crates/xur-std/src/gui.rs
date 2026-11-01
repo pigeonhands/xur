@@ -139,6 +139,7 @@ fn run_native(
 
     impl eframe::App for XurApp {
         fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+            ui.ctx().request_repaint();
             let draw = self.draw.clone();
             let cx = self.cx();
             match into_value(cx, GuiUi::from_ui(ui)) {
