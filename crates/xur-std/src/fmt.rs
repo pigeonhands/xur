@@ -51,16 +51,19 @@ mod tests {
         let print = fn_id(&registry, "std::io::print");
         let error = |cx: &mut TestCx<'_>, args: &[Value]| cx.call(print, args).unwrap_err().message;
         assert_eq!(
-            error(&mut cx, &[Value::str("{}")]),
-            "the format string has more `{}` than arguments"
-        );
-        assert_eq!(
             error(&mut cx, &[Value::str("x"), Value::Int(1)]),
             "more arguments than `{}` in the format string"
         );
-        assert_eq!(
-            error(&mut cx, &[Value::str("{")]),
-            "unmatched `{` in format string; write `{{` for a literal brace"
-        );
+    }
+
+    #[test]
+    fn no_args_passes_through_literal() {
+        let registry = registry();
+        let mut cx = TestCx::new(&registry, crate::PRELUDE);
+        let print = fn_id(&registry, "std::io::print");
+        // With no extra args, braces are literal text, not format directives.
+        cx.call(print, &[Value::str("{}")]).unwrap();
+        cx.call(print, &[Value::str("{")]).unwrap();
+        cx.call(print, &[Value::str("hello {world}")]).unwrap();
     }
 }

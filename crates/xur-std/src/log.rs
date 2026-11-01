@@ -359,5 +359,9 @@ fn log_message(cx: &mut dyn Context, args: &[Value]) -> RunResult<String> {
     let Some((Value::Str(template), rest)) = args.split_first() else {
         return Err(RuntimeError::new("log functions take a format string"));
     };
-    fmt::format(cx, template, rest)
+    if rest.is_empty() {
+        Ok(template.to_string())
+    } else {
+        fmt::format(cx, template, rest)
+    }
 }

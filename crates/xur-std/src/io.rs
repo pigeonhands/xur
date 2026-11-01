@@ -34,7 +34,11 @@ fn print(cx: &mut dyn Context, args: &[Value], end: &str) -> RunResult<Value> {
             "expected a format string as the first argument",
         ));
     };
-    let mut text = format(cx, template, args)?;
+    let mut text = if args.is_empty() {
+        template.to_string()
+    } else {
+        format(cx, template, args)?
+    };
     text.push_str(end);
     cx.print(&text)?;
     Ok(Value::Unit)
@@ -46,7 +50,11 @@ fn eprint(cx: &mut dyn Context, args: &[Value], end: &str) -> RunResult<Value> {
             "expected a format string as the first argument",
         ));
     };
-    let mut text = format(cx, template, args)?;
+    let mut text = if args.is_empty() {
+        template.to_string()
+    } else {
+        format(cx, template, args)?
+    };
     text.push_str(end);
     std::io::stderr()
         .write_all(text.as_bytes())
