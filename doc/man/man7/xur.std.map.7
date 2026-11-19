@@ -1,0 +1,68 @@
+.TH XUR.STD.MAP 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.map \- map methods
+.SH DESCRIPTION
+Maps in xur are shared and change in place (like lists).
+.B std::map
+is not imported directly; instead these are methods on any map value
+.RB ( "#{}" ).
+.SH METHODS
+.TP
+.B len() -> int
+Number of key-value pairs.
+.TP
+.B is_empty() -> bool
+Whether the map has no entries.
+.TP
+.B get(key) -> Option<Value>
+Return the value for
+.IR key ,
+or
+.B None
+if not present.
+.TP
+.B contains_key(key) -> bool
+Whether the map contains
+.IR key .
+.TP
+.B insert(key, value) -> ()
+Insert or overwrite a key-value pair.
+.TP
+.B remove(key) -> Option<Value>
+Remove a key and return its value, or
+.B None
+if not present.
+.TP
+.B keys() -> list
+All keys as a list (unordered).
+.TP
+.B values() -> list
+All values as a list (unordered).
+.TP
+.B entries() -> list
+All entries as a list of (key, value) tuples.
+.TP
+.B clear() -> ()
+Remove all entries.
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    let m = #{"a": 1, "b": 2};
+    m.insert("c", 3);
+    io::println("len: {}", m.len());
+
+    match m.get("a") {
+        Some(v) => io::println("a = {}", v),
+        None => io::println("not found"),
+    }
+
+    for entry in m.entries() {
+        io::println("{} -> {}", entry.0, entry.1);
+    }
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.list (7)

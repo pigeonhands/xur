@@ -1,0 +1,56 @@
+.TH XUR.STD.CELL 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.cell \- shared mutable values
+.SH SYNOPSIS
+.nf
+use std::cell;
+
+let c = cell::new(0);
+c.set(42);
+io::println("{}", c.get());
+.fi
+.SH DESCRIPTION
+.B std::cell
+provides a
+.B Cell
+type for sharing mutable state across closures and threads.
+A Cell wraps a single value that can be read and written through a
+shared reference.
+.PP
+Cells are type-checked: a
+.B Cell<int>
+created with an integer will reject writes of other types.
+.SH FUNCTIONS
+.TP
+.B new(value) -> Cell
+Create a new cell containing
+.IR value .
+.SH METHODS
+.TP
+.B get() -> Value
+Read the current value.
+.TP
+.B set(value) -> ()
+Replace the stored value. Errors if
+.I value
+has a different type than the cell was created with.
+.SH EXAMPLES
+.nf
+use std::cell;
+use std::io;
+
+fn main() {
+    let counter = cell::new(0);
+
+    let inc = fn() {
+        counter.set(counter.get() + 1);
+    };
+
+    inc();
+    inc();
+    io::println("count: {}", counter.get());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.sync (7)

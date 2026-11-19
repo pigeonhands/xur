@@ -1,0 +1,112 @@
+.TH XUR.STD.GUI 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.gui \- desktop GUI with egui
+.SH SYNOPSIS
+.nf
+use std::gui;
+
+gui::run("My App", fn(ui) {
+    ui.heading("Welcome");
+    if ui.button("Click me") {
+        io::println("clicked!");
+    }
+});
+.fi
+.SH DESCRIPTION
+.B std::gui
+provides an immediate-mode GUI backed by
+.BR egui / eframe .
+Call
+.B gui::run
+or
+.B gui::dialog
+with a title and a draw callback; the callback receives a
+.B Ui
+handle and is called every frame.
+.SH FUNCTIONS
+.TP
+.B run(title: str, draw: fn(ui)) -> ()
+Open a window and run the draw loop until it is closed.
+.TP
+.B dialog(title: str, draw: fn(ui)) -> ()
+Like
+.B run
+but with a dialog window type hint (X11).
+.SH UI METHODS
+.TP
+.B label(text: str) -> ()
+Display a text label.
+.TP
+.B heading(text: str) -> ()
+Display a heading.
+.TP
+.B small(text: str) -> ()
+Display small text.
+.TP
+.B button(text: str) -> bool
+Display a button. Returns
+.B true
+if clicked this frame.
+.TP
+.B separator() -> ()
+Draw a horizontal separator line.
+.TP
+.B checkbox(checked: bool, label: str) -> bool
+Display a checkbox. Returns the new checked state.
+.TP
+.B slider_float(label: str, value: float, min: float, max: float) -> float
+A float slider. Returns the new value.
+.TP
+.B slider_int(label: str, value: int, min: int, max: int) -> int
+An integer slider. Returns the new value.
+.TP
+.B text_edit(text: str) -> str
+A single-line text input. Returns the new text.
+.TP
+.B text_edit_multiline(text: str) -> str
+A multi-line text input. Returns the new text.
+.TP
+.B horizontal(body: fn(ui)) -> ()
+Lay out children horizontally.
+.TP
+.B vertical(body: fn(ui)) -> ()
+Lay out children vertically.
+.TP
+.B collapsing(heading: str, body: fn(ui)) -> ()
+A collapsible section.
+.TP
+.B scroll(body: fn(ui)) -> ()
+Wrap children in a vertical scroll area.
+.TP
+.B window(title: str, body: fn(ui)) -> ()
+Open a child window (viewport).
+.TP
+.B dialog(title: str, body: fn(ui)) -> ()
+Open a child dialog window.
+.TP
+.B panel_left(id: str, body: fn(ui)) -> ()
+A left side panel.
+.TP
+.B add_space(amount: float) -> ()
+Add vertical spacing.
+.SH EXAMPLES
+.nf
+use std::gui;
+use std::cell;
+use std::io;
+
+fn main() {
+    let count = cell::new(0);
+
+    gui::run("Counter", fn(ui) {
+        ui.heading("Counter app");
+        ui.label("count: {}".format(count.get()));
+        if ui.button("+1") {
+            count.set(count.get() + 1);
+        }
+    });
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.cell (7)

@@ -1,0 +1,57 @@
+.TH XUR.STD.RECORD 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.record \- record methods
+.SH DESCRIPTION
+Records are named-field values (like structs or objects).
+.B std::record
+is not imported directly; instead these are methods on any record value.
+.SH METHODS
+.TP
+.B get_field(name: str) -> Option<Value>
+Return the value of field
+.IR name ,
+or
+.B None
+if the record has no such field.
+.TP
+.B set_field(name: str, value) -> Record
+Return a new record with field
+.I name
+set to
+.IR value .
+If the field already exists it is replaced; otherwise it is added.
+.TP
+.B get_method(name: str) -> Option<fn>
+Return the callable stored under
+.IR name ,
+or
+.B None
+if not present or not callable.
+.TP
+.B set_method(name: str, func: fn) -> Record
+Return a new record with method
+.I name
+set to
+.IR func .
+Errors if
+.I func
+is not callable.
+.TP
+.B fields() -> [str]
+List all field names.
+.SH EXAMPLES
+.nf
+use std::io;
+
+fn main() {
+    let point = #{x: 1, y: 2};
+    io::println("fields: {}", point.fields());
+    io::println("x = {}", point.get_field("x").unwrap());
+
+    let moved = point.set_field("x", 10);
+    io::println("moved.x = {}", moved.get_field("x").unwrap());
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.map (7)

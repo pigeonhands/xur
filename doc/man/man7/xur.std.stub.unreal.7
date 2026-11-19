@@ -1,0 +1,207 @@
+.TH XUR.STD.STUB.UNREAL 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.stub.unreal \- Unreal Engine introspection and manipulation
+.SH SYNOPSIS
+.nf
+use std::stub::unreal;
+use std::mem;
+
+let text = mem::find_module_section(".text");
+let sdk = unreal::init(5, text.base, text.size).unwrap();
+.fi
+.SH DESCRIPTION
+.B std::stub::unreal
+provides runtime introspection of Unreal Engine 4 and 5 games
+via the
+.B unrealkit
+crate. It discovers GNames and GObjects by AOB-scanning,
+then exposes the full UObject reflection system: classes, properties,
+functions, and ProcessEvent invocation.
+.PP
+Only available when xur is loaded as a shared library
+.RB ( LD_PRELOAD )
+into a running UE game process.
+.SH MODULE FUNCTIONS
+.TP
+.B init(version: int, text_base: int, text_size: int) -> Result<()>
+Initialise the SDK by scanning the
+.B .text
+section for GNames and GObjects. Pass
+.B 4
+for UE4 or
+.B 5
+for UE5.
+.TP
+.B init_with_pointers(version: int, gnames: int, gobjects: int) -> Result<()>
+Initialise from known addresses (skip AOB scanning).
+.TP
+.B objects() -> [UObject]
+Iterate all live UObjects.
+.TP
+.B find_object(name: str) -> Option<UObject>
+Find the first object whose short name matches.
+.TP
+.B find_objects_by_class(class_name: str) -> [UObject]
+Find all objects whose class short name matches.
+.TP
+.B set_process_event(addr: int) -> ()
+Store the ProcessEvent function pointer (for
+.BR UFunction.invoke ).
+.TP
+.B set_process_event_vtable(index: int) -> ()
+Discover ProcessEvent by reading a UObject vtable at the given
+index (typical: UE4 ~66\(en68, UE5 ~68\(en72).
+.SH UOBJECT TYPE
+.TP
+.B name() -> str
+Short name (e.g. "PlayerController_0").
+.TP
+.B full_name() -> str
+Full path name (e.g. "Class /Script/Engine.Actor").
+.TP
+.B class() -> UClass
+The object's UClass.
+.TP
+.B ptr() -> int
+Raw memory address.
+.TP
+.B is_a(class_name: str) -> bool
+Check class hierarchy membership.
+.TP
+.B get(property_name: str) -> Value
+Read a property by name.
+.TP
+.B set(property_name: str, value) -> ()
+Write a property by name.
+.SH UCLASS TYPE
+.TP
+.B name() -> str
+Class short name.
+.TP
+.B instance_size() -> int
+Size of an instance in bytes.
+.TP
+.B hierarchy() -> [str]
+Inheritance chain as class names.
+.TP
+.B property(name: str) -> Option<UProperty>
+Find a property by name (searches superclasses).
+.TP
+.B properties() -> [UProperty]
+This class's own properties.
+.TP
+.B all_properties() -> [UProperty]
+All properties including inherited ones.
+.TP
+.B method(name: str) -> Option<UFunction>
+Find a function by name (searches superclasses).
+.TP
+.B methods() -> [UFunction]
+This class's own functions.
+.TP
+.B all_methods() -> [UFunction]
+All functions including inherited ones.
+.SH UPROPERTY TYPE
+.TP
+.B name() -> str
+Property name.
+.TP
+.B type_name() -> str
+Property type (e.g. "FloatProperty", "BoolProperty").
+.TP
+.B offset() -> int
+Byte offset within the owning object.
+.TP
+.B element_size() -> int
+Size of one element in bytes.
+.TP
+.B ptr() -> int
+Raw memory address of the property descriptor.
+.TP
+.B read(obj: UObject) -> Value
+Read this property from an object.
+.TP
+.B write(obj: UObject, value) -> ()
+Write this property on an object.
+.SH UFUNCTION TYPE
+.TP
+.B name() -> str
+Function short name.
+.TP
+.B full_name() -> str
+Full path name.
+.TP
+.B signature() -> str
+Human-readable signature (e.g. "void Jump()").
+.TP
+.B num_params() -> int
+Number of parameters.
+.TP
+.B params_size() -> int
+Size of the parameter struct in bytes.
+.TP
+.B flags() -> int
+UFunction flags bitmask.
+.TP
+.B native_ptr() -> int
+Address of the native C++ implementation.
+.TP
+.B ptr() -> int
+Raw address of the UFunction object.
+.TP
+.B params() -> [UProperty]
+Parameter properties (including return value).
+.TP
+.B invoke(obj: UObject, ...args) -> Value
+Call via ProcessEvent. Arguments are matched positionally to input
+parameters; return value is extracted from the return parameter.
+Requires
+.B set_process_event
+or
+.B set_process_event_vtable
+to be called first.
+.TP
+.B hook(detour_addr: int) -> int
+Inline-hook the native function pointer. Returns the original function
+address for trampolining. The hook is permanent.
+.SH EXAMPLES
+.nf
+use std::stub::unreal;
+use std::mem;
+use std::io;
+
+fn main() {
+    let text = mem::find_module_section(".text");
+    unreal::init(5, text.base, text.size).unwrap();
+    io::println("SDK initialised");
+
+    // Dump objects
+    for obj in unreal::objects() {
+        io::println(obj.full_name());
+    }
+
+    // Inspect a class
+    let player = unreal::find_object("MyCharacter").unwrap();
+    let cls = player.class();
+    for p in cls.all_properties() {
+        io::println("  {} : {}", p.name(), p.type_name());
+    }
+    for f in cls.all_methods() {
+        io::println("  {}", f.signature());
+    }
+
+    // Read/write properties
+    let hp = player.get("Health");
+    io::println("health: {}", hp);
+    player.set("Health", 999.0);
+
+    // Call a function
+    unreal::set_process_event_vtable(68);
+    let jump = cls.method("Jump").unwrap();
+    jump.invoke(player);
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.stub.hooking (7),
+.BR xur.std.mem (7)

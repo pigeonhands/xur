@@ -1,0 +1,50 @@
+.TH XUR.STD.RANDOM 7 "2026-11-19" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.random \- random number generation
+.SH SYNOPSIS
+.nf
+use std::random;
+
+let n = random::int(1, 100);
+.fi
+.SH DESCRIPTION
+.B std::random
+provides random value generation backed by the OS CSPRNG.
+.SH FUNCTIONS
+.TP
+.B int(min: int, max: int) -> int
+Random integer in the inclusive range [min, max].
+.TP
+.B float() -> float
+Random floating-point number in [0.0, 1.0).
+.TP
+.B bool() -> bool
+Random boolean.
+.TP
+.B choice(list) -> Value
+Pick a random element from a non-empty list. Errors if the list is empty.
+.TP
+.B shuffle(list) -> list
+Return a new list with the elements in random order.
+.TP
+.B bytes(len: int) -> bytes
+Generate
+.I len
+cryptographically random bytes.
+.SH EXAMPLES
+.nf
+use std::random;
+use std::io;
+
+fn main() {
+    io::println("dice: {}", random::int(1, 6));
+    io::println("coin: {}", random::bool());
+
+    let items = ["a", "b", "c"];
+    io::println("pick: {}", random::choice(items));
+    io::println("shuffled: {}", random::shuffle(items));
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.hash (7)
