@@ -22,6 +22,13 @@ pub trait NativeProvider: Send + Sync {
     /// The contents of the lazy module at `path` (such as `["std", "net"]`),
     /// which is now needed. Its own submodules may be lazy in turn.
     fn expand(&self, path: &[String]) -> NativeModule;
+
+    /// Registers built-in functions (`from_str`, `len`, `values`) for the
+    /// enum `enum_def`. Returns their declarations so the resolver can add
+    /// them to the enum's scope.
+    fn register_enum_builtins(&self, _enum_def: super::DefId) -> Vec<NativeFnDecl> {
+        Vec::new()
+    }
 }
 
 impl<T: NativeProvider + ?Sized> NativeProvider for std::sync::Arc<T> {
@@ -31,6 +38,10 @@ impl<T: NativeProvider + ?Sized> NativeProvider for std::sync::Arc<T> {
 
     fn expand(&self, path: &[String]) -> NativeModule {
         (**self).expand(path)
+    }
+
+    fn register_enum_builtins(&self, enum_def: super::DefId) -> Vec<NativeFnDecl> {
+        (**self).register_enum_builtins(enum_def)
     }
 }
 

@@ -206,6 +206,7 @@ fn resolve_modules(
     resolver.collect_items(&new);
     resolver.resolve_imports();
     resolver.collect_impls(&new);
+    resolver.inject_enum_builtins();
     resolver.resolve_bodies(&new);
     resolver.suspend()
 }

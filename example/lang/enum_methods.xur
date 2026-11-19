@@ -1,0 +1,49 @@
+use std::io;
+use std::fmt;
+use std::assert;
+
+enum Color { Red  Green  Blue }
+
+#[repr(u32)]
+enum Protection { Read = 1  Write = 2  Execute = 4 }
+
+enum Shape { Circle(f64)  Rect(f64, f64)  Point }
+
+fn main() -> Result<()> {
+    // to_str: get the variant name as a string
+    assert::is_eq(Color::Red.to_str(), "Red");
+    assert::is_eq(Color::Green.to_str(), "Green");
+    assert::is_eq(Protection::Write.to_str(), "Write");
+    assert::is_eq(Shape::Circle(2.0).to_str(), "Circle");
+    assert::is_eq(Shape::Point.to_str(), "Point");
+
+    // from_str: parse a variant name, returns Option
+    assert::is_eq(Color::from_str("Red"), Some(Color::Red));
+    assert::is_eq(Color::from_str("Blue"), Some(Color::Blue));
+    assert::is_eq(Color::from_str("nope"), None);
+    assert::is_eq(Protection::from_str("Execute"), Some(Protection::Execute));
+    assert::is_eq(Shape::from_str("Point"), Some(Shape::Point));
+    assert::is_eq(Shape::from_str("Circle"), None);
+
+    // len: total number of variants
+    assert::is_eq(Color::len(), 3);
+    assert::is_eq(Protection::len(), 3);
+    assert::is_eq(Shape::len(), 3);
+
+    // values: list of all unit variants
+    assert::is_eq(Color::values().len(), 3);
+    assert::is_eq(Shape::values().len(), 1);
+
+    for c in Color::values() {
+        io::println(c.to_str());
+    }
+
+    // round-trip: from_str undoes to_str for unit variants
+    for c in Color::values() {
+        let name = c.to_str();
+        assert::is_eq(Color::from_str(name), Some(c));
+    }
+
+    io::println("enum_methods: all assertions passed");
+    Ok(())
+}

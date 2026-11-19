@@ -132,6 +132,40 @@ impl Context for Interp<'_> {
         Some(Box::new(crate::SharedHandle(Arc::clone(self.shared))))
     }
 
+    fn def_name(&self, def: DefId) -> Option<String> {
+        Some(
+            self.shared
+                .program()
+                .resolutions()
+                .defs
+                .get(def)
+                .name
+                .to_string(),
+        )
+    }
+
+    fn enum_variants(&self, def: DefId) -> Vec<(String, DefId, bool)> {
+        use xur_resolve::{DefKind, Namespace, Res};
+        let program = self.shared.program();
+        let resolutions = program.resolutions();
+        let mut variants: Vec<_> = resolutions
+            .scope_entries(def, Namespace::Value)
+            .into_iter()
+            .filter_map(|(name, res)| match res {
+                Res::Def(DefKind::Variant | DefKind::NativeVariant(_), vdef) => {
+                    let has_fields = self
+                        .adt_info(vdef)
+                        .map(|info| !info.fields.is_empty())
+                        .unwrap_or(false);
+                    Some((name.to_string(), vdef, has_fields))
+                }
+                _ => None,
+            })
+            .collect();
+        variants.sort_by_key(|(_, vdef, _)| *vdef);
+        variants
+    }
+
     fn fn_info(&self, value: &Value) -> Option<FnInfo> {
         match value {
             Value::Fn(def) => {

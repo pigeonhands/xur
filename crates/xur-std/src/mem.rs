@@ -51,6 +51,15 @@ pub(crate) fn register(registry: &Registry) {
                 return Err(RuntimeError::new("`byte_size` takes no arguments"));
             };
             Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
+        })
+        .raw_function_returns::<String>("to_str", |cx, args| {
+            let [Value::Adt(adt)] = args else {
+                return Err(RuntimeError::new("`to_str` takes no arguments"));
+            };
+            match cx.def_name(adt.ctor) {
+                Some(name) => Ok(Value::str(&name)),
+                None => Err(RuntimeError::new("cannot determine name of this value")),
+            }
         });
 }
 

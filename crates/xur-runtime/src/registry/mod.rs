@@ -102,6 +102,17 @@ pub trait Context: ConvertCx {
     fn shared_handle(&self) -> Option<Box<dyn std::any::Any + Send + Sync>> {
         None
     }
+
+    /// The name of a definition: the variant name for an enum variant,
+    /// the type name for a struct or enum.
+    fn def_name(&self, _def: DefId) -> Option<String> {
+        None
+    }
+
+    /// The variants of the enum `def`: `(name, variant_def, has_fields)`.
+    fn enum_variants(&self, _def: DefId) -> Vec<(String, DefId, bool)> {
+        Vec::new()
+    }
 }
 
 pub(crate) type CallFn = dyn Fn(&mut dyn Context, &[Value]) -> RunResult<Value> + Send + Sync;
@@ -601,7 +612,7 @@ impl Registry {
         self.read().decl(module)
     }
 
-    pub(super) fn add_fn(
+    pub fn add_fn(
         &self,
         name: &str,
         signature: Option<Signature>,
@@ -734,4 +745,69 @@ impl NativeProvider for Registry {
     fn expand(&self, path: &[String]) -> NativeModule {
         Registry::expand(self, path)
     }
+
+    fn register_enum_builtins(&self, enum_def: DefId) -> Vec<NativeFnDecl> {
+        vec![
+            self.add_fn(
+                "from_str",
+                None,
+                vec!["name".into()],
+                Box::new({
+                    let def = enum_def;
+                    move |cx, args| enum_from_str(cx, def, args)
+                }),
+            ),
+            self.add_fn(
+                "len",
+                None,
+                Vec::new(),
+                Box::new({
+                    let def = enum_def;
+                    move |cx, args| enum_len(cx, def, args)
+                }),
+            ),
+            self.add_fn(
+                "values",
+                None,
+                Vec::new(),
+                Box::new({
+                    let def = enum_def;
+                    move |cx, args| enum_values(cx, def, args)
+                }),
+            ),
+        ]
+    }
+}
+
+fn enum_from_str(cx: &mut dyn Context, enum_def: DefId, args: &[Value]) -> RunResult<Value> {
+    let [Value::Str(name)] = args else {
+        return Err(RuntimeError::new("`from_str` takes a string"));
+    };
+    let lang = cx.lang();
+    for (vname, vdef, has_fields) in cx.enum_variants(enum_def) {
+        if vname == name.as_ref() && !has_fields {
+            return Ok(Value::adt(lang.some, vec![Value::adt(vdef, vec![])]));
+        }
+    }
+    Ok(Value::adt(lang.none, vec![]))
+}
+
+fn enum_len(cx: &mut dyn Context, enum_def: DefId, args: &[Value]) -> RunResult<Value> {
+    if !args.is_empty() {
+        return Err(RuntimeError::new("`len` takes no arguments"));
+    }
+    Ok(Value::Int(cx.enum_variants(enum_def).len() as i64))
+}
+
+fn enum_values(cx: &mut dyn Context, enum_def: DefId, args: &[Value]) -> RunResult<Value> {
+    if !args.is_empty() {
+        return Err(RuntimeError::new("`values` takes no arguments"));
+    }
+    let values: Vec<Value> = cx
+        .enum_variants(enum_def)
+        .into_iter()
+        .filter(|(_, _, has_fields)| !has_fields)
+        .map(|(_, vdef, _)| Value::adt(vdef, vec![]))
+        .collect();
+    Ok(Value::list(values))
 }

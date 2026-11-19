@@ -177,6 +177,19 @@ let (client, peer) = listener.accept().unwrap();
 client.write(client.read_line().unwrap()).unwrap();
 ```
 
+### Enum introspection
+
+All enums — user-defined, `#[repr]`, and native — have built-in methods:
+
+```rust
+enum Color { Red  Green  Blue }
+
+Color::Red.to_str()      // "Red"
+Color::from_str("Red")   // Some(Color::Red)
+Color::len()             // 3
+Color::values()          // [Color::Red, Color::Green, Color::Blue]
+```
+
 See the full set of language features in the
 [`example/lang/`](example/lang) directory.
 
@@ -294,6 +307,7 @@ There are complete programs in [`example/`](example):
 | [`lang/pointers.xur`](example/lang/pointers.xur) | pointer types and arithmetic |
 | [`lang/bitwise.xur`](example/lang/bitwise.xur) | bitwise operators and masks |
 | [`lang/repr_enums.xur`](example/lang/repr_enums.xur) | repr enums |
+| [`lang/enum_methods.xur`](example/lang/enum_methods.xur) | enum `to_str`, `from_str`, `len`, `values` |
 | [`lang/try_custom.xur`](example/lang/try_custom.xur) | custom `#[try(unwrap)]` enums |
 | [`lang/bytes.xur`](example/lang/bytes.xur) | byte manipulation |
 | [`lang/logging.xur`](example/lang/logging.xur) | structured logging |

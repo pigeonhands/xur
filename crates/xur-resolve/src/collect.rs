@@ -5,7 +5,7 @@ use xur_ast::{
     VariantData, Visibility,
 };
 use xur_errors::Diag;
-use xur_span::Ident;
+use xur_span::{Ident, Symbol};
 
 use crate::def::{DefData, DefId, DefKind, Namespace, Res};
 use crate::imports::Import;
@@ -253,6 +253,54 @@ impl Resolver<'_> {
                 span: Some(func.ident.span),
             };
             self.declare(ty, Namespace::VALUE, func.ident, binding);
+        }
+    }
+}
+
+impl Resolver<'_> {
+    /// Injects `from_str`, `len` and `values` into every enum that doesn't
+    /// already define them. Runs after `collect_impls` so user-defined
+    /// functions take priority.
+    pub(crate) fn inject_enum_builtins(&mut self) {
+        let enum_defs: Vec<DefId> = self
+            .defs
+            .iter()
+            .filter_map(|(id, data)| {
+                let is_enum = match data.kind {
+                    DefKind::Enum => true,
+                    DefKind::NativeType(_) => self.scopes.get(&id).map_or(false, |scope| {
+                        scope
+                            .iter(Namespace::Value)
+                            .any(|(_, b)| matches!(b.res, Res::Def(DefKind::NativeVariant(_), _)))
+                    }),
+                    _ => false,
+                };
+                is_enum.then_some(id)
+            })
+            .collect();
+
+        for enum_def in enum_defs {
+            let builtins = self.natives.register_enum_builtins(enum_def);
+            for decl in builtins {
+                let name = Symbol::intern(&decl.name);
+                let scope = self.scopes.get_mut(&enum_def).expect("enum has a scope");
+                if scope.get(Namespace::Value, name).is_some() {
+                    continue;
+                }
+                let kind = DefKind::NativeFn(decl.id);
+                let fn_def = self.defs.create(DefData {
+                    kind,
+                    name,
+                    parent: Some(enum_def),
+                    span: None,
+                });
+                let binding = Binding {
+                    res: Res::Def(kind, fn_def),
+                    vis: Vis::Public,
+                    span: None,
+                };
+                let _ = scope.insert(Namespace::Value, name, binding);
+            }
         }
     }
 }

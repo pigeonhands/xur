@@ -343,6 +343,31 @@ or
 .TP
 .B set_method(name, fn)
 Returns a new record with the method attached.
+.SH ENUM METHODS
+All enums (user-defined, repr, and native) have these built-in methods:
+.SS Instance methods
+.TP
+.B to_str()
+Returns the variant name as a string.
+.B Color::Red.to_str()
+returns
+.BR \(dqRed\(dq .
+.SS Associated functions
+.TP
+.B from_str(name)
+Returns
+.B Some(variant)
+if
+.I name
+matches a unit variant, otherwise
+.BR None .
+.TP
+.B len()
+Returns the total number of variants.
+.TP
+.B values()
+Returns a list of all unit variants in declaration order.
+Data-carrying variants are excluded.
 .SH BUILT-IN FUNCTIONS
 These are available without importing
 .BR std :
