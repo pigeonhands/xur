@@ -10,6 +10,7 @@ mod bytes;
 mod cell;
 #[cfg(feature = "cli")]
 mod cli;
+mod env;
 #[cfg(feature = "datetime")]
 mod datetime;
 mod fmt;
@@ -105,6 +106,7 @@ pub fn register(registry: &Registry) {
     #[cfg(feature = "datetime")]
     datetime::register(registry);
     time::register(registry);
+    env::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);
