@@ -1593,18 +1593,6 @@ dependencies = [
 [[package]]
 name = "hao"
 version = "0.0.9"
-dependencies = [
- "bitflags 2.13.2",
- "facet",
- "pewter",
- "strum 0.28.0",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "hao"
-version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78a84b4d6465062d784b8f37c36a2ec1aa8ac094b46621689b85311cc41ea15e"
 dependencies = [
@@ -1618,7 +1606,9 @@ dependencies = [
 
 [[package]]
 name = "hao-godot"
-version = "0.0.4"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba04da7942bf921dd0d39e1e5228d3750e851370ccec1e855114153b2fa89a67"
 dependencies = [
  "hao-runtime",
  "tracing",
@@ -1632,7 +1622,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a38df509710d5a812ab3366b3559c050ed522f39b5f9008f2fa4873f6742de3"
 dependencies = [
  "facet",
- "hao 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hao",
  "pewter",
  "thiserror 2.0.21",
 ]
@@ -1665,10 +1655,12 @@ dependencies = [
 
 [[package]]
 name = "hao-runtime"
-version = "0.0.4"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b7e6c2bdc17aadfc96a6f698d51b5140f91a541f70ecde5772b9433a469aa7e"
 dependencies = [
  "facet",
- "hao 0.0.9",
+ "hao",
  "hooking",
  "libloading 0.9.0",
  "thiserror 2.0.21",
@@ -1728,7 +1720,9 @@ checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
 name = "hooking"
-version = "0.6.1"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "159cfa6f5ff7d63753f362991a62ceebd1da947afb99c4a4842087431da56afc"
 dependencies = [
  "ctor 1.0.13",
  "hooking_macros",
@@ -1741,6 +1735,8 @@ dependencies = [
 [[package]]
 name = "hooking_macros"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "135f02a35c34d1a9b00cf1d3fdf89d70ba13bc0bfdf5b238f6635f8709b82695"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3120,6 +3116,8 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "rekit"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "706b18bb4b1aaa6071853fef18b4e557f3b9885605fff38f6166e1fc0a99719d"
 dependencies = [
  "cpp_demangle",
  "msvc-demangler",
@@ -4798,7 +4796,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xur"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "ariadne",
@@ -4819,14 +4817,14 @@ dependencies = [
 
 [[package]]
 name = "xur-ast"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "xur-span",
 ]
 
 [[package]]
 name = "xur-bytecode"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "xur-ast",
  "xur-resolve",
@@ -4836,7 +4834,7 @@ dependencies = [
 
 [[package]]
 name = "xur-errors"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "ariadne",
  "xur-span",
@@ -4844,7 +4842,7 @@ dependencies = [
 
 [[package]]
 name = "xur-parser"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "strum 0.27.2",
  "thiserror 2.0.21",
@@ -4856,7 +4854,7 @@ dependencies = [
 
 [[package]]
 name = "xur-resolve"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "xur-ast",
  "xur-errors",
@@ -4866,7 +4864,7 @@ dependencies = [
 
 [[package]]
 name = "xur-runtime"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "dashmap 6.2.1",
  "facet",
@@ -4878,11 +4876,11 @@ dependencies = [
 
 [[package]]
 name = "xur-span"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "xur-std"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "bitflags 2.13.2",
  "chrono",
@@ -4891,7 +4889,7 @@ dependencies = [
  "dashmap 6.2.1",
  "eframe",
  "facet",
- "hao 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hao",
  "hao-il2cpp",
  "hao-runtime",
  "iced-x86",
@@ -4919,7 +4917,7 @@ dependencies = [
 
 [[package]]
 name = "xur-stub"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "ctor 0.4.3",
  "facet",
@@ -4941,7 +4939,7 @@ dependencies = [
 
 [[package]]
 name = "xur-vm"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "xur-ast",
  "xur-bytecode",
