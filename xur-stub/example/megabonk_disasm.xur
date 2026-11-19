@@ -1,0 +1,96 @@
+// Megabonk static disassembly — reads the game binary offline.
+//
+//     xur run xur-stub/example/megabonk_disasm.xur
+
+use std::io;
+use std::re::dotnet::il2cpp;
+use std::re::elf;
+use std::re::asm::x86;
+
+fn disasm(binary: elf::ElfFile, method: il2cpp::MethodView, max_insns: i32) {
+    let addr = match method.code_address() {
+        Some(a) => a,
+        None => {
+            io::println("--- {} --- (no code address)", method);
+            return;
+        }
+    };
+    io::println("--- {} @ 0x{} ---", method, addr.to_hex());
+    let data = match binary.read(addr, 512) {
+        Some(b) => b,
+        None => {
+            io::println("  (could not read at 0x{})", addr.to_hex());
+            return;
+        }
+    };
+    let insns = x86::decode(64, data, addr);
+    let count = 0;
+    for insn in insns {
+        io::println("  0x{}: {}", insn.ip().to_hex(), insn);
+        count = count + 1;
+        if count >= max_insns { break; }
+        let fc = insn.flow_control();
+        if fc == "Return" { break; }
+    }
+    io::println("");
+}
+
+fn disasm_methods(game: il2cpp::Game, binary: elf::ElfFile, type_name: str, methods: [str], params: [i32], max: i32) {
+    match game.find_type(type_name) {
+        Ok(ty) => {
+            for i in 0..methods.len() {
+                let name = methods[i];
+                let pc = params[i];
+                let found = false;
+                for m in ty.methods() {
+                    if m.name() == name && m.parameter_type_names().len() == pc {
+                        disasm(binary, m, max);
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    io::println("--- {}.{}({}) NOT FOUND ---", type_name, name, pc);
+                    io::println("");
+                }
+            }
+        }
+        Err(e) => io::println("type not found: {}", type_name)
+    }
+}
+
+fn main() {
+    let game_dir = "/games/SteamLibrary/steamapps/common/Megabonk";
+    let so_path = game_dir + "/GameAssembly.so";
+
+    let game = match il2cpp::open(game_dir) {
+        Ok(g) => g,
+        Err(e) => { io::println("failed to open: {}", e); return; }
+    };
+    let binary = match elf::ElfFile::open(so_path) {
+        Ok(b) => b,
+        Err(e) => { io::println("failed to open ELF: {}", e); return; }
+    };
+
+    io::println("=== PlayerCamera ===");
+    disasm_methods(game, binary, "PlayerCamera",
+        ["UpdateZoom", "SetZoom", "PlayerCam", "Update", "AdjustCameraFar"],
+        [0, 1, 1, 0, 0], 60);
+
+    io::println("=== GameManager ===");
+    disasm_methods(game, binary, "GameManager",
+        ["Update", "GetStageTimeMax", "GetAliveTime"],
+        [0, 0, 0], 80);
+
+    io::println("=== GameTimer ===");
+    disasm_methods(game, binary, "GameTimer",
+        ["UpdateTimers", "GetForcedTime"],
+        [0, 0], 60);
+
+    io::println("=== PlayerMovement ===");
+    disasm_methods(game, binary, "PlayerMovement",
+        ["PushPlayer", "BouncePlayer", "PushPlayerButKeepMovement", "NoclipMovement"],
+        [1, 1, 0, 0], 40);
+
+    io::println("=== DONE ===");
+}

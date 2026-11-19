@@ -98,6 +98,7 @@ struct GameRuntime {
     // PlayerCamera
     pc_instance: il2cpp::Field
     pc_max_zoom: il2cpp::Field
+    pc_current_z: il2cpp::Field
     pc_camera_state: il2cpp::Field
     // SaveManager -> ProgressionSaveFile
     sm_instance: il2cpp::Field
@@ -233,8 +234,9 @@ impl GameRuntime {
 
         let pc_instance = pc_cls.field("Instance")?;
         let pc_max_zoom = pc_cls.field("maxExtraZoomoutDistance")?;
+        let pc_current_z = pc_cls.field("currentZ")?;
         let pc_camera_state = pc_cls.field("cameraState")?;
-        log::debug("  PlayerCamera.Instance, maxExtraZoomoutDistance, cameraState found");
+        log::debug("  PlayerCamera fields found");
 
         let sm_instance = sm_cls.field("<Instance>k__BackingField")?;
         let sm_progression = sm_cls.field("progression")?;
@@ -354,6 +356,7 @@ impl GameRuntime {
             pm_noclip,
             pc_instance,
             pc_max_zoom,
+            pc_current_z,
             pc_camera_state,
             sm_instance,
             sm_progression,
@@ -494,9 +497,10 @@ impl GameRuntime {
         self.set_noclip(false);
         self.detach_camera.set(false);
         self.extended_zoom.set(false);
+        self.set_max_zoom(0.0);
         let pc = self.player_camera();
         if !pc.is_null() {
-            self.pc_camera_state.write(pc, 0);
+            self.pc_camera_state.write(pc, 1);
         }
     }
 
@@ -679,8 +683,9 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
 
 fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
     let timer = game.get_timer();
-    let mins = timer / 60.0;
-    let secs = timer - mins * 60.0;
+    let total_secs = timer.to_int();
+    let mins = total_secs / 60;
+    let secs = total_secs - mins * 60;
     ui.heading(fmt::format("Timer: {}m {}s", mins, secs));
 
     let frozen = game.freeze_timer.get();
@@ -724,11 +729,21 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
     let new_ext = ui.checkbox(ext, "Extended zoom range");
     if new_ext != ext {
         game.extended_zoom.set(new_ext);
+        if new_ext {
+            game.set_max_zoom(50.0);
+        } else {
+            game.set_max_zoom(0.0);
+        }
     }
-    if game.extended_zoom.get() {
-        game.set_max_zoom(50.0);
+
+    let pc = game.player_camera();
+    if !pc.is_null() {
+        let cur_z = game.pc_current_z.read(pc);
+        let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
+        if new_z != cur_z {
+            game.pc_current_z.write(pc, new_z);
+        }
     }
-    ui.small("(use scroll wheel to zoom in/out)");
 
     let detach = game.detach_camera.get();
     let new_detach = ui.checkbox(detach, "Detach camera from player");
@@ -1006,6 +1021,7 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
 fn ctor() {
     log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
     egui::init();
+    egui::set_scale(0.7);
 }
 
 fn stub_main() {
