@@ -1,0 +1,76 @@
+// String methods: find, rfind, trim_start, trim_end, pad_right, slice,
+// chars, bytes, insert, remove.
+//
+//     xur run example/lang/string_methods.xur
+
+use std::io;
+use std::assert;
+
+fn main() -> Result<()> {
+    // --- find / rfind ---
+    // find returns the char index of the first match.
+    let s = "hello world";
+    match s.find("world") {
+        Some(i) => assert::is_eq(i, 6),
+        None    => assert::fail("expected Some"),
+    }
+    // Not found returns None.
+    match s.find("xyz") {
+        Some(_) => assert::fail("expected None"),
+        None    => {},
+    }
+    // rfind returns the char index of the last match.
+    match "abcabc".rfind("abc") {
+        Some(i) => assert::is_eq(i, 3),
+        None    => assert::fail("expected Some"),
+    }
+    // find uses char indices, not byte indices.
+    match "αβγδ".find("γ") {
+        Some(i) => assert::is_eq(i, 2),
+        None    => assert::fail("expected Some"),
+    }
+
+    // --- trim_start / trim_end ---
+    assert::is_eq("  hello  ".trim_start(), "hello  ");
+    assert::is_eq("  hello  ".trim_end(), "  hello");
+    assert::is_eq("  hello  ".trim(), "hello");
+
+    // --- pad_right ---
+    assert::is_eq("hi".pad_right(6, "."), "hi....");
+    assert::is_eq("hi".pad_right(6, "-="), "hi-=-=");
+    // Already at or beyond width: no padding.
+    assert::is_eq("hello".pad_right(3, "."), "hello");
+
+    // --- slice ---
+    // Positive indices.
+    assert::is_eq("hello".slice(1, 4), "ell");
+    // Negative indices count from the end.
+    assert::is_eq("hello".slice(0, -1), "hell");
+    assert::is_eq("hello".slice(-3, -1), "ll");
+    // Slice with multibyte chars.
+    assert::is_eq("αβγδ".slice(1, 3), "βγ");
+
+    // --- chars ---
+    let cs = "abc".chars();
+    assert::is_eq(cs.len(), 3);
+    assert::is_eq(cs[0], "a");
+    assert::is_eq(cs[1], "b");
+    assert::is_eq(cs[2], "c");
+
+    // --- bytes ---
+    let bs = "AB".bytes();
+    assert::is_eq(bs.len(), 2);
+    assert::is_eq(bs[0], 65);
+    assert::is_eq(bs[1], 66);
+
+    // --- insert ---
+    assert::is_eq("helo".insert(3, "l"), "hello");
+    assert::is_eq("world".insert(0, "hello "), "hello world");
+
+    // --- remove ---
+    assert::is_eq("hello".remove(1, 4), "ho");
+    assert::is_eq("abcdef".remove(0, 3), "def");
+
+    io::println("string_methods: all assertions passed");
+    Ok(())
+}
