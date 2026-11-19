@@ -29,7 +29,7 @@ libc.workspace = true
 unrealkit = { workspace = true, optional = true }
 
 [features]
-default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "unreal", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash"]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "unreal", "egui", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash"]
 hooking = ["dep:hooking", "xur-re-asm"]
 hao-runtime = ["dep:hao-runtime", "hooking"]
 il2cpp-runtime = ["dep:hao-il2cpp-runtime", "dep:libloading", "hooking"]
