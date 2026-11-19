@@ -81,6 +81,10 @@ fn main() {
             // unreal::set_process_event_vtable(68);  // discover from vtable
             // let func = cls.method("SomeFunction").unwrap();
             // let result = func.invoke(obj, arg1, arg2);
+
+            // Hook a native UFunction (returns original fn pointer):
+            // let orig = func.hook(my_detour_addr);
+            // The hook is permanent — the detour runs instead of the original.
         }
         None => io::println("(skipped — no object found)"),
     }

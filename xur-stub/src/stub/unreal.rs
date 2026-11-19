@@ -542,6 +542,25 @@ pub(crate) fn register(registry: &Registry) {
                 .collect();
             Ok(Value::list(params?))
         })
+        .raw_function("hook", |_cx, args| {
+            let this = extract_ufunction(&args[0])?;
+            let Value::Int(detour_addr) = &args[1] else {
+                return Err(err("`hook` takes (detour_addr: int)"));
+            };
+            let sdk = get_sdk()?;
+            let func = unrealkit::UFunction::new(this.0, &sdk.names);
+            let native = func.native_func_ptr();
+            if native.is_null() {
+                return Err(err("UFunction has no native pointer"));
+            }
+            let mut hook = unsafe {
+                hooking::Hook::create(native as *mut u8, *detour_addr as *mut u8)
+            }
+            .map_err(|e| err(format!("{e}")))?;
+            unsafe { hook.apply_hook() }
+                .map_err(|e| err(format!("{e}")))?;
+            Ok(Value::Int(hook.original_function().as_ptr() as i64))
+        })
         .raw_function("invoke", |cx, args| {
             let this = extract_ufunction(&args[0])?;
             let obj = extract_uobject(&args[1])?;
