@@ -612,6 +612,43 @@ Returns the SHA-256 hash as raw bytes.
 .TP
 .B md5(data)
 Returns the MD5 hash as a hex string.
+.SH STD::RE DEMANGLING
+C++ name demangling via rekit (feature
+.BR re-demangle ,
+included in
+.BR re ).
+.TP
+.B demangle(name)
+Auto-detects mangling scheme and returns
+.B Some(demangled)
+or
+.BR None .
+.TP
+.B demangle_itanium(name)
+Demangles Itanium (GCC/Clang) names.
+.TP
+.B demangle_msvc(name)
+Demangles MSVC names.
+.SH STD::MEM PATTERN SCANNING
+In-process byte pattern scanning via rekit (feature
+.BR re-demangle ).
+.TP
+.B read_bytes(addr, len)
+Reads
+.I len
+bytes from memory at
+.IR addr .
+.TP
+.B scan(addr, size, pattern)
+Returns
+.B Some(ptr)
+for the first IDA-style pattern match in
+.RI [ addr ", " addr+size ),
+or
+.BR None .
+.TP
+.B scan_all(addr, size, pattern)
+Returns a list of all matching pointers.
 .SH EXAMPLES
 .nf
 use std::io;

@@ -256,6 +256,7 @@ embedders only compile what they need. All are enabled by default.
 | `re-dotnet` | `std::re::dotnet` | hao |
 | `re-dotnet-il2cpp` | `std::re::dotnet::il2cpp` | hao-il2cpp |
 | `re-dotnet-runtime` | `std::re::dotnet::runtime` | hao-runtime |
+| `re-demangle` | `std::re::demangle` | rekit (cpp_demangle, msvc-demangler) |
 | `random` | `std::random` | rand |
 | `hash` | `std::hash` | sha2, md-5, crc32fast |
 | `re` | all `re-*` features | |
@@ -341,6 +342,8 @@ There are complete programs in [`example/`](example):
 | [`regex/match.xur`](example/regex/match.xur) | regex pattern matching |
 | [`time/bench.xur`](example/time/bench.xur) | benchmarking with `std::time` |
 | [`module/plugin_load.xur`](example/module/plugin_load.xur) | dynamic imports and module introspection |
+| [`re/demangle.xur`](example/re/demangle.xur) | C++ name demangling (Itanium + MSVC) |
+| [`re/aob_scan.xur`](example/re/aob_scan.xur) | in-process AOB pattern scanning |
 | [`xur-stub/example/hello.xur`](xur-stub/example/hello.xur) | minimal stub injection |
 | [`xur-stub/example/game_inspector.xur`](xur-stub/example/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
 | [`xur-stub/example/egui_overlay.xur`](xur-stub/example/egui_overlay.xur) | egui overlay injected into a running process |
