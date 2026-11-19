@@ -1,0 +1,35 @@
+use std::io;
+use std::mem;
+use std::bytes;
+use std::assert;
+
+fn main() {
+    // Allocate a page (zeroed by the OS).
+    let page = mem::alloc_page(4096);
+
+    // Write a recognisable 4-byte pattern at offset 100 and 500.
+    let marker = bytes::from_hex("48 8B C1 05").unwrap();
+    mem::write_bytes(page.offset(100), marker);
+    mem::write_bytes(page.offset(500), marker);
+
+    // Read back bytes to verify.
+    let readback = mem::read_bytes(page.offset(100), 4);
+    assert::is_eq(readback.len(), 4);
+
+    // Scan for the first occurrence (wildcard on 3rd byte).
+    let found = mem::scan(page, 4096, "48 8B ?? 05");
+    assert::is_true(found.is_some());
+    io::println("first match at offset: {}", found.unwrap().to_int() - page.to_int());
+
+    // Scan for all occurrences.
+    let all = mem::scan_all(page, 4096, "48 8B ?? 05");
+    assert::is_eq(all.len(), 2);
+    io::println("total matches: {}", all.len());
+
+    // Pattern that doesn't exist.
+    let missing = mem::scan(page, 4096, "FF FF FF FF FF");
+    assert::is_true(missing.is_none());
+
+    mem::free_page(page, 4096);
+    io::println("aob_scan: all assertions passed");
+}

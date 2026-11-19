@@ -42,7 +42,13 @@ pub(crate) fn register(registry: &Registry) {
         .named_raw_function_returns_xur("alloc_page", &["size"], XurType::ptr::<u8>(), alloc_page)
         .named_raw_function_returns_xur("protect", &["addr", "size", "mode"], XurType::UNIT, protect_page)
         .named_raw_function_returns_xur("write_bytes", &["addr", "data"], XurType::UNIT, write_bytes)
-        .named_raw_function_returns_xur("free_page", &["addr", "size"], XurType::UNIT, free_page);
+        .named_raw_function_returns_xur("free_page", &["addr", "size"], XurType::UNIT, free_page)
+        .named_raw_function("read_bytes", &["addr", "len"], read_bytes);
+    #[cfg(feature = "re-demangle")]
+    registry
+        .module("std::mem")
+        .named_raw_function("scan", &["addr", "size", "pattern"], scan_first)
+        .named_raw_function("scan_all", &["addr", "size", "pattern"], scan_all);
     registry
         .builtin(BuiltinType::Struct)
         .raw_function_returns::<Vec<u8>>("to_bytes", struct_to_bytes)
@@ -223,6 +229,58 @@ mod platform {
             Ok(())
         }
     }
+}
+
+/// `mem::read_bytes(addr, len)` → bytes: reads `len` bytes from memory at `addr`.
+fn read_bytes(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let [Value::Ptr(addr), Value::Int(len)] = args else {
+        return Err(RuntimeError::new("`read_bytes` takes (ptr, len)"));
+    };
+    let src = *addr as usize as *const u8;
+    let len = *len as usize;
+    let mut buf = vec![0u8; len];
+    unsafe {
+        std::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), len);
+    }
+    Ok(Value::Bytes(Arc::new(buf.into())))
+}
+
+#[cfg(feature = "re-demangle")]
+fn parse_pattern(s: &str) -> RunResult<rekit::pattern::Pattern> {
+    s.parse::<rekit::pattern::Pattern>()
+        .map_err(|e| RuntimeError::new(e.to_string()))
+}
+
+/// `mem::scan(addr, size, pattern)` → Option<ptr>: finds first AOB match.
+#[cfg(feature = "re-demangle")]
+fn scan_first(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] = args else {
+        return Err(RuntimeError::new("`scan` takes (ptr, size, pattern_str)"));
+    };
+    let pat = parse_pattern(pattern)?;
+    let base = *addr as usize;
+    let slice = unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+    let result = pat.find_first(slice).map(|off| Value::Ptr((base + off) as u64));
+    Ok(crate::option(cx, result))
+}
+
+/// `mem::scan_all(addr, size, pattern)` → [ptr]: finds all AOB matches.
+#[cfg(feature = "re-demangle")]
+fn scan_all(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    let [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] = args else {
+        return Err(RuntimeError::new(
+            "`scan_all` takes (ptr, size, pattern_str)",
+        ));
+    };
+    let pat = parse_pattern(pattern)?;
+    let base = *addr as usize;
+    let slice = unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+    let results: Vec<Value> = pat
+        .find_all(slice)
+        .into_iter()
+        .map(|off| Value::Ptr((base + off) as u64))
+        .collect();
+    Ok(Value::list(results))
 }
 
 fn struct_to_bytes(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
