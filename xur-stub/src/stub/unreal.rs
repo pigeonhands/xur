@@ -96,6 +96,24 @@ impl std::fmt::Display for XurUClass {
     }
 }
 
+#[derive(Facet, Clone)]
+#[facet(opaque)]
+struct XurUProperty(*const u8);
+
+unsafe impl Send for XurUProperty {}
+unsafe impl Sync for XurUProperty {}
+
+impl std::fmt::Display for XurUProperty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Ok(sdk) = get_sdk() {
+            let prop = unrealkit::FProperty::new(self.0, &sdk.names);
+            write!(f, "UProperty({}: {})", prop.name(), prop.class_name())
+        } else {
+            write!(f, "UProperty({:#x})", self.0 as usize)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Module registration
 // ---------------------------------------------------------------------------
@@ -242,6 +260,33 @@ pub(crate) fn register(registry: &Registry) {
         })
         .function("ptr", |obj: &XurUObject| -> u64 {
             obj.0 as u64
+        })
+        .raw_function("get", |cx, args| {
+            let this = extract_uobject(&args[0])?;
+            let Value::Str(name) = &args[1] else {
+                return Err(err("expected string"));
+            };
+            let sdk = get_sdk()?;
+            let uobj = unrealkit::UObject::new(this.0, &sdk.names);
+            let ucls = uobj.class();
+            let prop = ucls.find_property(name)
+                .ok_or_else(|| err(&format!("no property '{name}'")))?;
+            let pv = unsafe { prop.read(this.0) };
+            property_value_to_xur(cx, pv)
+        })
+        .raw_function("set", |_cx, args| {
+            let this = extract_uobject(&args[0])?;
+            let Value::Str(name) = &args[1] else {
+                return Err(err("expected string"));
+            };
+            let sdk = get_sdk()?;
+            let uobj = unrealkit::UObject::new(this.0, &sdk.names);
+            let ucls = uobj.class();
+            let prop = ucls.find_property(name)
+                .ok_or_else(|| err(&format!("no property '{name}'")))?;
+            let pv = xur_to_property_value(&args[2])?;
+            unsafe { prop.write(this.0 as *mut u8, &pv) };
+            Ok(Value::Unit)
         });
 
     // --- UClass type ---
@@ -287,6 +332,82 @@ pub(crate) fn register(registry: &Registry) {
                 .map(|c| Value::str(&c.name()))
                 .collect();
             Ok(Value::list(chain))
+        })
+        .raw_function_returns::<XurUProperty>("property", |cx, args| {
+            let this = extract_uclass(&args[0])?;
+            let Value::Str(name) = &args[1] else {
+                return Err(err("expected string"));
+            };
+            let sdk = get_sdk()?;
+            let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+            match ucls.find_property(name) {
+                Some(prop) => {
+                    let v = into_value(cx, XurUProperty(prop.ptr()))?;
+                    Ok(xur_option(cx, Some(v)))
+                }
+                None => Ok(xur_option(cx, None)),
+            }
+        })
+        .raw_function("properties", |cx, args| {
+            let this = extract_uclass(&args[0])?;
+            let sdk = get_sdk()?;
+            let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+            let props: Result<Vec<Value>, _> = ucls
+                .properties()
+                .map(|p| into_value(cx, XurUProperty(p.ptr())))
+                .collect();
+            Ok(Value::list(props?))
+        })
+        .raw_function("all_properties", |cx, args| {
+            let this = extract_uclass(&args[0])?;
+            let sdk = get_sdk()?;
+            let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+            let props: Result<Vec<Value>, _> = ucls
+                .class_hierarchy()
+                .flat_map(|c| c.properties())
+                .map(|p| into_value(cx, XurUProperty(p.ptr())))
+                .collect();
+            Ok(Value::list(props?))
+        });
+
+    // --- UProperty type ---
+
+    m.ty::<XurUProperty>("UProperty")
+        .function("name", |prop: &XurUProperty| -> String {
+            let sdk = get_sdk().expect("SDK not initialized");
+            unrealkit::FProperty::new(prop.0, &sdk.names).name()
+        })
+        .function("type_name", |prop: &XurUProperty| -> String {
+            let sdk = get_sdk().expect("SDK not initialized");
+            unrealkit::FProperty::new(prop.0, &sdk.names).class_name()
+        })
+        .function("offset", |prop: &XurUProperty| -> i64 {
+            let sdk = get_sdk().expect("SDK not initialized");
+            unrealkit::FProperty::new(prop.0, &sdk.names).offset() as i64
+        })
+        .function("element_size", |prop: &XurUProperty| -> i64 {
+            let sdk = get_sdk().expect("SDK not initialized");
+            unrealkit::FProperty::new(prop.0, &sdk.names).element_size() as i64
+        })
+        .function("ptr", |prop: &XurUProperty| -> i64 {
+            prop.0 as usize as i64
+        })
+        .raw_function("read", |cx, args| {
+            let this = extract_uproperty(&args[0])?;
+            let obj = extract_uobject(&args[1])?;
+            let sdk = get_sdk()?;
+            let prop = unrealkit::FProperty::new(this.0, &sdk.names);
+            let pv = unsafe { prop.read(obj.0) };
+            property_value_to_xur(cx, pv)
+        })
+        .raw_function("write", |_cx, args| {
+            let this = extract_uproperty(&args[0])?;
+            let obj = extract_uobject(&args[1])?;
+            let sdk = get_sdk()?;
+            let prop = unrealkit::FProperty::new(this.0, &sdk.names);
+            let pv = xur_to_property_value(&args[2])?;
+            unsafe { prop.write(obj.0 as *mut u8, &pv) };
+            Ok(Value::Unit)
         });
 
     }); // end lazy_module
@@ -310,4 +431,48 @@ fn extract_uclass(val: &Value) -> Result<XurUClass, RuntimeError> {
     };
     n.with(|c: &XurUClass| c.clone())
         .ok_or_else(|| err("expected a UClass"))
+}
+
+fn extract_uproperty(val: &Value) -> Result<XurUProperty, RuntimeError> {
+    let Value::Native(n) = val else {
+        return Err(err("expected a UProperty"));
+    };
+    n.with(|p: &XurUProperty| p.clone())
+        .ok_or_else(|| err("expected a UProperty"))
+}
+
+fn property_value_to_xur(cx: &mut dyn Context, pv: unrealkit::PropertyValue) -> Result<Value, RuntimeError> {
+    match pv {
+        unrealkit::PropertyValue::Bool(v) => Ok(Value::Bool(v)),
+        unrealkit::PropertyValue::Int(v) => Ok(Value::Int(v)),
+        unrealkit::PropertyValue::Float(v) => Ok(Value::Float(v)),
+        unrealkit::PropertyValue::Name(s) | unrealkit::PropertyValue::Str(s) => Ok(Value::str(&s)),
+        unrealkit::PropertyValue::Object(ptr) => {
+            if ptr.is_null() {
+                let none = cx.lang().none;
+                Ok(Value::adt(none, Vec::new()))
+            } else {
+                into_value(cx, XurUObject(ptr))
+            }
+        }
+        unrealkit::PropertyValue::Bytes(b) => Ok(Value::bytes(b)),
+    }
+}
+
+fn xur_to_property_value(val: &Value) -> Result<unrealkit::PropertyValue, RuntimeError> {
+    match val {
+        Value::Bool(v) => Ok(unrealkit::PropertyValue::Bool(*v)),
+        Value::Int(v) => Ok(unrealkit::PropertyValue::Int(*v)),
+        Value::Float(v) => Ok(unrealkit::PropertyValue::Float(*v)),
+        Value::Str(s) => Ok(unrealkit::PropertyValue::Str(s.to_string())),
+        Value::Bytes(b) => {
+            let bytes = b.lock().map_err(|e| err(e.to_string()))?.clone();
+            Ok(unrealkit::PropertyValue::Bytes(bytes))
+        }
+        Value::Native(_) => {
+            let obj = extract_uobject(val)?;
+            Ok(unrealkit::PropertyValue::Object(obj.0))
+        }
+        _ => Err(err("cannot convert value to property type")),
+    }
 }
