@@ -112,7 +112,8 @@ struct GameRuntime {
     freeze_timer: cell::Cell<bool>
     noclip: cell::Cell<bool>
     extended_zoom: cell::Cell<bool>
-    manual_zoom: cell::Cell<bool>
+    zoom_block: il2cpp::VoidBlockHook
+    timer_block: il2cpp::VoidBlockHook
     detach_camera: cell::Cell<bool>
     // Enum entries
     weapons: [EnumEntry]
@@ -314,19 +315,14 @@ impl GameRuntime {
 
         let freeze_timer = cell::new(false);
         let gm_update = gm_cls.method("Update", 0)?;
-        gm_update.hook(|ctx| {
-            if freeze_timer.get() { Some(0) } else { None }
-        });
-        log::info("GameManager.Update hooked for freeze timer");
+        let timer_block = gm_update.hook_void_block();
+        log::info("GameManager.Update void-blocked for freeze timer");
 
         let noclip = cell::new(false);
         let extended_zoom = cell::new(false);
-        let manual_zoom = cell::new(false);
         let update_zoom = pc_cls.method("UpdateZoom", 0)?;
-        update_zoom.hook(|ctx| {
-            if manual_zoom.get() { Some(0) } else { None }
-        });
-        log::info("PlayerCamera.UpdateZoom hooked for manual zoom");
+        let zoom_block = update_zoom.hook_void_block();
+        log::info("PlayerCamera.UpdateZoom void-blocked for manual zoom");
 
         let weapons = enum_entries(weapon_enum);
         let items = enum_entries(item_enum);
@@ -381,7 +377,8 @@ impl GameRuntime {
             freeze_timer,
             noclip,
             extended_zoom,
-            manual_zoom,
+            zoom_block,
+            timer_block,
             detach_camera,
             weapons,
             items,
@@ -511,7 +508,7 @@ impl GameRuntime {
         self.set_noclip(false);
         self.detach_camera.set(false);
         self.extended_zoom.set(false);
-        self.manual_zoom.set(false);
+        self.zoom_block.set_blocked(false);
         self.set_max_zoom(0.0);
         let pc = self.player_camera();
         if !pc.is_null() {
@@ -703,17 +700,14 @@ fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
     let secs = total_secs - mins * 60;
     ui.heading(fmt::format("Timer: {}m {}s", mins, secs));
 
-    let frozen = game.freeze_timer.get();
+    let frozen = game.timer_block.is_blocked();
     let new_frozen = ui.checkbox(frozen, "Freeze timer");
     if new_frozen != frozen {
+        game.timer_block.set_blocked(new_frozen);
         game.freeze_timer.set(new_frozen);
         if new_frozen {
             state.timer_value.set(timer);
         }
-    }
-
-    if frozen {
-        game.set_timer(state.timer_value.get());
     }
 
     let new_val = ui.slider_float("Set to (seconds)", state.timer_value.get(), 0.0, 3600.0);
@@ -751,10 +745,10 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         }
     }
 
-    let manual = game.manual_zoom.get();
-    let new_manual = ui.checkbox(manual, "Manual zoom (slider)");
-    if new_manual != manual {
-        game.manual_zoom.set(new_manual);
+    let blocked = game.zoom_block.is_blocked();
+    let new_blocked = ui.checkbox(blocked, "Manual zoom (blocks game zoom)");
+    if new_blocked != blocked {
+        game.zoom_block.set_blocked(new_blocked);
     }
 
     let pc = game.player_camera();
@@ -762,7 +756,7 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         let cur_z = game.pc_current_z.read(pc);
         let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
         if new_z != cur_z {
-            game.manual_zoom.set(true);
+            game.zoom_block.set_blocked(true);
             game.pc_current_z.write(pc, new_z);
         }
     }
@@ -1043,7 +1037,7 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
 fn ctor() {
     log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
     egui::init();
-    egui::set_scale(2.0);
+    egui::set_scale(0.5);
 }
 
 fn stub_main() {
