@@ -13,6 +13,8 @@ mod cli;
 mod env;
 #[cfg(feature = "random")]
 mod random;
+#[cfg(feature = "hash")]
+mod hash;
 #[cfg(feature = "datetime")]
 mod datetime;
 mod fmt;
@@ -111,6 +113,8 @@ pub fn register(registry: &Registry) {
     env::register(registry);
     #[cfg(feature = "random")]
     random::register(registry);
+    #[cfg(feature = "hash")]
+    hash::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);

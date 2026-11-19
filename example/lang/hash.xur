@@ -1,0 +1,44 @@
+use std::io;
+use std::hash;
+use std::assert;
+
+fn main() {
+    let data = "hello world".to_bytes();
+
+    // CRC32
+    let crc = hash::crc32(data);
+    io::println("crc32: {}", crc);
+    assert::is_true(crc > 0);
+
+    // SHA-256 (hex string)
+    let sha = hash::sha256(data);
+    io::println("sha256: {}", sha);
+    assert::is_eq(sha.len(), 64);
+
+    // SHA-256 (raw bytes)
+    let sha_bytes = hash::sha256_bytes(data);
+    assert::is_eq(sha_bytes.len(), 32);
+
+    // MD5 (hex string)
+    let md = hash::md5(data);
+    io::println("md5: {}", md);
+    assert::is_eq(md.len(), 32);
+
+    // Known values: "hello world" sha256
+    assert::is_eq(
+        hash::sha256("hello world".to_bytes()),
+        "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    );
+
+    // Known values: "hello world" md5
+    assert::is_eq(
+        hash::md5("hello world".to_bytes()),
+        "5eb63bbbe01eeed093cb22bb8f5acdc3"
+    );
+
+    // Empty data works
+    let empty = hash::sha256("".to_bytes());
+    assert::is_eq(empty.len(), 64);
+
+    io::println("hash: all assertions passed");
+}

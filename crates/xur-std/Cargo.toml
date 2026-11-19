@@ -11,8 +11,9 @@ name = "xur_std"
 path = "src/lib.rs"
 
 [features]
-default = ["cli", "http", "regex", "datetime", "json", "re", "gui", "random"]
+default = ["cli", "http", "regex", "datetime", "json", "re", "gui", "random", "hash"]
 random            = ["dep:rand"]
+hash              = ["dep:sha2", "dep:md-5", "dep:crc32fast"]
 cli               = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
 http              = ["dep:ureq"]
 regex             = ["dep:regex"]
@@ -46,6 +47,9 @@ chrono = { workspace = true, optional = true }
 eframe = { version = "0.37", optional = true, default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
 winit = { version = "0.30", optional = true }
 rand = { version = "0.9", optional = true }
+sha2 = { version = "0.10", optional = true }
+md-5 = { version = "0.10", optional = true }
+crc32fast = { version = "1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
