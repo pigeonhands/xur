@@ -28,7 +28,7 @@ libloading = { version = "0.9", optional = true }
 libc.workspace = true
 
 [features]
-default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui"]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash"]
 hooking = ["dep:hooking", "xur-re-asm"]
 hao-runtime = ["dep:hao-runtime", "hooking"]
 il2cpp-runtime = ["dep:hao-il2cpp-runtime", "dep:libloading", "hooking"]
@@ -47,3 +47,5 @@ xur-re-dotnet-il2cpp  = ["xur-std/re-dotnet-il2cpp"]
 xur-re-dotnet-runtime = ["xur-std/re-dotnet-runtime"]
 xur-re                = ["xur-std/re"]
 xur-gui               = ["xur-std/gui"]
+xur-random            = ["xur-std/random"]
+xur-hash              = ["xur-std/hash"]
