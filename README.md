@@ -213,7 +213,10 @@ modules are lazy: they are only built if a program uses them.
 | `std::thread`  | `spawn`, `sleep`, `JoinHandle::join`                                     |
 | `std::process` | `spawn(program, args)` an OS child process; `Process::pid/kill/wait`     |
 | `std::sync`    | `channel`, `Sender::send`, `Receiver::recv`; `Mutex`, `lock`, `try_lock` |
-| `std::math`    | `sqrt`, `pow`, `abs`, `min`, `max`, `floor`, `ceil`, `PI`, `E`           |
+| `std::math`    | `sqrt`, `pow`, `abs`, `min`, `max`, `floor`, `ceil`, `sin`, `cos`, `atan2`, `ln`, `log2`, `PI`, `E`, `clamp`, `lerp` |
+| `std::env`     | `get`, `set`, `remove`, `vars`, `current_dir`, `home_dir`, `exe_path`    |
+| `std::random`  | `int`, `float`, `bool`, `choice`, `shuffle`, `bytes`                     |
+| `std::hash`    | `crc32`, `sha256`, `sha256_bytes`, `md5`                                 |
 | `std::mem`     | `size_of::<T>()`, `align_of::<T>()`, `from_bytes::<T>()`, `to_bytes`, `alloc_page`, `protect`, `free_page` |
 | `std::ptr`     | `null`, `from_int`, `to_int`, `offset`, pointer arithmetic               |
 | `std::reflect` | `fields`, `get`, `set`, `methods`, `call`, `variants`; `layout::<T>()`, `Layout` |
@@ -227,10 +230,12 @@ modules are lazy: they are only built if a program uses them.
 | `std::re`      | binaries with [pewter](https://docs.rs/pewter) (`pe`, `elf`), live processes with [procodile](https://docs.rs/procodile) (`proc`), x86 disassembly/assembly with [iced-x86](https://docs.rs/iced-x86) (`asm::x86`), .NET assemblies with [hao](https://docs.rs/hao) (`dotnet`), and Unity Il2Cpp with [hao-il2cpp](https://docs.rs/hao-il2cpp) (`dotnet::il2cpp`) |
 
 Built-in values have methods too: lists (`push`, `pop`, `get`, `map`,
-`filter`, `sort`, `join`, ...), strings (`split`, `trim`, `starts_with`,
-`replace`, `to_upper`, `ord`, ...), numbers (`abs`, `pow`, `to_hex`, ...),
-bytes (`read_u32`, `write_u16`, ...) and records (`set_field`,
-`set_method`, `keys`, `values`).
+`filter`, `sort`, `sort_by`, `find`, `reduce`, `enumerate`, `zip`,
+`flatten`, `slice`, `any`, `all`, `sum`, `min`, `max`, `join`, ...),
+strings (`split`, `trim`, `find`, `rfind`, `slice`, `chars`,
+`starts_with`, `replace`, `to_upper`, `pad_left`, `pad_right`, ...),
+numbers (`abs`, `pow`, `to_hex`, ...), bytes (`read_u32`, `write_u16`,
+...) and records (`set_field`, `set_method`, `keys`, `values`).
 
 ### Feature flags
 
@@ -251,6 +256,8 @@ embedders only compile what they need. All are enabled by default.
 | `re-dotnet` | `std::re::dotnet` | hao |
 | `re-dotnet-il2cpp` | `std::re::dotnet::il2cpp` | hao-il2cpp |
 | `re-dotnet-runtime` | `std::re::dotnet::runtime` | hao-runtime |
+| `random` | `std::random` | rand |
+| `hash` | `std::hash` | sha2, md-5, crc32fast |
 | `re` | all `re-*` features | |
 
 ```sh
@@ -312,6 +319,12 @@ There are complete programs in [`example/`](example):
 | [`lang/bytes.xur`](example/lang/bytes.xur) | byte manipulation |
 | [`lang/logging.xur`](example/lang/logging.xur) | structured logging |
 | [`lang/ord_chr.xur`](example/lang/ord_chr.xur) | character ordinals and conversion |
+| [`lang/env.xur`](example/lang/env.xur) | environment variables |
+| [`lang/random.xur`](example/lang/random.xur) | random numbers, choice, shuffle |
+| [`lang/hash.xur`](example/lang/hash.xur) | CRC32, SHA-256, MD5 hashing |
+| [`lang/list_methods.xur`](example/lang/list_methods.xur) | sort, find, reduce, zip, slice, and more |
+| [`lang/string_methods.xur`](example/lang/string_methods.xur) | find, slice, chars, insert, pad, trim |
+| [`lang/math_expanded.xur`](example/lang/math_expanded.xur) | trig, log, rounding, constants, lerp |
 | [`json/`](example/json) | JSON parsing and struct coercion |
 | [`http/get.xur`](example/http/get.xur) | HTTP GET request |
 | [`http/post_json.xur`](example/http/post_json.xur) | HTTP POST with JSON body |

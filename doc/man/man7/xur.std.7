@@ -320,6 +320,147 @@ Runtime metadata.
 .B invoked_by()
 returns how the program was launched
 .RB ( \(dqcli\(dq " or " \(dqstub\(dq ).
+.SH LIST METHODS
+Lists support these builtin methods in addition to
+.BR len() ", " is_empty() ", " push() ", " pop() ", "
+.BR get() ", " first() ", " last() ", " insert() ", "
+.BR remove() ", " contains() ", " clear() ", " reverse() ", "
+.BR extend() ", " map() ", " filter() ", " join() :
+.TP
+.B sort()
+Returns a new sorted list. Works on homogeneous Int, Float, or Str lists.
+.TP
+.B sort_by(f)
+Returns a new list sorted by comparator
+.IR f(a,\ b) ,
+which must return \-1, 0, or 1.
+.TP
+.B find(f)
+Returns
+.B Some(item)
+for the first item where
+.I f
+returns true, or
+.BR None .
+.TP
+.B find_index(f)
+Returns
+.B Some(index)
+or
+.BR None .
+.TP
+.B any(f)
+Returns true if any item satisfies
+.IR f .
+.TP
+.B all(f)
+Returns true if all items satisfy
+.IR f .
+.TP
+.B reduce(f)
+Folds the list with
+.IR f(acc,\ item) ,
+using the first element as the initial accumulator.
+.TP
+.B flat_map(f)
+Like
+.B map
+but flattens one level of nested lists.
+.TP
+.B enumerate()
+Returns a list of [index, value] pairs.
+.TP
+.B flatten()
+Flattens one level of nested lists.
+.TP
+.B slice(start, end)
+Returns a sublist. Supports negative indices (from end).
+.TP
+.B dedup()
+Removes consecutive duplicates.
+.TP
+.B sum()
+Returns the sum of an Int or Float list.
+.TP
+.B min() / max()
+Returns
+.B Some(value)
+or
+.B None
+for empty lists. Works on Int, Float, Str.
+.TP
+.B zip(other)
+Returns a list of [a, b] pairs, truncated to the shorter list.
+.SH STRING METHODS
+Strings support these builtin methods in addition to
+.BR len() ", " is_empty() ", " contains() ", " starts_with() ", "
+.BR ends_with() ", " to_upper() ", " to_lower() ", " trim() ", "
+.BR replace() ", " split() ", " repeat() ", " pad_left() ", "
+.BR to_int() ", " to_float() ", " to_bytes() ", " ord() ", " chr() :
+.TP
+.B find(needle)
+Returns
+.B Some(index)
+(char index) of the first occurrence, or
+.BR None .
+.TP
+.B rfind(needle)
+Returns
+.B Some(index)
+of the last occurrence, or
+.BR None .
+.TP
+.B trim_start() / trim_end()
+Trims leading or trailing whitespace.
+.TP
+.B pad_right(width, fill)
+Pads with
+.I fill
+on the right to reach
+.IR width .
+.TP
+.B slice(start, end)
+Returns a substring by char indices. Supports negative indices.
+.TP
+.B chars()
+Returns a list of single-character strings.
+.TP
+.B bytes()
+Returns a list of byte integer values.
+.TP
+.B insert(index, substr)
+Inserts a string at the given char position.
+.TP
+.B remove(start, end)
+Removes a char range.
+.SH STD::MATH
+Mathematical functions.
+In addition to the existing
+.BR abs() ", " min() ", " max() ", " pow() ", " sqrt() :
+.SS Trigonometry
+.BR sin(x) ", " cos(x) ", " tan(x) ", "
+.BR asin(x) ", " acos(x) ", " atan(x) ", " atan2(y,x)
+.SS Logarithms and exponentials
+.BR ln(x) ", " log2(x) ", " log10(x) ", " exp(x)
+.SS Rounding
+.BR floor(x) ", " ceil(x) ", " round(x)
+.SS Constants
+.BR PI() ", " E() ", " TAU() ", " INFINITY() ", " NAN()
+.SS Utility
+.TP
+.B clamp(x, min, max)
+Clamps
+.I x
+to the range [min, max].
+.TP
+.B lerp(a, b, t)
+Linear interpolation between
+.I a
+and
+.IR b .
+.TP
+.B fmin(a, b) / fmax(a, b)
+Float-aware min/max (NaN-propagating).
 .SH RECORD METHODS
 All records support these builtin methods:
 .TP
@@ -403,6 +544,74 @@ Methods:
 Supports the
 .B ?
 operator for early return.
+.SH STD::ENV
+Environment variable access.
+.TP
+.B get(name)
+Returns
+.B Some(value)
+or
+.BR None .
+.TP
+.B set(name, value)
+Sets an environment variable.
+.TP
+.B remove(name)
+Removes an environment variable.
+.TP
+.B vars()
+Returns a list of [key, value] pairs for all environment variables.
+.TP
+.B current_dir()
+Returns the current working directory as a string.
+.TP
+.B home_dir()
+Returns
+.B Some(path)
+for the home directory, or
+.BR None .
+.TP
+.B exe_path()
+Returns
+.B Some(path)
+for the current executable, or
+.BR None .
+.SH STD::RANDOM
+Random number generation.
+.TP
+.B int(min, max)
+Returns a random integer in [min, max].
+.TP
+.B float()
+Returns a random float in [0.0, 1.0).
+.TP
+.B bool()
+Returns a random boolean.
+.TP
+.B choice(list)
+Returns a random element from the list.
+.TP
+.B shuffle(list)
+Returns a shuffled copy of the list.
+.TP
+.B bytes(len)
+Returns random bytes of the given length.
+.SH STD::HASH
+Cryptographic and checksum hashing.
+.TP
+.B crc32(data)
+Returns the CRC-32 checksum of
+.I data
+(bytes) as an integer.
+.TP
+.B sha256(data)
+Returns the SHA-256 hash as a hex string.
+.TP
+.B sha256_bytes(data)
+Returns the SHA-256 hash as raw bytes.
+.TP
+.B md5(data)
+Returns the MD5 hash as a hex string.
 .SH EXAMPLES
 .nf
 use std::io;
@@ -440,4 +649,7 @@ fn main() -> Result<(), str> {
 .BR xur.std.http (7),
 .BR xur.std.time (7),
 .BR xur.std.regex (7),
-.BR xur.std.datetime (7)
+.BR xur.std.datetime (7),
+.BR xur.std.env (7),
+.BR xur.std.random (7),
+.BR xur.std.hash (7)
