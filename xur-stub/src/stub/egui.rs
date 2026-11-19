@@ -5,7 +5,7 @@
 //! calling `draw(ctx)` each frame. The script uses `ctx.window(...)` to
 //! create its own windows.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use facet::Facet;
@@ -21,7 +21,6 @@ use xur_runtime::{Registry, RuntimeError, Value};
 // -----------------------------------------------------------------------
 
 static BRIDGE: OnceLock<Arc<Bridge>> = OnceLock::new();
-static ZOOM_FACTOR: AtomicU32 = AtomicU32::new(0);
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -196,7 +195,7 @@ pub(crate) fn register(registry: &Registry) {
             if f <= 0.0 {
                 return Err(RuntimeError::new("scale factor must be positive"));
             }
-            ZOOM_FACTOR.store(f.to_bits(), Ordering::Relaxed);
+            hao_egui::set_ui_scale(f);
             Ok(Value::Unit)
         });
 
@@ -236,11 +235,6 @@ fn register_run(m: &mut ModuleBuilder<'_>) {
                 }
                 state.ctx.take().unwrap()
             };
-
-            let bits = ZOOM_FACTOR.load(Ordering::Relaxed);
-            if bits != 0 {
-                ctx.set_zoom_factor(f32::from_bits(bits));
-            }
 
             let ctx_val = into_value(cx, EguiCtx::from_ctx(&ctx)).expect("EguiCtx registered");
             if let Err(e) = cx.call(&draw, &[ctx_val]) {
