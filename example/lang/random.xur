@@ -1,0 +1,40 @@
+use std::io;
+use std::random;
+use std::assert;
+
+fn main() {
+    // random int in range
+    let n = random::int(1, 100);
+    assert::is_true(n >= 1);
+    assert::is_true(n <= 100);
+    io::println("random int: {}", n);
+
+    // random float in [0, 1)
+    let f = random::float();
+    assert::is_true(f >= 0.0);
+    assert::is_true(f < 1.0);
+    io::println("random float: {}", f);
+
+    // random bool
+    let b = random::bool();
+    io::println("random bool: {}", b);
+
+    // choice from a list
+    let colors = ["red", "green", "blue"];
+    let pick = random::choice(colors);
+    assert::is_true(colors.contains(pick));
+    io::println("random choice: {}", pick);
+
+    // shuffle
+    let nums = [1, 2, 3, 4, 5];
+    let shuffled = random::shuffle(nums);
+    assert::is_eq(shuffled.len(), 5);
+    io::println("shuffled: {} items", shuffled.len());
+
+    // random bytes
+    let b = random::bytes(16);
+    assert::is_eq(b.len(), 16);
+    io::println("random bytes: {} bytes", b.len());
+
+    io::println("random: all assertions passed");
+}

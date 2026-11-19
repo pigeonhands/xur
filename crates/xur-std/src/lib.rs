@@ -11,6 +11,8 @@ mod cell;
 #[cfg(feature = "cli")]
 mod cli;
 mod env;
+#[cfg(feature = "random")]
+mod random;
 #[cfg(feature = "datetime")]
 mod datetime;
 mod fmt;
@@ -107,6 +109,8 @@ pub fn register(registry: &Registry) {
     datetime::register(registry);
     time::register(registry);
     env::register(registry);
+    #[cfg(feature = "random")]
+    random::register(registry);
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);
