@@ -39,6 +39,7 @@ hao-runtime = { path = "../hao/crates/hao-runtime", features = ["reflect"] }
 hao-il2cpp-runtime = { version = "0.0.5", features = ["reflect"] }
 hao-il2cpp-unity = { version = "0.0.6", features = ["reflect"] }
 hao-godot = { path = "../hao/crates/hao-godot", features = ["reflect"] }
+rekit = { path = "../rekit", default-features = false }
 hooking = "0.6"
 iced-x86 = "1.21"
 ureq = "3.0"

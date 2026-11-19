@@ -25,7 +25,8 @@ re-asm            = ["dep:iced-x86"]
 re-dotnet         = ["dep:hao"]
 re-dotnet-il2cpp  = ["re-dotnet", "dep:hao-il2cpp"]
 re-dotnet-runtime = ["re-dotnet", "dep:hao-runtime"]
-re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime"]
+re-demangle       = ["dep:rekit"]
+re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime", "re-demangle"]
 gui               = ["dep:eframe", "dep:winit"]
 
 [dependencies]
@@ -50,6 +51,7 @@ rand = { version = "0.9", optional = true }
 sha2 = { version = "0.10", optional = true }
 md-5 = { version = "0.10", optional = true }
 crc32fast = { version = "1", optional = true }
+rekit = { workspace = true, features = ["demangle"], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

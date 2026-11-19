@@ -1,0 +1,34 @@
+use std::io;
+use std::re;
+use std::assert;
+
+fn main() {
+    // Itanium (GCC/Clang) mangled name
+    let itanium = re::demangle("_ZN3foo3barEv");
+    assert::is_true(itanium.is_some());
+    io::println("itanium: {}", itanium.unwrap());
+
+    // MSVC mangled name
+    let msvc = re::demangle("?bar@foo@@YAXXZ");
+    assert::is_true(msvc.is_some());
+    io::println("msvc: {}", msvc.unwrap());
+
+    // Not mangled returns None
+    let plain = re::demangle("printf");
+    assert::is_true(plain.is_none());
+
+    // Scheme-specific functions
+    let it = re::demangle_itanium("_ZN5MyApp4initEv");
+    assert::is_true(it.is_some());
+    io::println("itanium specific: {}", it.unwrap());
+
+    let ms = re::demangle_msvc("?init@MyApp@@QAEXXZ");
+    assert::is_true(ms.is_some());
+    io::println("msvc specific: {}", ms.unwrap());
+
+    // Wrong scheme returns None
+    assert::is_true(re::demangle_itanium("?bar@foo@@YAXXZ").is_none());
+    assert::is_true(re::demangle_msvc("_ZN3foo3barEv").is_none());
+
+    io::println("demangle: all assertions passed");
+}

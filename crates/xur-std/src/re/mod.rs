@@ -26,6 +26,8 @@
 
 #[cfg(feature = "re-asm")]
 mod asm;
+#[cfg(feature = "re-demangle")]
+mod demangle;
 #[cfg(feature = "re-dotnet")]
 mod dotnet;
 #[allow(unused)]
@@ -52,5 +54,7 @@ pub(crate) fn register(registry: &Registry) {
         asm::register(registry, re);
         #[cfg(feature = "re-dotnet")]
         dotnet::register(registry, re);
+        #[cfg(feature = "re-demangle")]
+        demangle::register(registry);
     });
 }
