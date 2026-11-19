@@ -21,7 +21,6 @@ use xur_runtime::{Registry, RuntimeError, Value};
 // -----------------------------------------------------------------------
 
 static BRIDGE: OnceLock<Arc<Bridge>> = OnceLock::new();
-static ZOOM_FACTOR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -147,11 +146,6 @@ fn init_early() {
 
             render_bridge.frames.fetch_add(1, Ordering::Relaxed);
 
-            let zoom_bits = ZOOM_FACTOR.load(Ordering::Relaxed);
-            if zoom_bits != 0 {
-                ctx.set_zoom_factor(f32::from_bits(zoom_bits));
-            }
-
             if !render_bridge.ready.load(Ordering::Relaxed) {
                 return;
             }
@@ -201,7 +195,7 @@ pub(crate) fn register(registry: &Registry) {
             if f <= 0.0 {
                 return Err(RuntimeError::new("scale factor must be positive"));
             }
-            ZOOM_FACTOR.store(f.to_bits(), Ordering::Relaxed);
+            hao_egui::set_pixels_per_point(f);
             Ok(Value::Unit)
         });
 

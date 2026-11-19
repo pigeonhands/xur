@@ -1630,8 +1630,6 @@ dependencies = [
 [[package]]
 name = "hao-il2cpp-runtime"
 version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5eaf809fda1af852042aecc00b6fb00b55a761c7a101039f53bcb3ef916477f"
 dependencies = [
  "facet",
  "hooking",
@@ -1644,8 +1642,6 @@ dependencies = [
 [[package]]
 name = "hao-il2cpp-unity"
 version = "0.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "896fc19aa1c817fcbc8afcb44918e2048dc96d23cd47d7e92fa7c97370644a46"
 dependencies = [
  "egui 0.29.1",
  "facet",

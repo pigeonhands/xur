@@ -112,6 +112,7 @@ struct GameRuntime {
     freeze_timer: cell::Cell<bool>
     noclip: cell::Cell<bool>
     extended_zoom: cell::Cell<bool>
+    manual_zoom: cell::Cell<bool>
     detach_camera: cell::Cell<bool>
     // Enum entries
     weapons: [EnumEntry]
@@ -312,8 +313,20 @@ impl GameRuntime {
         log::info("PlayerCamera.PlayerCam hooked for detach camera");
 
         let freeze_timer = cell::new(false);
+        let gm_update = gm_cls.method("Update", 0)?;
+        gm_update.hook(|ctx| {
+            if freeze_timer.get() { Some(0) } else { None }
+        });
+        log::info("GameManager.Update hooked for freeze timer");
+
         let noclip = cell::new(false);
         let extended_zoom = cell::new(false);
+        let manual_zoom = cell::new(false);
+        let update_zoom = pc_cls.method("UpdateZoom", 0)?;
+        update_zoom.hook(|ctx| {
+            if manual_zoom.get() { Some(0) } else { None }
+        });
+        log::info("PlayerCamera.UpdateZoom hooked for manual zoom");
 
         let weapons = enum_entries(weapon_enum);
         let items = enum_entries(item_enum);
@@ -368,6 +381,7 @@ impl GameRuntime {
             freeze_timer,
             noclip,
             extended_zoom,
+            manual_zoom,
             detach_camera,
             weapons,
             items,
@@ -497,6 +511,7 @@ impl GameRuntime {
         self.set_noclip(false);
         self.detach_camera.set(false);
         self.extended_zoom.set(false);
+        self.manual_zoom.set(false);
         self.set_max_zoom(0.0);
         let pc = self.player_camera();
         if !pc.is_null() {
@@ -736,11 +751,18 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         }
     }
 
+    let manual = game.manual_zoom.get();
+    let new_manual = ui.checkbox(manual, "Manual zoom (slider)");
+    if new_manual != manual {
+        game.manual_zoom.set(new_manual);
+    }
+
     let pc = game.player_camera();
     if !pc.is_null() {
         let cur_z = game.pc_current_z.read(pc);
         let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
         if new_z != cur_z {
+            game.manual_zoom.set(true);
             game.pc_current_z.write(pc, new_z);
         }
     }
@@ -1021,7 +1043,7 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
 fn ctor() {
     log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
     egui::init();
-    egui::set_scale(0.7);
+    egui::set_scale(2.0);
 }
 
 fn stub_main() {
