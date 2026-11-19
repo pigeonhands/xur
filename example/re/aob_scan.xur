@@ -31,5 +31,17 @@ fn main() {
     assert::is_true(missing.is_none());
 
     mem::free_page(page, 4096);
+
+    // Also scan a byte buffer directly (no pointer needed).
+    let buf = bytes::from_hex("00 00 48 8B C1 05 00 00 48 8B AA 05").unwrap();
+    let first = mem::scan(buf, "48 8B ?? 05");
+    assert::is_true(first.is_some());
+    assert::is_eq(first.unwrap(), 2);
+
+    let all_buf = mem::scan_all(buf, "48 8B ?? 05");
+    assert::is_eq(all_buf.len(), 2);
+    assert::is_eq(all_buf.get(0).unwrap(), 2);
+    assert::is_eq(all_buf.get(1).unwrap(), 8);
+
     io::println("aob_scan: all assertions passed");
 }

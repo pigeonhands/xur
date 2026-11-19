@@ -251,36 +251,62 @@ fn parse_pattern(s: &str) -> RunResult<rekit::pattern::Pattern> {
         .map_err(|e| RuntimeError::new(e.to_string()))
 }
 
-/// `mem::scan(addr, size, pattern)` → Option<ptr>: finds first AOB match.
+/// `mem::scan(ptr, size, pattern)` → Option<ptr>
+/// `mem::scan(bytes, pattern)` → Option<int>
 #[cfg(feature = "re-demangle")]
 fn scan_first(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] = args else {
-        return Err(RuntimeError::new("`scan` takes (ptr, size, pattern_str)"));
-    };
-    let pat = parse_pattern(pattern)?;
-    let base = *addr as usize;
-    let slice = unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
-    let result = pat.find_first(slice).map(|off| Value::Ptr((base + off) as u64));
-    Ok(crate::option(cx, result))
+    match args {
+        [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] => {
+            let pat = parse_pattern(pattern)?;
+            let base = *addr as usize;
+            let slice =
+                unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+            let result = pat.find_first(slice).map(|off| Value::Ptr((base + off) as u64));
+            Ok(crate::option(cx, result))
+        }
+        [Value::Bytes(data), Value::Str(pattern)] => {
+            let pat = parse_pattern(pattern)?;
+            let data = lock(data);
+            let result = pat.find_first(&data).map(|off| Value::Int(off as i64));
+            Ok(crate::option(cx, result))
+        }
+        _ => Err(RuntimeError::new(
+            "`scan` takes (ptr, size, pattern) or (bytes, pattern)",
+        )),
+    }
 }
 
-/// `mem::scan_all(addr, size, pattern)` → [ptr]: finds all AOB matches.
+/// `mem::scan_all(ptr, size, pattern)` → [ptr]
+/// `mem::scan_all(bytes, pattern)` → [int]
 #[cfg(feature = "re-demangle")]
 fn scan_all(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] = args else {
-        return Err(RuntimeError::new(
-            "`scan_all` takes (ptr, size, pattern_str)",
-        ));
-    };
-    let pat = parse_pattern(pattern)?;
-    let base = *addr as usize;
-    let slice = unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
-    let results: Vec<Value> = pat
-        .find_all(slice)
-        .into_iter()
-        .map(|off| Value::Ptr((base + off) as u64))
-        .collect();
-    Ok(Value::list(results))
+    match args {
+        [Value::Ptr(addr), Value::Int(size), Value::Str(pattern)] => {
+            let pat = parse_pattern(pattern)?;
+            let base = *addr as usize;
+            let slice =
+                unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+            let results: Vec<Value> = pat
+                .find_all(slice)
+                .into_iter()
+                .map(|off| Value::Ptr((base + off) as u64))
+                .collect();
+            Ok(Value::list(results))
+        }
+        [Value::Bytes(data), Value::Str(pattern)] => {
+            let pat = parse_pattern(pattern)?;
+            let data = lock(data);
+            let results: Vec<Value> = pat
+                .find_all(&data)
+                .into_iter()
+                .map(|off| Value::Int(off as i64))
+                .collect();
+            Ok(Value::list(results))
+        }
+        _ => Err(RuntimeError::new(
+            "`scan_all` takes (ptr, size, pattern) or (bytes, pattern)",
+        )),
+    }
 }
 
 fn struct_to_bytes(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
