@@ -67,6 +67,24 @@ fn main() {
         None => io::println("(skipped — no object found)"),
     }
 
+    // Dump functions of a class.
+    io::println("=== Functions ===");
+    match found {
+        Some(obj) => {
+            let cls = obj.class();
+            io::println("functions of {}:", cls.name());
+            for f in cls.all_methods() {
+                io::println("  {}", f.signature());
+            }
+
+            // Call a function via ProcessEvent:
+            // unreal::set_process_event_vtable(68);  // discover from vtable
+            // let func = cls.method("SomeFunction").unwrap();
+            // let result = func.invoke(obj, arg1, arg2);
+        }
+        None => io::println("(skipped — no object found)"),
+    }
+
     // List all actors (objects whose class inherits AActor).
     io::println("=== Actors ===");
     let actors = unreal::find_objects_by_class("Actor");
