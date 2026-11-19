@@ -9,6 +9,8 @@ pub(crate) mod il2cpp;
 mod re;
 #[cfg(feature = "il2cpp-unity")]
 mod time;
+#[cfg(feature = "unreal")]
+mod unreal;
 
 use xur_runtime::Registry;
 
@@ -24,4 +26,6 @@ pub(crate) fn register(registry: &Registry) {
     il2cpp::register(registry);
     #[cfg(feature = "godot")]
     godot::register(registry);
+    #[cfg(feature = "unreal")]
+    unreal::register(registry);
 }

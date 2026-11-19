@@ -26,9 +26,10 @@ hooking = { workspace = true, optional = true }
 hao-runtime = { workspace = true, optional = true }
 libloading = { version = "0.9", optional = true }
 libc.workspace = true
+unrealkit = { workspace = true, optional = true }
 
 [features]
-default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash"]
+default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "unreal", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash"]
 hooking = ["dep:hooking", "xur-re-asm"]
 hao-runtime = ["dep:hao-runtime", "hooking"]
 il2cpp-runtime = ["dep:hao-il2cpp-runtime", "dep:libloading", "hooking"]
@@ -46,7 +47,9 @@ xur-re-dotnet         = ["xur-std/re-dotnet"]
 xur-re-dotnet-il2cpp  = ["xur-std/re-dotnet-il2cpp"]
 xur-re-dotnet-runtime = ["xur-std/re-dotnet-runtime"]
 xur-re-demangle       = ["xur-std/re-demangle"]
+xur-re-unreal         = ["xur-std/re-unreal"]
 xur-re                = ["xur-std/re"]
 xur-gui               = ["xur-std/gui"]
 xur-random            = ["xur-std/random"]
 xur-hash              = ["xur-std/hash"]
+unreal                = ["dep:unrealkit", "xur-re-unreal"]

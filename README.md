@@ -257,6 +257,7 @@ embedders only compile what they need. All are enabled by default.
 | `re-dotnet-il2cpp` | `std::re::dotnet::il2cpp` | hao-il2cpp |
 | `re-dotnet-runtime` | `std::re::dotnet::runtime` | hao-runtime |
 | `re-demangle` | `std::re::demangle` | rekit (cpp_demangle, msvc-demangler) |
+| `re-unreal` | `std::stub::unreal` | unrealkit (UE4/UE5 introspection) |
 | `random` | `std::random` | rand |
 | `hash` | `std::hash` | sha2, md-5, crc32fast |
 | `re` | all `re-*` features | |
@@ -344,6 +345,7 @@ There are complete programs in [`example/`](example):
 | [`module/plugin_load.xur`](example/module/plugin_load.xur) | dynamic imports and module introspection |
 | [`re/demangle.xur`](example/re/demangle.xur) | C++ name demangling (Itanium + MSVC) |
 | [`re/aob_scan.xur`](example/re/aob_scan.xur) | in-process AOB pattern scanning |
+| [`re/unreal/discover.xur`](example/re/unreal/discover.xur) | UE4/UE5 object discovery via `LD_PRELOAD` |
 | [`xur-stub/example/hello.xur`](xur-stub/example/hello.xur) | minimal stub injection |
 | [`xur-stub/example/game_inspector.xur`](xur-stub/example/game_inspector.xur) | in-process Unity Il2Cpp game inspector via `LD_PRELOAD` |
 | [`xur-stub/example/egui_overlay.xur`](xur-stub/example/egui_overlay.xur) | egui overlay injected into a running process |

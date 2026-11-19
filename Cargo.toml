@@ -40,6 +40,7 @@ hao-il2cpp-runtime = { version = "0.0.5", features = ["reflect"] }
 hao-il2cpp-unity = { version = "0.0.6", features = ["reflect"] }
 hao-godot = { version = "0.0.5", features = ["reflect"] }
 rekit = { version = "0.1.0", default-features = false }
+unrealkit = { version = "0.1.0", path = "../unrealkit" }
 hooking = "0.6.2"
 iced-x86 = "1.21"
 ureq = "3.0"
