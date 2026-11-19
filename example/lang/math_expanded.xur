@@ -1,0 +1,83 @@
+// Expanded math module: trig, logarithmic, rounding, constants, and
+// utility functions.
+//
+//     xur run example/lang/math_expanded.xur
+
+use std::io;
+use std::assert;
+use std::math;
+
+fn approx_eq(a: f64, b: f64) -> bool {
+    math::abs(a - b) < 0.0001
+}
+
+fn main() -> Result<()> {
+    let pi = math::PI();
+    let e  = math::E();
+    let tau = math::TAU();
+
+    // --- Constants ---
+    assert::is_true(approx_eq(tau, 2.0 * pi));
+    assert::is_true(approx_eq(pi, 3.14159265));
+    assert::is_true(approx_eq(e, 2.71828182));
+
+    // INFINITY and NAN are special values.
+    let inf = math::INFINITY();
+    let nan = math::NAN();
+    assert::is_true(inf > 1000000.0);
+    assert::is_true(nan != nan); // NaN is never equal to itself
+
+    // --- Trig functions ---
+    assert::is_true(approx_eq(math::sin(pi / 2.0), 1.0));
+    assert::is_true(approx_eq(math::cos(0.0), 1.0));
+    assert::is_true(approx_eq(math::tan(pi / 4.0), 1.0));
+
+    // Inverse trig.
+    assert::is_true(approx_eq(math::asin(1.0), pi / 2.0));
+    assert::is_true(approx_eq(math::acos(1.0), 0.0));
+    assert::is_true(approx_eq(math::atan(1.0), pi / 4.0));
+
+    // atan2(y, x) gives the angle of the vector (x, y).
+    assert::is_true(approx_eq(math::atan2(1.0, 1.0), pi / 4.0));
+    assert::is_true(approx_eq(math::atan2(0.0, -1.0), pi));
+
+    // --- Logarithmic / exponential ---
+    assert::is_true(approx_eq(math::ln(e), 1.0));
+    assert::is_true(approx_eq(math::log2(8.0), 3.0));
+    assert::is_true(approx_eq(math::log10(1000.0), 3.0));
+    assert::is_true(approx_eq(math::exp(1.0), e));
+    assert::is_true(approx_eq(math::exp(0.0), 1.0));
+
+    // --- Rounding ---
+    assert::is_eq(math::floor(2.9), 2.0);
+    assert::is_eq(math::floor(-2.1), -3.0);
+    assert::is_eq(math::ceil(2.1), 3.0);
+    assert::is_eq(math::ceil(-2.9), -2.0);
+    assert::is_eq(math::round(2.5), 3.0);
+    assert::is_eq(math::round(2.4), 2.0);
+
+    // --- Utility ---
+    // clamp: pin a value between min and max.
+    assert::is_eq(math::clamp(5.0, 0.0, 3.0), 3.0);
+    assert::is_eq(math::clamp(-1.0, 0.0, 3.0), 0.0);
+    assert::is_eq(math::clamp(2.0, 0.0, 3.0), 2.0);
+
+    // lerp: linear interpolation between a and b.
+    assert::is_true(approx_eq(math::lerp(0.0, 10.0, 0.0), 0.0));
+    assert::is_true(approx_eq(math::lerp(0.0, 10.0, 0.5), 5.0));
+    assert::is_true(approx_eq(math::lerp(0.0, 10.0, 1.0), 10.0));
+
+    // fmin / fmax: float min/max (the existing min/max work on integers).
+    assert::is_eq(math::fmin(3.0, 1.0), 1.0);
+    assert::is_eq(math::fmax(3.0, 1.0), 3.0);
+
+    // --- Existing functions still work ---
+    assert::is_eq(math::sqrt(9.0), 3.0);
+    assert::is_eq(math::pow(2.0, 10.0), 1024.0);
+    assert::is_eq(math::abs(-5.0), 5.0);
+    assert::is_eq(math::min(3, 7), 3);
+    assert::is_eq(math::max(3, 7), 7);
+
+    io::println("math_expanded: all assertions passed");
+    Ok(())
+}
