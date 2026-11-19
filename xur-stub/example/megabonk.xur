@@ -98,7 +98,7 @@ struct GameRuntime {
     // PlayerCamera
     pc_instance: il2cpp::Field
     pc_max_zoom: il2cpp::Field
-    pc_current_z: il2cpp::Field
+    pc_camera_state: il2cpp::Field
     // SaveManager -> ProgressionSaveFile
     sm_instance: il2cpp::Field
     sm_progression: il2cpp::Field
@@ -111,6 +111,7 @@ struct GameRuntime {
     freeze_timer: cell::Cell<bool>
     noclip: cell::Cell<bool>
     extended_zoom: cell::Cell<bool>
+    detach_camera: cell::Cell<bool>
     // Enum entries
     weapons: [EnumEntry]
     items: [EnumEntry]
@@ -232,8 +233,8 @@ impl GameRuntime {
 
         let pc_instance = pc_cls.field("Instance")?;
         let pc_max_zoom = pc_cls.field("maxExtraZoomoutDistance")?;
-        let pc_current_z = pc_cls.field("currentZ")?;
-        log::debug("  PlayerCamera.Instance, maxExtraZoomoutDistance, currentZ found");
+        let pc_camera_state = pc_cls.field("cameraState")?;
+        log::debug("  PlayerCamera.Instance, maxExtraZoomoutDistance, cameraState found");
 
         let sm_instance = sm_cls.field("<Instance>k__BackingField")?;
         let sm_progression = sm_cls.field("progression")?;
@@ -301,6 +302,13 @@ impl GameRuntime {
         });
         log::info("PushPlayer/BouncePlayer hooked for no push");
 
+        let detach_camera = cell::new(false);
+        let player_cam_method = pc_cls.method("PlayerCam", 1)?;
+        player_cam_method.hook(|ctx| {
+            if detach_camera.get() { Some(0) } else { None }
+        });
+        log::info("PlayerCamera.PlayerCam hooked for detach camera");
+
         let freeze_timer = cell::new(false);
         let noclip = cell::new(false);
         let extended_zoom = cell::new(false);
@@ -346,7 +354,7 @@ impl GameRuntime {
             pm_noclip,
             pc_instance,
             pc_max_zoom,
-            pc_current_z,
+            pc_camera_state,
             sm_instance,
             sm_progression,
             prog_silver,
@@ -357,6 +365,7 @@ impl GameRuntime {
             freeze_timer,
             noclip,
             extended_zoom,
+            detach_camera,
             weapons,
             items,
             tomes,
@@ -474,22 +483,21 @@ impl GameRuntime {
         self.pc_max_zoom.write(pc, value);
     }
 
-    fn get_zoom(self) -> f32 {
-        let pc = self.player_camera();
-        if pc.is_null() { return -10.0; }
-        self.pc_current_z.read(pc)
-    }
-
-    fn set_zoom(self, value: f32) {
-        let pc = self.player_camera();
-        if pc.is_null() { return; }
-        self.pc_current_z.write(pc, value);
-    }
-
     fn set_noclip(self, enabled: bool) {
         let pm = self.player_movement();
         if pm.is_null() { return; }
         self.pm_noclip.write(pm, enabled);
+    }
+
+    fn reset_camera(self) {
+        self.noclip.set(false);
+        self.set_noclip(false);
+        self.detach_camera.set(false);
+        self.extended_zoom.set(false);
+        let pc = self.player_camera();
+        if !pc.is_null() {
+            self.pc_camera_state.write(pc, 0);
+        }
     }
 
     // --- Silver ---
@@ -717,31 +725,29 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
     if new_ext != ext {
         game.extended_zoom.set(new_ext);
     }
-    if ext {
+    if game.extended_zoom.get() {
         game.set_max_zoom(50.0);
     }
+    ui.small("(use scroll wheel to zoom in/out)");
 
-    let zoom = game.get_zoom();
-    let new_zoom = ui.slider_float("Zoom", zoom, -50.0, -1.0);
-    if new_zoom != zoom {
-        game.set_zoom(new_zoom);
+    let detach = game.detach_camera.get();
+    let new_detach = ui.checkbox(detach, "Detach camera from player");
+    if new_detach != detach {
+        game.detach_camera.set(new_detach);
     }
 
-    ui.horizontal(|row| {
-        if row.button("Close") { game.set_zoom(-3.0); }
-        if row.button("Default") { game.set_zoom(-10.0); }
-        if row.button("Far") { game.set_zoom(-25.0); }
-        if row.button("Max") { game.set_zoom(-50.0); }
-    });
-
     let noclip = game.noclip.get();
-    let new_noclip = ui.checkbox(noclip, "Noclip (freecam)");
+    let new_noclip = ui.checkbox(noclip, "Noclip (fly mode, moves player)");
     if new_noclip != noclip {
         game.noclip.set(new_noclip);
         game.set_noclip(new_noclip);
     }
-    if noclip {
+    if game.noclip.get() {
         game.set_noclip(true);
+    }
+
+    if ui.button("Reset camera") {
+        game.reset_camera();
     }
 }
 
