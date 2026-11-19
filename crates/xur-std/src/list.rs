@@ -1,6 +1,7 @@
 //! Methods of lists, which are shared and change in place, like Python's:
 //! `let xs = [1, 2]; xs.push(3);`.
 
+use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
@@ -147,7 +148,332 @@ pub(crate) fn register(registry: &Registry) {
             let items = lock(list).clone();
             let parts: Vec<_> = items.iter().map(|item| cx.display(item)).collect();
             Ok(Value::str(&parts.join(separator)))
+        })
+        // -- Callback-based methods ------------------------------------------
+        .raw_function_returns_xur("sort_by", XurType::LIST, |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let mut items = lock(list).clone();
+            let error: Cell<Option<RuntimeError>> = Cell::new(None);
+            items.sort_by(|a, b| {
+                if error.take().is_some() {
+                    // A previous comparison already failed; skip the rest.
+                    return std::cmp::Ordering::Equal;
+                }
+                match cx.call(f, &[a.clone(), b.clone()]) {
+                    Ok(Value::Int(n)) => {
+                        if n < 0 {
+                            std::cmp::Ordering::Less
+                        } else if n > 0 {
+                            std::cmp::Ordering::Greater
+                        } else {
+                            std::cmp::Ordering::Equal
+                        }
+                    }
+                    Ok(_) => {
+                        error.set(Some(RuntimeError::new(
+                            "sort_by comparator must return an Int (-1, 0, or 1)",
+                        )));
+                        std::cmp::Ordering::Equal
+                    }
+                    Err(e) => {
+                        error.set(Some(e));
+                        std::cmp::Ordering::Equal
+                    }
+                }
+            });
+            if let Some(e) = error.take() {
+                return Err(e);
+            }
+            Ok(Value::list(items))
+        })
+        .raw_function("find", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut found = None;
+            for item in items {
+                match cx.call(f, std::slice::from_ref(&item))? {
+                    Value::Bool(true) => {
+                        found = Some(item);
+                        break;
+                    }
+                    Value::Bool(false) => {}
+                    _ => return Err(RuntimeError::new("find predicate must return a bool")),
+                }
+            }
+            Ok(option(cx, found))
+        })
+        .raw_function("find_index", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut found = None;
+            for (i, item) in items.into_iter().enumerate() {
+                match cx.call(f, std::slice::from_ref(&item))? {
+                    Value::Bool(true) => {
+                        found = Some(Value::Int(i as i64));
+                        break;
+                    }
+                    Value::Bool(false) => {}
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "find_index predicate must return a bool",
+                        ))
+                    }
+                }
+            }
+            Ok(option(cx, found))
+        })
+        .raw_function_returns::<bool>("any", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            for item in items {
+                match cx.call(f, std::slice::from_ref(&item))? {
+                    Value::Bool(true) => return Ok(Value::Bool(true)),
+                    Value::Bool(false) => {}
+                    _ => return Err(RuntimeError::new("any predicate must return a bool")),
+                }
+            }
+            Ok(Value::Bool(false))
+        })
+        .raw_function_returns::<bool>("all", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            for item in items {
+                match cx.call(f, std::slice::from_ref(&item))? {
+                    Value::Bool(true) => {}
+                    Value::Bool(false) => return Ok(Value::Bool(false)),
+                    _ => return Err(RuntimeError::new("all predicate must return a bool")),
+                }
+            }
+            Ok(Value::Bool(true))
+        })
+        .raw_function("reduce", |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut iter = items.into_iter();
+            let Some(mut acc) = iter.next() else {
+                return Err(RuntimeError::new("reduce on an empty list"));
+            };
+            for item in iter {
+                acc = cx.call(f, &[acc, item])?;
+            }
+            Ok(acc)
+        })
+        .raw_function_returns_xur("flat_map", XurType::LIST, |cx, args| {
+            let (list, [f]) = receiver(args)? else {
+                return arity(1);
+            };
+            let items = lock(list).clone();
+            let mut result = Vec::new();
+            for item in items {
+                let mapped = cx.call(f, &[item])?;
+                match mapped {
+                    Value::List(inner) => result.extend(lock(&inner).clone()),
+                    other => result.push(other),
+                }
+            }
+            Ok(Value::list(result))
+        })
+        // -- Non-callback methods --------------------------------------------
+        .raw_function_returns_xur("sort", XurType::LIST, |_, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let mut items = lock(list).clone();
+            let mut err = false;
+            items.sort_by(|a, b| match compare(a, b) {
+                Some(ord) => ord,
+                None => {
+                    err = true;
+                    std::cmp::Ordering::Equal
+                }
+            });
+            if err {
+                return Err(RuntimeError::new(
+                    "sort: elements are not comparable (must be all Int, all Float, or all Str)",
+                ));
+            }
+            Ok(Value::list(items))
+        })
+        .raw_function_returns_xur("enumerate", XurType::LIST, |_, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            let result = items
+                .into_iter()
+                .enumerate()
+                .map(|(i, item)| Value::list(vec![Value::Int(i as i64), item]))
+                .collect();
+            Ok(Value::list(result))
+        })
+        .raw_function_returns_xur("flatten", XurType::LIST, |_, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            let mut result = Vec::new();
+            for item in items {
+                match item {
+                    Value::List(inner) => result.extend(lock(&inner).clone()),
+                    other => result.push(other),
+                }
+            }
+            Ok(Value::list(result))
+        })
+        .raw_function_returns_xur("slice", XurType::LIST, |_, args| {
+            let (list, [start, end]) = receiver(args)? else {
+                return arity(2);
+            };
+            let items = lock(list).clone();
+            let len = items.len();
+            let start = resolve_index(int(start)?, len);
+            let end = resolve_index(int(end)?, len);
+            if start >= end {
+                return Ok(Value::list(Vec::new()));
+            }
+            Ok(Value::list(items[start..end].to_vec()))
+        })
+        .raw_function_returns_xur("dedup", XurType::LIST, |_, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            let mut result: Vec<Value> = Vec::new();
+            for item in items {
+                if result.last() != Some(&item) {
+                    result.push(item);
+                }
+            }
+            Ok(Value::list(result))
+        })
+        .raw_function("sum", |_, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            let Some(first) = items.first() else {
+                return Err(RuntimeError::new("sum on an empty list"));
+            };
+            match first {
+                Value::Int(_) => {
+                    let mut total: i64 = 0;
+                    for item in &items {
+                        match item {
+                            Value::Int(n) => total += n,
+                            _ => {
+                                return Err(RuntimeError::new(
+                                    "sum: mixed types (expected all Int)",
+                                ))
+                            }
+                        }
+                    }
+                    Ok(Value::Int(total))
+                }
+                Value::Float(_) => {
+                    let mut total: f64 = 0.0;
+                    for item in &items {
+                        match item {
+                            Value::Float(n) => total += n,
+                            _ => {
+                                return Err(RuntimeError::new(
+                                    "sum: mixed types (expected all Float)",
+                                ))
+                            }
+                        }
+                    }
+                    Ok(Value::Float(total))
+                }
+                _ => Err(RuntimeError::new(
+                    "sum: elements must be Int or Float",
+                )),
+            }
+        })
+        .raw_function("min", |cx, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            if items.is_empty() {
+                return Ok(option(cx, None));
+            }
+            let mut best = &items[0];
+            for item in &items[1..] {
+                match compare(item, best) {
+                    Some(std::cmp::Ordering::Less) => best = item,
+                    Some(_) => {}
+                    None => {
+                        return Err(RuntimeError::new(
+                            "min: elements are not comparable",
+                        ))
+                    }
+                }
+            }
+            Ok(option(cx, Some(best.clone())))
+        })
+        .raw_function("max", |cx, args| {
+            let (list, []) = receiver(args)? else {
+                return arity(0);
+            };
+            let items = lock(list).clone();
+            if items.is_empty() {
+                return Ok(option(cx, None));
+            }
+            let mut best = &items[0];
+            for item in &items[1..] {
+                match compare(item, best) {
+                    Some(std::cmp::Ordering::Greater) => best = item,
+                    Some(_) => {}
+                    None => {
+                        return Err(RuntimeError::new(
+                            "max: elements are not comparable",
+                        ))
+                    }
+                }
+            }
+            Ok(option(cx, Some(best.clone())))
+        })
+        .raw_function_returns_xur("zip", XurType::LIST, |_, args| {
+            let (list, [Value::List(other)]) = receiver(args)? else {
+                return Err(RuntimeError::new("`zip` takes a list"));
+            };
+            let left = lock(list).clone();
+            let right = lock(other).clone();
+            let result = left
+                .into_iter()
+                .zip(right)
+                .map(|(a, b)| Value::list(vec![a, b]))
+                .collect();
+            Ok(Value::list(result))
         });
+}
+
+fn compare(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    match (a, b) {
+        (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
+        (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+        (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
+        _ => None,
+    }
+}
+
+fn resolve_index(index: i64, len: usize) -> usize {
+    if index < 0 {
+        len.saturating_sub((-index) as usize)
+    } else {
+        (index as usize).min(len)
+    }
 }
 
 /// Splits a method call's arguments into the list and the rest.
