@@ -243,30 +243,30 @@ when captured, so both the hook closure and the returned record see the
 same mutable state.
 .PP
 .nf
-struct GodmodeState {
+struct HookState {
     enabled: cell::Cell<bool>
 }
-impl GodmodeState {
+impl HookState {
     #[default]
-    fn default() -> GodmodeState {
-        GodmodeState { enabled: cell::new(false) }
+    fn default() -> HookState {
+        HookState { enabled: cell::new(false) }
     }
 }
 
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: GodmodeState) -> _ {
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
 
-// None = use GodmodeState::default()
+// None = use HookState::default()
 let hooks = proxy.setup_hooks(None);
 hooks.state.enabled.set(true);
 
 // Or provide pre-configured state:
-let my_state = GodmodeState { enabled: cell::new(true) };
+let my_state = HookState { enabled: cell::new(true) };
 let hooks = proxy.setup_hooks(Some(my_state));
 .fi
 .SS Scoped Import

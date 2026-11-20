@@ -61,21 +61,21 @@ struct HealthProxy {
 // the same impl block that share a param name+type share one instance.
 // The caller passes `None` for defaults or `Some(value)` for custom state.
 
-struct GodmodeState {
+struct HookState {
     enabled: cell::Cell<bool>
 }
 
-impl GodmodeState {
+impl HookState {
     #[default]
-    fn default() -> GodmodeState {
-        GodmodeState { enabled: cell::new(false) }
+    fn default() -> HookState {
+        HookState { enabled: cell::new(false) }
     }
 }
 
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: GodmodeState) -> _ {
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -83,8 +83,8 @@ impl HealthProxy {
 // Generated (conceptual):
 //
 //   impl HealthProxy {
-//       fn setup_hooks(self, state: Option<GodmodeState>) -> @ {
-//           let _state = state.unwrap_or(GodmodeState::default());
+//       fn setup_hooks(self, state: Option<HookState>) -> @ {
+//           let _state = state.unwrap_or(HookState::default());
 //           self.damage.hook(|ctx| {
 //               HealthProxy::on_damage(ctx, _state)
 //           });
@@ -95,12 +95,12 @@ impl HealthProxy {
 fn main() -> Result<()> {
     let proxy = HealthProxy::from_runtime(il2cpp::loaded()?)?;
 
-    // None = use GodmodeState::default()
+    // None = use HookState::default()
     let hooks = proxy.setup_hooks(None);
     hooks.state.enabled.set(true);  // hook now blocks all damage
 
     // Or provide pre-configured state:
-    // let my_state = GodmodeState { enabled: cell::new(true) };
+    // let my_state = HookState { enabled: cell::new(true) };
     // let hooks = proxy.setup_hooks(Some(my_state));
 
     Ok(())

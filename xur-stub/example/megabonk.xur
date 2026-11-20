@@ -46,58 +46,27 @@ struct UiState {
     silver_amount: cell::Cell<i32>
 }
 
-fn new_ui_state() -> UiState {
-    UiState {
-        gold_amount: cell::new(10000),
-        weapon_search: cell::new(""),
-        tome_search: cell::new(""),
-        item_search: cell::new(""),
-        timer_value: cell::new(0.0),
-        silver_amount: cell::new(10000),
+impl UiState {
+    fn new() -> UiState {
+        UiState {
+            gold_amount: cell::new(10000),
+            weapon_search: cell::new(""),
+            tome_search: cell::new(""),
+            item_search: cell::new(""),
+            timer_value: cell::new(0.0),
+            silver_amount: cell::new(10000),
+        }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Hook data structs
-// ---------------------------------------------------------------------------
-
-struct GodmodeState { enabled: cell::Cell<bool> }
-impl GodmodeState {
-    #[default]
-    fn default() -> GodmodeState {
-        GodmodeState { enabled: cell::new(false) }
-    }
+struct HookState {
+    enabled: cell::Cell<bool>
 }
 
-struct SkipLoadState { enabled: cell::Cell<bool> }
-impl SkipLoadState {
+impl HookState {
     #[default]
-    fn default() -> SkipLoadState {
-        SkipLoadState { enabled: cell::new(false) }
-    }
-}
-
-struct NoPushState { enabled: cell::Cell<bool> }
-impl NoPushState {
-    #[default]
-    fn default() -> NoPushState {
-        NoPushState { enabled: cell::new(false) }
-    }
-}
-
-struct DetachCamState { enabled: cell::Cell<bool> }
-impl DetachCamState {
-    #[default]
-    fn default() -> DetachCamState {
-        DetachCamState { enabled: cell::new(false) }
-    }
-}
-
-struct NoMaxLevelState { enabled: cell::Cell<bool> }
-impl NoMaxLevelState {
-    #[default]
-    fn default() -> NoMaxLevelState {
-        NoMaxLevelState { enabled: cell::new(false) }
+    fn default() -> HookState {
+        HookState { enabled: cell::new(false) }
     }
 }
 
@@ -130,7 +99,7 @@ struct HealthProxy {
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: GodmodeState) -> _ {
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -178,7 +147,7 @@ struct WeaponInvProxy {
 #[il2cpp_proxy]
 impl WeaponInvProxy {
     #[il2cpp_hook(method="is_max_level")]
-    fn on_is_max_level(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -200,7 +169,7 @@ struct TomeInvProxy {
 #[il2cpp_proxy]
 impl TomeInvProxy {
     #[il2cpp_hook(method="is_max_level")]
-    fn on_is_max_level(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -252,17 +221,17 @@ struct MovementProxy {
 #[il2cpp_proxy]
 impl MovementProxy {
     #[il2cpp_hook(method="push")]
-    fn on_push(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+    fn on_push(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 
     #[il2cpp_hook(method="bounce")]
-    fn on_bounce(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+    fn on_bounce(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 
     #[il2cpp_hook(method="push_keep")]
-    fn on_push_keep(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+    fn on_push_keep(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -288,7 +257,7 @@ struct CameraProxy {
 #[il2cpp_proxy]
 impl CameraProxy {
     #[il2cpp_hook(method="player_cam")]
-    fn on_player_cam(ctx: il2cpp::HookContext, state: DetachCamState) -> _ {
+    fn on_player_cam(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(0) } else { None }
     }
 }
@@ -316,7 +285,7 @@ struct LoadingProxy {
 #[il2cpp_proxy]
 impl LoadingProxy {
     #[il2cpp_hook(method="load_async")]
-    fn on_load(ctx: il2cpp::HookContext, state: SkipLoadState) -> _ {
+    fn on_load(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() {
             log::debug("skipping load animation");
             Some(il2cpp::null())
@@ -355,12 +324,12 @@ struct InvUtilProxy {
 #[il2cpp_proxy]
 impl InvUtilProxy {
     #[il2cpp_hook(method="get_weapon_max")]
-    fn on_get_weapon_max(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+    fn on_get_weapon_max(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(999) } else { None }
     }
 
     #[il2cpp_hook(method="get_tome_max")]
-    fn on_get_tome_max(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+    fn on_get_tome_max(ctx: il2cpp::HookContext, state: HookState) -> _ {
         if state.enabled.get() { Some(999) } else { None }
     }
 }
@@ -412,11 +381,11 @@ struct GameRuntime {
     encounter: EncounterProxy
     inv_util: InvUtilProxy
     // Hook state
-    godmode: GodmodeState
-    skip_loading: SkipLoadState
-    no_push: NoPushState
-    no_max_level: NoMaxLevelState
-    detach_camera: DetachCamState
+    godmode: HookState
+    skip_loading: HookState
+    no_push: HookState
+    no_max_level: HookState
+    detach_camera: HookState
     freeze_timer: cell::Cell<bool>
     noclip: cell::Cell<bool>
     extended_zoom: cell::Cell<bool>
@@ -457,7 +426,7 @@ impl GameRuntime {
         log::debug("  PlayerCamera offset3rd.z raw offset = {}", pc_offset3rd_z_off);
 
         // Hook setup — shared no_max_level state across three proxies
-        let no_max_level = NoMaxLevelState::default();
+        let no_max_level = HookState::default();
         let health_hooks = health.setup_hooks(None);
         let loading_hooks = loading.setup_hooks(None);
         let movement_hooks = movement.setup_hooks(None);
@@ -1212,7 +1181,7 @@ fn stub_main() {
     let visible = true;
     let f1_down = false;
 
-    let state = new_ui_state();
+    let state = UiState::new();
 
     let rt: Option<GameRuntime> = None;
     let rt_error: Option<str> = None;
