@@ -158,22 +158,22 @@ pub fn draw_camera(ui: egui::Ui, game: proxies::GameRuntime) {
 
 pub fn draw_economy(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     ui.heading(fmt::format("Gold: {}", game.get_gold()));
-    let new_amount = ui.slider_int("Amount##gold", state.gold_amount.get(), 0, 99999);
+    let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
     state.gold_amount.set(new_amount);
     ui.horizontal(|row| {
-        if row.button("Set##gold") { game.set_gold(state.gold_amount.get()); }
-        if row.button("+1k##gold") { game.set_gold(game.get_gold() + 1000); }
-        if row.button("+10k##gold") { game.set_gold(game.get_gold() + 10000); }
+        if row.button("Set") { game.set_gold(state.gold_amount.get()); }
+        if row.button("+1k") { game.set_gold(game.get_gold() + 1000); }
+        if row.button("+10k") { game.set_gold(game.get_gold() + 10000); }
     });
 
     ui.separator();
     ui.heading(fmt::format("Silver: {}", game.get_silver()));
-    let new_amount = ui.slider_int("Amount##silver", state.silver_amount.get(), 0, 99999);
+    let new_amount = ui.slider_int("Amount", state.silver_amount.get(), 0, 99999);
     state.silver_amount.set(new_amount);
     ui.horizontal(|row| {
-        if row.button("Set##silver") { game.set_silver(state.silver_amount.get()); }
-        if row.button("+1k##silver") { game.set_silver(game.get_silver() + 1000); }
-        if row.button("+10k##silver") { game.set_silver(game.get_silver() + 10000); }
+        if row.button("Set") { game.set_silver(state.silver_amount.get()); }
+        if row.button("+1k") { game.set_silver(game.get_silver() + 1000); }
+        if row.button("+10k") { game.set_silver(game.get_silver() + 10000); }
     });
 }
 
@@ -212,9 +212,13 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
 
     if owned.len() > 0 {
         ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("weapons_owned", 4, |g| {
+            section.grid("weapons_owned", 5, |g| {
                 for entry in owned {
                     let lvl = game.get_weapon_lvl(entry.value);
+                    match entry.icon {
+                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        None => { g.label(""); }
+                    }
                     g.label(fmt::format("{} lv{}", entry.name, lvl));
                     if g.button("+") {
                         game.unlock_weapon_cap();
@@ -252,6 +256,10 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
                 if row.button("+") {
                     game.unlock_weapon_cap();
                     game.add_weapon_by_enum(entry.value);
+                }
+                match entry.icon {
+                    Some(id) => { row.image(id, 18.0, 18.0); }
+                    None => {}
                 }
                 row.label(entry.name);
             });
@@ -294,9 +302,13 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
 
     if owned.len() > 0 {
         ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("tomes_owned", 5, |g| {
+            section.grid("tomes_owned", 6, |g| {
                 for entry in owned {
                     let lvl = game.get_tome_lvl(entry.value);
+                    match entry.icon {
+                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        None => { g.label(""); }
+                    }
                     g.label(fmt::format("{} lv{}", entry.name, lvl));
                     if g.button("+") { game.add_tome_by_enum(entry.value); }
                     if g.button("+10") { game.add_tome_n(entry.value, 10); }
@@ -323,6 +335,10 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
             }
             scroll.horizontal(|row| {
                 if row.button("+") { game.add_tome_by_enum(entry.value); }
+                match entry.icon {
+                    Some(id) => { row.image(id, 18.0, 18.0); }
+                    None => {}
+                }
                 row.label(entry.name);
             });
         }
@@ -362,9 +378,13 @@ pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
 
     if owned.len() > 0 {
         ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("items_owned", 5, |g| {
+            section.grid("items_owned", 6, |g| {
                 for entry in owned {
                     let count = game.get_item_count(entry.value);
+                    match entry.icon {
+                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        None => { g.label(""); }
+                    }
                     g.label(fmt::format("{} x{}", entry.name, count));
                     if g.button("+") { game.add_item(entry.value); }
                     if g.button("+10") { game.add_item_n(entry.value, 10); }
@@ -392,6 +412,10 @@ pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
             scroll.horizontal(|row| {
                 if row.button("+") { game.add_item(entry.value); }
                 if row.button("+10") { game.add_item_n(entry.value, 10); }
+                match entry.icon {
+                    Some(id) => { row.image(id, 18.0, 18.0); }
+                    None => {}
+                }
                 row.label(entry.name);
             });
         }

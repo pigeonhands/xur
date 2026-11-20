@@ -108,6 +108,8 @@ fn stub_main() {
                 }
             };
 
+            game.load_icons_if_ready();
+
             if !game.in_game() {
                 win.small("not in game (main menu)");
                 win.separator();

@@ -8,6 +8,7 @@ use std::ptr;
 use std::stub::hooking;
 use std::stub::il2cpp;
 use std::stub::il2cpp::il2cpp_proxy;
+use std::stub::re::unity::egui;
 use std::log;
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,7 @@ pub struct HealthInfo {
 pub struct EnumEntry {
     name: str
     value: i32
+    icon: Option<i32>
 }
 
 pub struct UiState {
@@ -327,10 +329,41 @@ fn enum_entries(cls: il2cpp::Class) -> _ {
             entries.push(EnumEntry {
                 name: field.name(),
                 value: field.read_static(),
+                icon: None,
             });
         }
     }
     entries
+}
+
+fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp::Field, icon_field: il2cpp::Field) {
+    let list_cls = list_obj.class();
+    let get_count = list_cls.method("get_Count", 0)?;
+    let get_item = list_cls.method("get_Item", 1)?;
+    let count: i32 = get_count.invoke(list_obj);
+    log::debug("loading {} icons from {}", count, list_cls.name());
+    let j = 0;
+    while j < count {
+        let data_obj = get_item.invoke(list_obj, j);
+        j = j + 1;
+        if data_obj.is_null() { continue; }
+        let enum_val: i32 = enum_field.read(data_obj);
+        let tex = icon_field.read(data_obj);
+        if tex.is_null() { continue; }
+        let i = 0;
+        while i < entries.len() {
+            if entries[i].value == enum_val {
+                let entry = entries[i];
+                entries[i] = EnumEntry {
+                    name: entry.name,
+                    value: entry.value,
+                    icon: Some(egui::register_texture(tex)),
+                };
+                break;
+            }
+            i = i + 1;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +409,17 @@ pub struct GameRuntime {
     weapons: [EnumEntry]
     items: [EnumEntry]
     tomes: [EnumEntry]
+    // Icon loading (deferred until DataManager is available)
+    icons_loaded: cell::Cell<bool>
+    weapon_icon_field: il2cpp::Field
+    weapon_enum_field: il2cpp::Field
+    tome_icon_field: il2cpp::Field
+    tome_enum_field: il2cpp::Field
+    item_icon_field: il2cpp::Field
+    item_enum_field: il2cpp::Field
+    dm_unsorted_weapons: il2cpp::Field
+    dm_unsorted_tomes: il2cpp::Field
+    dm_unsorted_items: il2cpp::Field
 }
 
 impl GameRuntime {
@@ -491,6 +535,24 @@ impl GameRuntime {
         log::info("discovered {} weapons, {} items, {} tomes",
             weapons.len(), items.len(), tomes.len());
 
+        let data = DataProxy::from_runtime(rt)?;
+
+        let weapon_data_cls = rt.class(asm, "", "WeaponData")?;
+        let weapon_icon_field = weapon_data_cls.field("icon")?;
+        let weapon_enum_field = weapon_data_cls.field("eWeapon")?;
+        let tome_data_cls = rt.class(asm, "", "TomeData")?;
+        let tome_icon_field = tome_data_cls.field("icon")?;
+        let tome_enum_field = tome_data_cls.field("eTome")?;
+        let item_data_cls = rt.class(asm, "", "ItemData")?;
+        let item_icon_field = item_data_cls.field("icon")?;
+        let item_enum_field = item_data_cls.field("eItem")?;
+
+        let dm_cls = rt.class(asm, "", "DataManager")?;
+        let dm_unsorted_weapons = dm_cls.field("unsortedWeapons")?;
+        let dm_unsorted_tomes = dm_cls.field("unsortedTomes")?;
+        let dm_unsorted_items = dm_cls.field("unsortedItems")?;
+
+
         Ok(GameRuntime {
             rt,
             player: PlayerProxy::from_runtime(rt)?,
@@ -499,7 +561,7 @@ impl GameRuntime {
             item_inv: ItemInvProxy::from_runtime(rt)?,
             weapon_inv,
             tome_inv,
-            data: DataProxy::from_runtime(rt)?,
+            data,
             gm: GameManagerProxy::from_runtime(rt)?,
             movement,
             camera,
@@ -527,7 +589,32 @@ impl GameRuntime {
             weapons,
             items,
             tomes,
+            icons_loaded: cell::new(false),
+            weapon_icon_field,
+            weapon_enum_field,
+            tome_icon_field,
+            tome_enum_field,
+            item_icon_field,
+            item_enum_field,
+            dm_unsorted_weapons,
+            dm_unsorted_tomes,
+            dm_unsorted_items,
         })
+    }
+
+    pub fn load_icons_if_ready(self) {
+        if self.icons_loaded.get() { return; }
+        let dm = self.data_manager();
+        if dm.is_null() { return; }
+        let wl = self.dm_unsorted_weapons.read(dm);
+        if wl.is_null() { return; }
+        load_icons(self.weapons, wl, self.weapon_enum_field, self.weapon_icon_field);
+        let tl = self.dm_unsorted_tomes.read(dm);
+        if !tl.is_null() { load_icons(self.tomes, tl, self.tome_enum_field, self.tome_icon_field); }
+        let il = self.dm_unsorted_items.read(dm);
+        if !il.is_null() { load_icons(self.items, il, self.item_enum_field, self.item_icon_field); }
+        self.icons_loaded.set(true);
+        log::info("loaded icons");
     }
 
     fn player_obj(self) -> il2cpp::Object {
