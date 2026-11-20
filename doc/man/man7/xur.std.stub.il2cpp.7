@@ -152,6 +152,79 @@ The assembly image name.
 .TP
 .B classes() -> [Class]
 All classes in this assembly image.
+.SH IL2CPP PROXY MACROS
+The
+.B #[il2cpp_proxy]
+attribute macro generates constructors for structs that map to IL2CPP
+classes, eliminating manual class/field/method lookup boilerplate.
+.SS Struct Attributes
+.TP
+.B #[il2cpp_proxy(asm="A", ns="N", class="C")]
+Marks a struct as a proxy for the IL2CPP class
+.I C
+in namespace
+.I N
+of assembly
+.IR A .
+The
+.I ns
+argument defaults to "" if omitted.
+Generates
+.B from_runtime(rt)
+and
+.B from_class(cls)
+constructors.
+.SS Field Attributes
+.TP
+.B #[il2cpp_field="name"]
+The field stores an
+.B il2cpp::Field
+looked up as
+.BR cls.field("name") .
+If the value form is used, the IL2CPP name matches the value. Otherwise
+.BR #[il2cpp_field(name="N")] " or " #[il2cpp_field(name="N", static)]
+can be used.
+.TP
+.B #[il2cpp_method(name="N", params=P)]
+The field stores an
+.B il2cpp::Method
+looked up as
+.BR cls.method("N",\ P) .
+.TP
+.B #[il2cpp_hook(name="N")]
+The field stores an
+.B il2cpp::VoidBlockHook
+created by
+.BR cls.method("N",\ P)?.hook_void_block() .
+.SS Impl Block Expansion
+.B #[il2cpp_proxy]
+on an impl block generates a
+.B setup_hooks()
+method. Functions annotated with
+.B #[il2cpp_hook(method="field")]
+are wired up as
+.BR self.field.hook(Self::fn) .
+For hooks requiring closures with captured state, wire them manually
+using the exposed Method handle.
+.SS Example
+.nf
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerHealth")]
+struct HealthProxy {
+    #[il2cpp_field="hp"]
+    hp: il2cpp::Field
+    #[il2cpp_field="maxHp"]
+    max_hp: il2cpp::Field
+    #[il2cpp_method(name="DamagePlayer", params=3)]
+    damage: il2cpp::Method
+}
+
+fn main() -> Result<()> {
+    let rt = il2cpp::loaded()?;
+    let proxy = HealthProxy::from_runtime(rt)?;
+    // proxy.hp, proxy.damage etc. are ready to use
+    Ok(())
+}
+.fi
 .SH EXAMPLES
 .nf
 use std::stub::il2cpp;

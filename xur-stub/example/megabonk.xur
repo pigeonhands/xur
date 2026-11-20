@@ -11,8 +11,12 @@
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
 use std::cell;
+use std::bytes;
 use std::fmt;
+use std::mem;
+use std::ptr;
 use std::stub::il2cpp;
+use std::stub::il2cpp::il2cpp_proxy;
 use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
 use std::log;
@@ -92,6 +96,9 @@ struct GameRuntime {
     // GameManager
     gm_instance: il2cpp::Field
     gm_timer: il2cpp::Field
+    gm_stage_time: il2cpp::Field
+    gm_next_stage_time: il2cpp::Field
+    gm_dungeon_time: il2cpp::Field
     // PlayerMovement
     pm_instance: il2cpp::Field
     pm_noclip: il2cpp::Field
@@ -99,6 +106,7 @@ struct GameRuntime {
     pc_instance: il2cpp::Field
     pc_max_zoom: il2cpp::Field
     pc_current_z: il2cpp::Field
+    pc_offset3rd_z_off: i64
     pc_camera_state: il2cpp::Field
     // SaveManager -> ProgressionSaveFile
     sm_instance: il2cpp::Field
@@ -114,11 +122,66 @@ struct GameRuntime {
     extended_zoom: cell::Cell<bool>
     zoom_block: il2cpp::VoidBlockHook
     timer_block: il2cpp::VoidBlockHook
+    levelup_block: il2cpp::VoidBlockHook
+    chest_block: il2cpp::VoidBlockHook
+    encounter_block: il2cpp::VoidBlockHook
     detach_camera: cell::Cell<bool>
     // Enum entries
     weapons: [EnumEntry]
     items: [EnumEntry]
     tomes: [EnumEntry]
+}
+
+// ---------------------------------------------------------------------------
+// IL2CPP proxy structs — auto-generate constructors via #[il2cpp_proxy]
+// ---------------------------------------------------------------------------
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="PlayerHealth")]
+struct HealthProxy {
+    #[il2cpp_field="hp"]
+    hp: il2cpp::Field
+    #[il2cpp_field="maxHp"]
+    max_hp: il2cpp::Field
+    #[il2cpp_field="shield"]
+    shield: il2cpp::Field
+    #[il2cpp_field="maxShield"]
+    max_shield: il2cpp::Field
+    #[il2cpp_method(name="DamagePlayer", params=3)]
+    damage: il2cpp::Method
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="DataManager")]
+struct DataProxy {
+    #[il2cpp_field="Instance"]
+    instance: il2cpp::Field
+    #[il2cpp_method(name="GetWeapon", params=1)]
+    get_weapon: il2cpp::Method
+    #[il2cpp_method(name="GetItem", params=1)]
+    get_item: il2cpp::Method
+    #[il2cpp_method(name="GetTome", params=1)]
+    get_tome: il2cpp::Method
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="GameManager")]
+struct GameManagerProxy {
+    #[il2cpp_field="Instance"]
+    instance: il2cpp::Field
+    #[il2cpp_field="gameTimer"]
+    timer: il2cpp::Field
+    #[il2cpp_field="lastFoundStageTime"]
+    stage_time: il2cpp::Field
+    #[il2cpp_field="nextGetStageTime"]
+    next_stage_time: il2cpp::Field
+    #[il2cpp_field="<dungeonTimeToComplete>k__BackingField"]
+    dungeon_time: il2cpp::Field
+    #[il2cpp_method(name="Update", params=0)]
+    update: il2cpp::Method
+}
+
+fn write_f32_raw(addr: i64, value: f32) {
+    let buf = bytes::zeroed(4);
+    buf.write_f32_le(0, value);
+    mem::write_bytes(ptr::from_int(addr), buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +235,10 @@ impl GameRuntime {
         log::debug("  SaveManager class found");
         let prog_cls = rt.class(asm, "Assets.Scripts.Saves___Serialization.SaveFiles", "ProgressionSaveFile")?;
         log::debug("  ProgressionSaveFile class found");
+        let levelup_cls = rt.class(asm, "", "LevelupScreen")?;
+        let chest_ui_cls = rt.class(asm, "", "ChestWindowUi")?;
+        let encounter_ui_cls = rt.class(asm, "", "EncounterUi")?;
+        log::debug("  LevelupScreen, ChestWindowUi, EncounterUi classes found");
         let weapon_enum = rt.class(asm, "", "EWeapon")?;
         let item_enum = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "EItem")?;
         let tome_enum = rt.class(asm, "Assets.Scripts._Data.Tomes", "ETome")?;
@@ -228,7 +295,10 @@ impl GameRuntime {
 
         let gm_instance = gm_cls.field("Instance")?;
         let gm_timer = gm_cls.field("gameTimer")?;
-        log::debug("  GameManager.Instance, gameTimer found");
+        let gm_stage_time = gm_cls.field("lastFoundStageTime")?;
+        let gm_next_stage_time = gm_cls.field("nextGetStageTime")?;
+        let gm_dungeon_time = gm_cls.field("<dungeonTimeToComplete>k__BackingField")?;
+        log::debug("  GameManager fields found");
 
         let pm_instance = pm_cls.field("Instance")?;
         let pm_noclip = pm_cls.field("isNoclipping")?;
@@ -237,8 +307,10 @@ impl GameRuntime {
         let pc_instance = pc_cls.field("Instance")?;
         let pc_max_zoom = pc_cls.field("maxExtraZoomoutDistance")?;
         let pc_current_z = pc_cls.field("currentZ")?;
+        let pc_offset3rd = pc_cls.field("offset3rdPerson")?;
+        let pc_offset3rd_z_off = pc_offset3rd.offset() + 8;
         let pc_camera_state = pc_cls.field("cameraState")?;
-        log::debug("  PlayerCamera fields found");
+        log::debug("  PlayerCamera fields found (offset3rd.z raw offset = {})", pc_offset3rd_z_off);
 
         let sm_instance = sm_cls.field("<Instance>k__BackingField")?;
         let sm_progression = sm_cls.field("progression")?;
@@ -318,6 +390,18 @@ impl GameRuntime {
         let timer_block = gm_update.hook_void_block();
         log::info("GameManager.Update void-blocked for freeze timer");
 
+        let show_levelup = levelup_cls.method("ShowLevelupScreen", 0)?;
+        let levelup_block = show_levelup.hook_void_block();
+        log::info("LevelupScreen.ShowLevelupScreen void-blocked");
+
+        let chest_open = chest_ui_cls.method("Open", 1)?;
+        let chest_block = chest_open.hook_void_block();
+        log::info("ChestWindowUi.Open void-blocked");
+
+        let encounter_open = encounter_ui_cls.method("Open", 1)?;
+        let encounter_block = encounter_open.hook_void_block();
+        log::info("EncounterUi.Open void-blocked");
+
         let noclip = cell::new(false);
         let extended_zoom = cell::new(false);
         let update_zoom = pc_cls.method("UpdateZoom", 0)?;
@@ -361,11 +445,15 @@ impl GameRuntime {
             dm_get_tome,
             gm_instance,
             gm_timer,
+            gm_stage_time,
+            gm_next_stage_time,
+            gm_dungeon_time,
             pm_instance,
             pm_noclip,
             pc_instance,
             pc_max_zoom,
             pc_current_z,
+            pc_offset3rd_z_off,
             pc_camera_state,
             sm_instance,
             sm_progression,
@@ -379,6 +467,9 @@ impl GameRuntime {
             extended_zoom,
             zoom_block,
             timer_block,
+            levelup_block,
+            chest_block,
+            encounter_block,
             detach_camera,
             weapons,
             items,
@@ -489,12 +580,45 @@ impl GameRuntime {
         self.gm_timer.write(gm, value);
     }
 
+    fn get_stage_time_max(self) -> f32 {
+        let gm = self.game_manager();
+        if gm.is_null() { return 0.0; }
+        self.gm_stage_time.read(gm)
+    }
+
+    fn get_round_remaining(self) -> f32 {
+        let max = self.get_stage_time_max();
+        let current = self.get_timer();
+        let rem = max - current;
+        if rem < 0.0 { 0.0 } else { rem }
+    }
+
+    fn set_round_remaining(self, seconds: f32) {
+        let gm = self.game_manager();
+        if gm.is_null() { return; }
+        let current = self.gm_timer.read(gm);
+        let old_stage = self.gm_stage_time.read(gm);
+        let new_stage = current + seconds;
+        let delta = new_stage - old_stage;
+        self.gm_stage_time.write(gm, new_stage);
+        self.gm_next_stage_time.write(gm, current + 99999.0);
+        let old_dungeon = self.gm_dungeon_time.read(gm);
+        self.gm_dungeon_time.write(gm, old_dungeon + delta);
+    }
+
     // --- Camera ---
 
     fn set_max_zoom(self, value: f32) {
         let pc = self.player_camera();
         if pc.is_null() { return; }
         self.pc_max_zoom.write(pc, value);
+    }
+
+    fn set_camera_z(self, value: f32) {
+        let pc = self.player_camera();
+        if pc.is_null() { return; }
+        self.pc_current_z.write(pc, value);
+        write_f32_raw(pc.address() + self.pc_offset3rd_z_off, value);
     }
 
     fn set_noclip(self, enabled: bool) {
@@ -680,6 +804,14 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
         game.no_max_level.set(new_no_max);
     }
 
+    let skip_levelup = game.levelup_block.is_blocked();
+    let new_skip_levelup = ui.checkbox(skip_levelup, "Skip upgrade offers");
+    if new_skip_levelup != skip_levelup {
+        game.levelup_block.set_blocked(new_skip_levelup);
+        game.chest_block.set_blocked(new_skip_levelup);
+        game.encounter_block.set_blocked(new_skip_levelup);
+    }
+
     match game.read_health() {
         Some(h) => {
             ui.small(fmt::format("HP: {}/{}  Shield: {}/{}",
@@ -694,11 +826,11 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
 }
 
 fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    let timer = game.get_timer();
-    let total_secs = timer.to_int();
+    let remaining = game.get_round_remaining();
+    let total_secs = remaining.to_int();
     let mins = total_secs / 60;
     let secs = total_secs - mins * 60;
-    ui.heading(fmt::format("Timer: {}m {}s", mins, secs));
+    ui.heading(fmt::format("Round: {}m {}s", mins, secs));
 
     let frozen = game.timer_block.is_blocked();
     let new_frozen = ui.checkbox(frozen, "Freeze timer");
@@ -706,27 +838,27 @@ fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
         game.timer_block.set_blocked(new_frozen);
         game.freeze_timer.set(new_frozen);
         if new_frozen {
-            state.timer_value.set(timer);
+            state.timer_value.set(remaining);
         }
     }
 
-    let new_val = ui.slider_float("Set to (seconds)", state.timer_value.get(), 0.0, 3600.0);
+    let new_val = ui.slider_float("Set to (seconds)", state.timer_value.get(), 0.0, 1200.0);
     state.timer_value.set(new_val);
     ui.horizontal(|row| {
-        if row.button("Set") { game.set_timer(state.timer_value.get()); }
+        if row.button("Set") { game.set_round_remaining(state.timer_value.get()); }
         if row.button("+60s") {
-            let t = game.get_timer() + 60.0;
-            game.set_timer(t);
+            let t = game.get_round_remaining() + 60.0;
+            game.set_round_remaining(t);
             state.timer_value.set(t);
         }
         if row.button("+300s") {
-            let t = game.get_timer() + 300.0;
-            game.set_timer(t);
+            let t = game.get_round_remaining() + 300.0;
+            game.set_round_remaining(t);
             state.timer_value.set(t);
         }
-        if row.button("Reset") {
-            game.set_timer(0.0);
-            state.timer_value.set(0.0);
+        if row.button("Reset (10m)") {
+            game.set_round_remaining(600.0);
+            state.timer_value.set(600.0);
         }
     });
 }
@@ -757,7 +889,10 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
         if new_z != cur_z {
             game.zoom_block.set_blocked(true);
-            game.pc_current_z.write(pc, new_z);
+            game.set_camera_z(new_z);
+        }
+        if game.zoom_block.is_blocked() {
+            game.set_camera_z(cur_z);
         }
     }
 
@@ -1037,7 +1172,7 @@ fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
 fn ctor() {
     log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
     egui::init();
-    egui::set_scale(0.5);
+    egui::set_scale(0.75);
 }
 
 fn stub_main() {

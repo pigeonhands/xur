@@ -1,0 +1,79 @@
+// IL2CPP Proxy Macro Example
+//
+// The `#[il2cpp_proxy]` attribute generates `from_runtime(rt)` and
+// `from_class(cls)` constructors for structs that map to IL2CPP classes.
+// Each annotated field becomes a lookup in the generated constructor:
+//
+//   - `#[il2cpp_field="name"]`          → cls.field("name")?
+//   - `#[il2cpp_method(name="N", params=P)]` → cls.method("N", P)?
+//   - `#[il2cpp_hook(name="N")]`        → cls.method("N", 0)?.hook_void_block()
+//
+// The struct's field types tell the runtime what kind of IL2CPP handle
+// each lookup produces. Fields without an il2cpp attribute are ignored
+// by the macro (useful for user state like Cell<bool>).
+//
+// Generated code (conceptual, for HealthProxy below):
+//
+//   impl HealthProxy {
+//       fn from_runtime(rt: il2cpp::Runtime) -> Result<HealthProxy> {
+//           let _cls = rt.class("Assembly-CSharp",
+//               "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
+//           HealthProxy::from_class(_cls)
+//       }
+//       fn from_class(_cls: il2cpp::Class) -> Result<HealthProxy> {
+//           let _m_damage = _cls.method("DamagePlayer", 3)?;
+//           Ok(HealthProxy {
+//               hp: _cls.field("hp")?,
+//               max_hp: _cls.field("maxHp")?,
+//               shield: _cls.field("shield")?,
+//               max_shield: _cls.field("maxShield")?,
+//               damage: _m_damage,
+//           })
+//       }
+//   }
+//
+// This eliminates ~120 lines of manual class/field/method lookups in
+// game trainers while keeping the generated code inspectable and the
+// proxy struct a plain xur struct you can use normally.
+//
+// Requires: std::stub::il2cpp (loads only with the xur-stub runtime).
+
+use std::stub::il2cpp;
+use std::stub::il2cpp::il2cpp_proxy;
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="PlayerHealth")]
+struct HealthProxy {
+    #[il2cpp_field="hp"]
+    hp: il2cpp::Field
+    #[il2cpp_field="maxHp"]
+    max_hp: il2cpp::Field
+    #[il2cpp_field="shield"]
+    shield: il2cpp::Field
+    #[il2cpp_field="maxShield"]
+    max_shield: il2cpp::Field
+    #[il2cpp_method(name="DamagePlayer", params=3)]
+    damage: il2cpp::Method
+}
+
+// Hook wiring: #[il2cpp_hook] on an impl-block function generates
+// a `setup_hooks()` method that calls `self.field.hook(Self::fn)`.
+
+#[il2cpp_proxy]
+impl HealthProxy {
+    #[il2cpp_hook(method="damage")]
+    fn on_damage(ctx: il2cpp::HookContext) -> _ {
+        None
+    }
+}
+
+// For hooks with captured state, wire them manually:
+//
+//   let godmode = cell::new(false);
+//   proxy.damage.hook(|ctx| {
+//       if godmode.get() { Some(0) } else { None }
+//   });
+
+fn main() -> Result<()> {
+    let proxy = HealthProxy::from_runtime(il2cpp::loaded()?)?;
+    Ok(())
+}
