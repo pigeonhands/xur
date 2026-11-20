@@ -1,0 +1,133 @@
+// Megabonk trainer — Unity Il2Cpp game mod with egui overlay.
+//
+// Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
+// menu, which provides godmode, speed control, gold, silver,
+// inventory management, timer control, no-push, camera zoom,
+// noclip, and more.
+//
+//     cargo build --release -p xur-stub
+//     # Steam > Megabonk > Properties > Launch options:
+//     XUR_STUB_PATH=xur-stub/example/megabonk/main.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::stub::re::unity::egui;
+use std::log;
+
+const proxies = std::import("./proxies.xur");
+const draw = std::import("./ui.xur");
+
+// ---------------------------------------------------------------------------
+// Tab bar
+// ---------------------------------------------------------------------------
+
+fn tab_bar(ui: egui::Ui, state: proxies::UiState) {
+    let tab = state.tab.get();
+    ui.horizontal(|row| {
+        if row.selectable(tab == 0, "Combat")    { state.tab.set(0); }
+        if row.selectable(tab == 1, "Camera")    { state.tab.set(1); }
+        if row.selectable(tab == 2, "Economy")   { state.tab.set(2); }
+        if row.selectable(tab == 3, "Inventory") { state.tab.set(3); }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Inventory sub-tabs
+// ---------------------------------------------------------------------------
+
+fn draw_inventory(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+    ui.horizontal(|row| {
+        if row.selectable(state.tab.get() == 3, "Weapons") { state.tab.set(3); }
+        if row.selectable(state.tab.get() == 4, "Tomes")   { state.tab.set(4); }
+        if row.selectable(state.tab.get() == 5, "Items")   { state.tab.set(5); }
+    });
+    let inv_tab = state.tab.get();
+    if inv_tab == 3 {
+        draw::draw_weapons(ui, game, state);
+    } else if inv_tab == 4 {
+        draw::draw_tomes(ui, game, state);
+    } else if inv_tab == 5 {
+        draw::draw_items(ui, game, state);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Entry points
+// ---------------------------------------------------------------------------
+
+fn ctor() {
+    log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
+    egui::init();
+    egui::set_scale(0.75);
+}
+
+fn stub_main() {
+    log::info("megabonk trainer starting");
+
+    let visible = true;
+    let f1_down = false;
+
+    let state = proxies::UiState::new();
+
+    let rt: Option<proxies::GameRuntime> = None;
+    let rt_error: Option<str> = None;
+
+    egui::run(|ctx| {
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down {
+            visible = !visible;
+        }
+        f1_down = f1;
+
+        if !visible { return; }
+
+        if rt.is_none() && rt_error.is_none() {
+            match proxies::GameRuntime::init() {
+                Ok(game) => { rt = Some(game); }
+                Err(e) => {
+                    log::info("init error: {}", e);
+                    rt_error = Some(e);
+                }
+            }
+        }
+
+        ctx.window_sized("Megabonk Trainer", 380.0, |win| {
+            match rt_error {
+                Some(msg) => {
+                    win.colored_label(255, 80, 80, "init error:");
+                    win.small(msg);
+                    return;
+                }
+                None => {}
+            }
+
+            let game = match rt {
+                Some(g) => g,
+                None => {
+                    win.small("waiting for Il2Cpp runtime...");
+                    return;
+                }
+            };
+
+            if !game.in_game() {
+                win.small("not in game (main menu)");
+                win.separator();
+                draw::draw_economy(win, game, state);
+                return;
+            }
+
+            tab_bar(win, state);
+            win.separator();
+
+            let tab = state.tab.get();
+            if tab == 0 {
+                draw::draw_combat(win, game, state);
+            } else if tab == 1 {
+                draw::draw_camera(win, game);
+            } else if tab == 2 {
+                draw::draw_economy(win, game, state);
+            } else {
+                draw_inventory(win, game, state);
+            }
+        });
+    });
+}

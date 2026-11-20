@@ -2,7 +2,7 @@
 // modify args, call the original, and override return values.
 //
 // Requires a Unity Il2Cpp game. For a full working example see
-// megabonk.xur which hooks DamagePlayer for godmode.
+// megabonk/ which hooks DamagePlayer for godmode.
 //
 //     cargo build --release -p xur-stub --features egui
 //     XUR_STUB_PATH=xur-stub/example/il2cpp_hooks.xur \

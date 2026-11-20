@@ -239,17 +239,22 @@ mod tests {
     use super::make_registry;
 
     fn compile(name: &str, src: &str) {
+        compile_files(&[(name, src)]);
+    }
+
+    fn compile_files(files: &[(&str, &str)]) {
         let registry = make_registry();
-        let loader = MemoryFileLoader::new(std::iter::once((name, src)));
+        let root = files[0].0;
+        let loader = MemoryFileLoader::new(files.iter().copied());
         let (_, diags) = Program::load(
-            Path::new(name),
+            Path::new(root),
             Box::new(loader),
             Box::new(Arc::clone(&registry)),
             Some(xur_std::PRELUDE),
         )
         .unwrap();
         let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
-        assert!(diags.is_empty(), "{name}: {messages:#?}");
+        assert!(diags.is_empty(), "{root}: {messages:#?}");
     }
 
     #[test]
@@ -267,7 +272,11 @@ mod tests {
     #[cfg(feature = "egui")]
     fn egui_examples_compile() {
         compile("egui_overlay.xur", include_str!("../example/egui_overlay.xur"));
-        compile("megabonk.xur", include_str!("../example/megabonk.xur"));
+        compile_files(&[
+            ("megabonk/main.xur", include_str!("../example/megabonk/main.xur")),
+            ("megabonk/proxies.xur", include_str!("../example/megabonk/proxies.xur")),
+            ("megabonk/ui.xur", include_str!("../example/megabonk/ui.xur")),
+        ]);
     }
 
 }

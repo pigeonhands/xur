@@ -1,54 +1,43 @@
-// Megabonk trainer — Unity Il2Cpp game mod with egui overlay.
-//
-// Loads into the game via LD_PRELOAD. Press F1 to toggle the mod
-// menu, which provides godmode (via DamagePlayer hook), speed
-// control, gold, silver, inventory management, timer control,
-// no-push, camera zoom, noclip, and more.
-//
-//     cargo build --release -p xur-stub
-//     # Steam > Megabonk > Properties > Launch options:
-//     XUR_STUB_PATH=xur-stub/example/megabonk.xur \
-//         LD_PRELOAD=target/release/libxur_stub.so %command%
+// Megabonk — IL2CPP proxy structs and game runtime.
 
-use std::cell;
 use std::bytes;
+use std::cell;
 use std::fmt;
 use std::mem;
 use std::ptr;
 use std::stub::hooking;
 use std::stub::il2cpp;
 use std::stub::il2cpp::il2cpp_proxy;
-use std::stub::re::unity::egui;
-use std::stub::re::unity::time;
 use std::log;
 
 // ---------------------------------------------------------------------------
 // Data types
 // ---------------------------------------------------------------------------
 
-struct HealthInfo {
+pub struct HealthInfo {
     hp: i32
     max_hp: i32
     shield: f32
     max_shield: f32
 }
 
-struct EnumEntry {
+pub struct EnumEntry {
     name: str
     value: i32
 }
 
-struct UiState {
+pub struct UiState {
     gold_amount: cell::Cell<i32>
     weapon_search: cell::Cell<str>
     tome_search: cell::Cell<str>
     item_search: cell::Cell<str>
     timer_value: cell::Cell<f32>
     silver_amount: cell::Cell<i32>
+    tab: cell::Cell<i32>
 }
 
 impl UiState {
-    fn new() -> UiState {
+    pub fn new() -> UiState {
         UiState {
             gold_amount: cell::new(10000),
             weapon_search: cell::new(""),
@@ -56,11 +45,12 @@ impl UiState {
             item_search: cell::new(""),
             timer_value: cell::new(0.0),
             silver_amount: cell::new(10000),
+            tab: cell::new(0),
         }
     }
 }
 
-struct HookState {
+pub struct HookState {
     enabled: cell::Cell<bool>
 }
 
@@ -144,6 +134,8 @@ struct ItemInvProxy {
 struct WeaponInvProxy {
     #[il2cpp_method(name="AddWeapon", params=2)]
     add_weapon: il2cpp::Method
+    #[il2cpp_method(name="RemoveWeapon", params=1)]
+    remove_weapon: il2cpp::Method
     #[il2cpp_method(name="GetWeaponLevel", params=1)]
     get_weapon_level: il2cpp::Method
     #[il2cpp_field="isMaxed"]
@@ -166,6 +158,8 @@ struct TomeInvProxy {
     add_tome: il2cpp::Method
     #[il2cpp_method(name="AddMaxedTome", params=1)]
     add_maxed_tome: il2cpp::Method
+    #[il2cpp_method(name="RemoveTome", params=1)]
+    remove_tome: il2cpp::Method
     #[il2cpp_method(name="GetTomeLevel", params=1)]
     get_tome_level: il2cpp::Method
     #[il2cpp_method(name="HasTome", params=1)]
@@ -221,7 +215,6 @@ struct MovementProxy {
     #[il2cpp_field="playerCollider"]
     player_collider: il2cpp::Field
 }
-
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerCamera")]
 struct CameraProxy {
@@ -348,7 +341,7 @@ fn enum_entries(cls: il2cpp::Class) -> _ {
 // GameRuntime
 // ---------------------------------------------------------------------------
 
-struct GameRuntime {
+pub struct GameRuntime {
     rt: il2cpp::Runtime
     player: PlayerProxy
     health: HealthProxy
@@ -388,7 +381,7 @@ struct GameRuntime {
 }
 
 impl GameRuntime {
-    fn init() -> Result<GameRuntime> {
+    pub fn init() -> Result<GameRuntime> {
         let rt = il2cpp::loaded()?;
         log::info("il2cpp runtime loaded");
 
@@ -713,7 +706,7 @@ impl GameRuntime {
         self.progression.silver.write(prog, value);
     }
 
-    // --- Gold (direct field write to avoid ChangeGold event crash) ---
+    // --- Gold ---
 
     fn get_gold(self) -> i32 {
         let inv = self.inventory_obj();
@@ -754,6 +747,17 @@ impl GameRuntime {
         self.item_inv.get_amount.invoke(ii, value)
     }
 
+    fn remove_all_items(self) {
+        for entry in self.items {
+            let count = self.get_item_count(entry.value);
+            let i = 0;
+            while i < count {
+                self.remove_item(entry.value);
+                i = i + 1;
+            }
+        }
+    }
+
     // --- Weapons ---
 
     fn unlock_weapon_cap(self) {
@@ -788,6 +792,21 @@ impl GameRuntime {
 
     fn add_weapon_max(self, value: i32) {
         self.add_weapon_n(value, 100);
+    }
+
+    fn remove_weapon(self, value: i32) {
+        let wi = self.weapon_inv_obj();
+        if wi.is_null() { return; }
+        self.weapon_inv.remove_weapon.invoke_on_main(wi, value);
+    }
+
+    fn remove_all_weapons(self) {
+        for entry in self.weapons {
+            if entry.name == "None" || entry.name == "Test" { continue; }
+            if self.get_weapon_lvl(entry.value) > 0 {
+                self.remove_weapon(entry.value);
+            }
+        }
     }
 
     // --- Tomes ---
@@ -825,491 +844,18 @@ impl GameRuntime {
         if ti.is_null() { return 0; }
         self.tome_inv.get_tome_level.invoke(ti, value)
     }
-}
 
-// ---------------------------------------------------------------------------
-// UI draw helpers
-// ---------------------------------------------------------------------------
-
-fn draw_combat(ui: egui::Ui, game: GameRuntime) {
-    ui.heading("Combat");
-    let godmode = game.is_godmode();
-    let new_godmode = ui.checkbox(godmode, "Godmode");
-    if new_godmode != godmode {
-        game.set_godmode(new_godmode);
+    fn remove_tome(self, value: i32) {
+        let ti = self.tome_inv_obj();
+        if ti.is_null() { return; }
+        self.tome_inv.remove_tome.invoke_on_main(ti, value);
     }
 
-    let no_push = game.no_push.get();
-    let new_no_push = ui.checkbox(no_push, "No push / knockback");
-    if new_no_push != no_push {
-        game.no_push.set(new_no_push);
-        game.push_apply_frames.set(150);
-    }
-
-    let skip = game.skip_loading.enabled.get();
-    let new_skip = ui.checkbox(skip, "Skip loading animation");
-    if new_skip != skip {
-        game.skip_loading.enabled.set(new_skip);
-    }
-
-    let no_max = game.no_max_level.enabled.get();
-    let new_no_max = ui.checkbox(no_max, "No max level cap");
-    if new_no_max != no_max {
-        game.no_max_level.enabled.set(new_no_max);
-    }
-
-    let skip_levelup = game.skip_offers.get();
-    let new_skip_levelup = ui.checkbox(skip_levelup, "Skip upgrade offers");
-    if new_skip_levelup != skip_levelup {
-        game.skip_offers.set(new_skip_levelup);
-    }
-
-    match game.read_health() {
-        Some(h) => {
-            ui.small(fmt::format("HP: {}/{}  Shield: {}/{}",
-                h.hp, h.max_hp, h.shield, h.max_shield));
-            ui.horizontal(|row| {
-                if row.button("Full heal") { game.full_heal(); }
-                if row.button("Max shield") { game.max_shield(); }
-            });
-        }
-        None => {}
-    }
-}
-
-fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    let remaining = game.get_round_remaining();
-    let total_secs = remaining.to_int();
-    let mins = total_secs / 60;
-    let secs = total_secs - mins * 60;
-    ui.heading(fmt::format("Round: {}m {}s", mins, secs));
-
-    let frozen = game.gm.timer_block.is_blocked();
-    let new_frozen = ui.checkbox(frozen, "Freeze timer");
-    if new_frozen != frozen {
-        game.gm.timer_block.set_blocked(new_frozen);
-        game.freeze_timer.set(new_frozen);
-        if new_frozen {
-            state.timer_value.set(remaining);
-        }
-    }
-
-    let new_val = ui.slider_float("Set to (seconds)", state.timer_value.get(), 0.0, 1200.0);
-    state.timer_value.set(new_val);
-    ui.horizontal(|row| {
-        if row.button("Set") { game.set_round_remaining(state.timer_value.get()); }
-        if row.button("+60s") {
-            let t = game.get_round_remaining() + 60.0;
-            game.set_round_remaining(t);
-            state.timer_value.set(t);
-        }
-        if row.button("+300s") {
-            let t = game.get_round_remaining() + 300.0;
-            game.set_round_remaining(t);
-            state.timer_value.set(t);
-        }
-        if row.button("Reset (10m)") {
-            game.set_round_remaining(600.0);
-            state.timer_value.set(600.0);
-        }
-    });
-}
-
-fn draw_camera(ui: egui::Ui, game: GameRuntime) {
-    ui.heading("Camera");
-
-    let ext = game.extended_zoom.get();
-    let new_ext = ui.checkbox(ext, "Extended zoom range");
-    if new_ext != ext {
-        game.extended_zoom.set(new_ext);
-        if new_ext {
-            game.set_max_zoom(50.0);
-        } else {
-            game.set_max_zoom(0.0);
-        }
-    }
-
-    let blocked = game.camera.zoom_block.is_blocked();
-    let new_blocked = ui.checkbox(blocked, "Manual zoom (blocks game zoom)");
-    if new_blocked != blocked {
-        game.camera.zoom_block.set_blocked(new_blocked);
-    }
-
-    let pc = game.player_camera();
-    if !pc.is_null() {
-        let cur_z = game.camera.current_z.read(pc);
-        let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
-        if new_z != cur_z {
-            game.camera.zoom_block.set_blocked(true);
-            game.set_camera_z(new_z);
-        } else if game.camera.zoom_block.is_blocked() {
-            game.set_camera_z(cur_z);
-        }
-    }
-
-    let detach = game.detach_camera.enabled.get();
-    let new_detach = ui.checkbox(detach, "Detach camera from player");
-    if new_detach != detach {
-        game.detach_camera.enabled.set(new_detach);
-    }
-
-    let noclip = game.noclip.get();
-    let new_noclip = ui.checkbox(noclip, "Noclip (fly mode, moves player)");
-    if new_noclip != noclip {
-        game.noclip.set(new_noclip);
-        game.set_noclip(new_noclip);
-    }
-    if game.noclip.get() {
-        game.set_noclip(true);
-    }
-
-    if ui.button("Reset camera") {
-        game.reset_camera();
-    }
-}
-
-fn draw_speed(ui: egui::Ui) {
-    ui.heading("Speed");
-    let speed = ui.slider_float("Time scale", time::scale(), 0.0, 20.0);
-    time::set_scale(speed);
-    ui.horizontal(|row| {
-        if row.button("pause") { time::set_scale(0.0); }
-        if row.button("0.5x")  { time::set_scale(0.5); }
-        if row.button("1x")    { time::set_scale(1.0); }
-        if row.button("2x")    { time::set_scale(2.0); }
-        if row.button("5x")    { time::set_scale(5.0); }
-        if row.button("10x")   { time::set_scale(10.0); }
-        if row.button("20x")   { time::set_scale(20.0); }
-    });
-}
-
-fn draw_gold(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    ui.heading(fmt::format("Gold: {}", game.get_gold()));
-    let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
-    state.gold_amount.set(new_amount);
-    ui.horizontal(|row| {
-        if row.button("Set") { game.set_gold(state.gold_amount.get()); }
-        if row.button("+1k") { game.set_gold(game.get_gold() + 1000); }
-        if row.button("+10k") { game.set_gold(game.get_gold() + 10000); }
-    });
-}
-
-fn draw_silver(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    ui.heading(fmt::format("Silver: {}", game.get_silver()));
-    let new_amount = ui.slider_int("Amount", state.silver_amount.get(), 0, 99999);
-    state.silver_amount.set(new_amount);
-    ui.horizontal(|row| {
-        if row.button("Set") { game.set_silver(state.silver_amount.get()); }
-        if row.button("+1k") { game.set_silver(game.get_silver() + 1000); }
-        if row.button("+10k") { game.set_silver(game.get_silver() + 10000); }
-    });
-}
-
-fn draw_weapons(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    let owned = [];
-    for entry in game.weapons {
-        if entry.name == "None" || entry.name == "Test" { continue; }
-        let lvl = game.get_weapon_lvl(entry.value);
-        if lvl > 0 {
-            owned.push(entry);
-        }
-    }
-
-    ui.horizontal(|row| {
-        if row.button("Add all") {
-            for entry in game.weapons {
-                if entry.name == "None" || entry.name == "Test" { continue; }
-                if game.get_weapon_lvl(entry.value) == 0 {
-                    game.unlock_weapon_cap();
-                    game.add_weapon_by_enum(entry.value);
-                }
+    fn remove_all_tomes(self) {
+        for entry in self.tomes {
+            if self.get_tome_lvl(entry.value) > 0 {
+                self.remove_tome(entry.value);
             }
         }
-        if row.button("+100 all") {
-            for entry in owned {
-                game.unlock_weapon_cap();
-                game.add_weapon_n(entry.value, 100);
-            }
-        }
-    });
-
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("weapons_owned", 4, |g| {
-                for entry in owned {
-                    let lvl = game.get_weapon_lvl(entry.value);
-                    g.label(fmt::format("{} lv{}", entry.name, lvl));
-                    if g.button("+") {
-                        game.unlock_weapon_cap();
-                        game.add_weapon_by_enum(entry.value);
-                    }
-                    if g.button("+10") {
-                        game.unlock_weapon_cap();
-                        game.add_weapon_n(entry.value, 10);
-                    }
-                    if g.button("+100") {
-                        game.unlock_weapon_cap();
-                        game.add_weapon_max(entry.value);
-                    }
-                    g.end_row();
-                }
-            });
-        });
-    } else {
-        ui.small("no weapons");
     }
-
-    ui.separator();
-    ui.small("Add weapon:");
-    let new_search = ui.text_edit(state.weapon_search.get());
-    state.weapon_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.weapons {
-            if entry.name == "None" || entry.name == "Test" { continue; }
-            if game.get_weapon_lvl(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") {
-                    game.unlock_weapon_cap();
-                    game.add_weapon_by_enum(entry.value);
-                }
-                row.label(entry.name);
-            });
-        }
-    });
-}
-
-fn draw_tomes(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    let owned = [];
-    for entry in game.tomes {
-        let lvl = game.get_tome_lvl(entry.value);
-        if lvl > 0 {
-            owned.push(entry);
-        }
-    }
-
-    ui.horizontal(|row| {
-        if row.button("Add all") {
-            let pass = 0;
-            while pass < 2 {
-                for entry in game.tomes {
-                    if game.get_tome_lvl(entry.value) == 0 {
-                        game.add_tome_by_enum(entry.value);
-                    }
-                }
-                pass = pass + 1;
-            }
-        }
-        if row.button("+100 all") {
-            for entry in owned {
-                game.add_tome_n(entry.value, 100);
-            }
-        }
-        if row.button("Max all") {
-            for entry in owned {
-                game.add_maxed_tome_by_enum(entry.value);
-            }
-        }
-    });
-
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("tomes_owned", 5, |g| {
-                for entry in owned {
-                    let lvl = game.get_tome_lvl(entry.value);
-                    g.label(fmt::format("{} lv{}", entry.name, lvl));
-                    if g.button("+") { game.add_tome_by_enum(entry.value); }
-                    if g.button("+10") { game.add_tome_n(entry.value, 10); }
-                    if g.button("+100") { game.add_tome_n(entry.value, 100); }
-                    if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
-                    g.end_row();
-                }
-            });
-        });
-    } else {
-        ui.small("no tomes");
-    }
-
-    ui.separator();
-    ui.small("Add tome:");
-    let new_search = ui.text_edit(state.tome_search.get());
-    state.tome_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.tomes {
-            if game.get_tome_lvl(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") { game.add_tome_by_enum(entry.value); }
-                row.label(entry.name);
-            });
-        }
-    });
-}
-
-fn draw_items(ui: egui::Ui, game: GameRuntime, state: UiState) {
-    let owned = [];
-    for entry in game.items {
-        let count = game.get_item_count(entry.value);
-        if count > 0 {
-            owned.push(entry);
-        }
-    }
-
-    ui.horizontal(|row| {
-        if row.button("Add all") {
-            let pass = 0;
-            while pass < 2 {
-                for entry in game.items {
-                    if game.get_item_count(entry.value) == 0 {
-                        game.add_item(entry.value);
-                    }
-                }
-                pass = pass + 1;
-            }
-        }
-        if row.button("+100 all") {
-            for entry in owned {
-                game.add_item_n(entry.value, 100);
-            }
-        }
-    });
-
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("items_owned", 5, |g| {
-                for entry in owned {
-                    let count = game.get_item_count(entry.value);
-                    g.label(fmt::format("{} x{}", entry.name, count));
-                    if g.button("+") { game.add_item(entry.value); }
-                    if g.button("+10") { game.add_item_n(entry.value, 10); }
-                    if g.button("+100") { game.add_item_n(entry.value, 100); }
-                    if g.button("-") { game.remove_item(entry.value); }
-                    g.end_row();
-                }
-            });
-        });
-    } else {
-        ui.small("no items");
-    }
-
-    ui.separator();
-    ui.small("Add item:");
-    let new_search = ui.text_edit(state.item_search.get());
-    state.item_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.items {
-            if game.get_item_count(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") { game.add_item(entry.value); }
-                if row.button("+10") { game.add_item_n(entry.value, 10); }
-                row.label(entry.name);
-            });
-        }
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Entry points
-// ---------------------------------------------------------------------------
-
-fn ctor() {
-    log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
-    egui::init();
-    egui::set_scale(0.75);
-}
-
-fn stub_main() {
-    log::info("megabonk trainer starting");
-
-    let visible = true;
-    let f1_down = false;
-
-    let state = UiState::new();
-
-    let rt: Option<GameRuntime> = None;
-    let rt_error: Option<str> = None;
-
-    egui::run(|ctx| {
-        let f1 = ctx.key("f1");
-        if f1 && !f1_down {
-            visible = !visible;
-        }
-        f1_down = f1;
-
-        if !visible { return; }
-
-        if rt.is_none() && rt_error.is_none() {
-            match GameRuntime::init() {
-                Ok(game) => { rt = Some(game); }
-                Err(e) => {
-                    log::info("init error: {}", e);
-                    rt_error = Some(e);
-                }
-            }
-        }
-
-        ctx.window_sized("Megabonk Trainer", 360.0, |ui| {
-            ui.small(fmt::format("frame {} | xur-stub", egui::frame_count()));
-
-            match rt_error {
-                Some(msg) => {
-                    ui.separator();
-                    ui.colored_label(255, 80, 80, fmt::format("init error: {}", msg));
-                    return;
-                }
-                None => {}
-            }
-
-            let game = match rt {
-                Some(g) => g,
-                None => {
-                    ui.separator();
-                    ui.small("waiting for Il2Cpp runtime...");
-                    return;
-                }
-            };
-
-            if !game.in_game() {
-                ui.separator();
-                ui.small("not in game (main menu)");
-                ui.separator();
-                draw_silver(ui, game, state);
-                return;
-            }
-
-            ui.separator();
-            draw_combat(ui, game);
-            ui.separator();
-            draw_timer(ui, game, state);
-            ui.separator();
-            draw_camera(ui, game);
-            ui.separator();
-            draw_speed(ui);
-            ui.separator();
-            draw_gold(ui, game, state);
-            ui.separator();
-            draw_silver(ui, game, state);
-            ui.separator();
-
-            ui.collapsing("Weapons", |section| {
-                draw_weapons(section, game, state);
-            });
-            ui.collapsing("Tomes", |section| {
-                draw_tomes(section, game, state);
-            });
-            ui.collapsing("Items", |section| {
-                draw_items(section, game, state);
-            });
-        });
-    });
 }
