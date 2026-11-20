@@ -40,6 +40,13 @@ impl<T, E> Result<T, E> {
         }
     }
 
+    pub fn unwrap_or_else(self, f: fn(E) -> T) -> T {
+        match self {
+            Ok(value) => value,
+            Err(error) => f(error),
+        }
+    }
+
     pub fn ok(self) -> Option<T> {
         match self {
             Ok(value) => Some(value),

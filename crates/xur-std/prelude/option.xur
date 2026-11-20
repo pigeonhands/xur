@@ -40,6 +40,13 @@ impl<T> Option<T> {
         }
     }
 
+    pub fn unwrap_or_else(self, f: fn() -> T) -> T {
+        match self {
+            Some(value) => value,
+            None => f(),
+        }
+    }
+
     pub fn map<U>(self, f: fn(T) -> U) -> Option<U> {
         match self {
             Some(value) => Some(f(value)),
