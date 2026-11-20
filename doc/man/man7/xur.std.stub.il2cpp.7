@@ -141,6 +141,18 @@ The hooked method's signature string.
 Call the original method with the (possibly modified) arguments.
 Can only be called once per hook invocation. Returns the original's
 return value.
+.SH Object METHODS
+.TP
+.B address() -> int
+The raw memory address of the managed object.
+.TP
+.B is_null() -> bool
+Whether this is a null object reference.
+.TP
+.B class() -> Class
+Get the runtime class of this object. Useful for calling methods on
+objects whose type was not known at proxy time, such as generic
+collections.
 .SH VoidBlockHook METHODS
 .TP
 .B set_blocked(blocked: bool) -> ()

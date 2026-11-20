@@ -265,6 +265,7 @@ fn register_run(m: &mut ModuleBuilder<'_>) {
 
             let ctx_val = into_value(cx, EguiCtx::from_ctx(&ctx)).expect("EguiCtx registered");
             if let Err(e) = cx.call(&draw, &[ctx_val]) {
+                tracing::error!("draw error: {}", e.message);
                 Window::new("xur error").show(&ctx, |ui| {
                     ui.colored_label(Color32::RED, format!("draw error: {}", e.message));
                 });
@@ -320,7 +321,10 @@ fn register_ctx_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                     let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
                     match cx.call(&body, &[ui_val]) {
                         Ok(val) => { ret = val; }
-                        Err(e) => { ui.colored_label(Color32::RED, format!("error: {}", e.message)); }
+                        Err(e) => {
+                            tracing::error!("{}", e.message);
+                            ui.colored_label(Color32::RED, format!("error: {}", e.message));
+                        }
                     }
                 });
             Ok(ret)
@@ -352,7 +356,10 @@ fn register_ctx_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                     let ui_val = into_value(cx, EguiUi::from_ui(ui)).expect("EguiUi registered");
                     match cx.call(&body, &[ui_val]) {
                         Ok(val) => { ret = val; }
-                        Err(e) => { ui.colored_label(Color32::RED, format!("error: {}", e.message)); }
+                        Err(e) => {
+                            tracing::error!("{}", e.message);
+                            ui.colored_label(Color32::RED, format!("error: {}", e.message));
+                        }
                     }
                 });
             Ok(ret)

@@ -1357,7 +1357,20 @@ pub(crate) fn register(registry: &Registry) {
     // --- Object methods ---
     m.ty::<XurObject>("Object")
         .method("address", |o: &XurObject| -> i64 { o.0 as i64 })
-        .method("is_null", |o: &XurObject| -> bool { o.0 == 0 });
+        .method("is_null", |o: &XurObject| -> bool { o.0 == 0 })
+        .raw_function_returns::<XurClass>("class", |cx, args| {
+            let [this] = args else {
+                return Err(RuntimeError::new("`class` takes no arguments"));
+            };
+            let object = extract_object(this)?;
+            if object.is_null() {
+                return Err(RuntimeError::new("cannot get class of null object"));
+            }
+            let il2cpp = rt::Il2Cpp::get()
+                .ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
+            let cls = unsafe { il2cpp.class_of(object) };
+            into_value(cx, XurClass::new(&cls))
+        });
 
     });
 }
