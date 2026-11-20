@@ -57,84 +57,61 @@ fn new_ui_state() -> UiState {
     }
 }
 
-struct GameRuntime {
-    rt: il2cpp::Runtime
-    // MyPlayer
-    player_instance: il2cpp::Field
-    inventory_field: il2cpp::Field
-    // PlayerHealth
-    hp_field: il2cpp::Field
-    max_hp_field: il2cpp::Field
-    shield_field: il2cpp::Field
-    max_shield_field: il2cpp::Field
-    // PlayerInventory
-    player_health_field: il2cpp::Field
-    weapon_inv_field: il2cpp::Field
-    item_inv_field: il2cpp::Field
-    tome_inv_field: il2cpp::Field
-    gold_int_field: il2cpp::Field
-    gold_float_field: il2cpp::Field
-    // ItemInventory
-    add_item_method: il2cpp::Method
-    add_item_n_method: il2cpp::Method
-    remove_item_method: il2cpp::Method
-    get_item_amount: il2cpp::Method
-    // WeaponInventory
-    add_weapon: il2cpp::Method
-    get_weapon_level: il2cpp::Method
-    weapon_is_maxed: il2cpp::Field
-    // TomeInventory
-    add_tome: il2cpp::Method
-    add_maxed_tome: il2cpp::Method
-    get_tome_level: il2cpp::Method
-    has_tome: il2cpp::Method
-    // DataManager
-    dm_instance: il2cpp::Field
-    dm_get_weapon: il2cpp::Method
-    dm_get_item: il2cpp::Method
-    dm_get_tome: il2cpp::Method
-    // GameManager
-    gm_instance: il2cpp::Field
-    gm_timer: il2cpp::Field
-    gm_stage_time: il2cpp::Field
-    gm_next_stage_time: il2cpp::Field
-    gm_dungeon_time: il2cpp::Field
-    // PlayerMovement
-    pm_instance: il2cpp::Field
-    pm_noclip: il2cpp::Field
-    // PlayerCamera
-    pc_instance: il2cpp::Field
-    pc_max_zoom: il2cpp::Field
-    pc_current_z: il2cpp::Field
-    pc_offset3rd_z_off: i64
-    pc_camera_state: il2cpp::Field
-    // SaveManager -> ProgressionSaveFile
-    sm_instance: il2cpp::Field
-    sm_progression: il2cpp::Field
-    prog_silver: il2cpp::Field
-    // Hook state
-    godmode: cell::Cell<bool>
-    skip_loading: cell::Cell<bool>
-    no_max_level: cell::Cell<bool>
-    no_push: cell::Cell<bool>
-    freeze_timer: cell::Cell<bool>
-    noclip: cell::Cell<bool>
-    extended_zoom: cell::Cell<bool>
-    zoom_block: il2cpp::VoidBlockHook
-    timer_block: il2cpp::VoidBlockHook
-    levelup_block: il2cpp::VoidBlockHook
-    chest_block: il2cpp::VoidBlockHook
-    encounter_block: il2cpp::VoidBlockHook
-    detach_camera: cell::Cell<bool>
-    // Enum entries
-    weapons: [EnumEntry]
-    items: [EnumEntry]
-    tomes: [EnumEntry]
+// ---------------------------------------------------------------------------
+// Hook data structs
+// ---------------------------------------------------------------------------
+
+struct GodmodeState { enabled: cell::Cell<bool> }
+impl GodmodeState {
+    #[default]
+    fn default() -> GodmodeState {
+        GodmodeState { enabled: cell::new(false) }
+    }
+}
+
+struct SkipLoadState { enabled: cell::Cell<bool> }
+impl SkipLoadState {
+    #[default]
+    fn default() -> SkipLoadState {
+        SkipLoadState { enabled: cell::new(false) }
+    }
+}
+
+struct NoPushState { enabled: cell::Cell<bool> }
+impl NoPushState {
+    #[default]
+    fn default() -> NoPushState {
+        NoPushState { enabled: cell::new(false) }
+    }
+}
+
+struct DetachCamState { enabled: cell::Cell<bool> }
+impl DetachCamState {
+    #[default]
+    fn default() -> DetachCamState {
+        DetachCamState { enabled: cell::new(false) }
+    }
+}
+
+struct NoMaxLevelState { enabled: cell::Cell<bool> }
+impl NoMaxLevelState {
+    #[default]
+    fn default() -> NoMaxLevelState {
+        NoMaxLevelState { enabled: cell::new(false) }
+    }
 }
 
 // ---------------------------------------------------------------------------
-// IL2CPP proxy structs — auto-generate constructors via #[il2cpp_proxy]
+// IL2CPP proxy structs
 // ---------------------------------------------------------------------------
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Actors.Player", class="MyPlayer")]
+struct PlayerProxy {
+    #[il2cpp_field="Instance"]
+    instance: il2cpp::Field
+    #[il2cpp_field="inventory"]
+    inventory: il2cpp::Field
+}
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="PlayerHealth")]
 struct HealthProxy {
@@ -148,6 +125,84 @@ struct HealthProxy {
     max_shield: il2cpp::Field
     #[il2cpp_method(name="DamagePlayer", params=3)]
     damage: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl HealthProxy {
+    #[il2cpp_hook(method="damage")]
+    fn on_damage(ctx: il2cpp::HookContext, state: GodmodeState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerInventory")]
+struct InventoryProxy {
+    #[il2cpp_field="playerHealth"]
+    player_health: il2cpp::Field
+    #[il2cpp_field="weaponInventory"]
+    weapon_inv: il2cpp::Field
+    #[il2cpp_field="itemInventory"]
+    item_inv: il2cpp::Field
+    #[il2cpp_field="tomeInventory"]
+    tome_inv: il2cpp::Field
+    #[il2cpp_field="<goldInt>k__BackingField"]
+    gold_int: il2cpp::Field
+    #[il2cpp_field="<gold>k__BackingField"]
+    gold_float: il2cpp::Field
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups.Items", class="ItemInventory")]
+struct ItemInvProxy {
+    #[il2cpp_method(name="AddItem", params=1)]
+    add_item: il2cpp::Method
+    #[il2cpp_method(name="AddItem", params=2)]
+    add_item_n: il2cpp::Method
+    #[il2cpp_method(name="RemoveItem", params=2)]
+    remove_item: il2cpp::Method
+    #[il2cpp_method(name="GetAmount", params=1)]
+    get_amount: il2cpp::Method
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups.Weapons", class="WeaponInventory")]
+struct WeaponInvProxy {
+    #[il2cpp_method(name="AddWeapon", params=2)]
+    add_weapon: il2cpp::Method
+    #[il2cpp_method(name="GetWeaponLevel", params=1)]
+    get_weapon_level: il2cpp::Method
+    #[il2cpp_field="isMaxed"]
+    is_maxed: il2cpp::Field
+    #[il2cpp_method(name="IsMaxLevel", params=1)]
+    is_max_level: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl WeaponInvProxy {
+    #[il2cpp_hook(method="is_max_level")]
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="TomeInventory")]
+struct TomeInvProxy {
+    #[il2cpp_method(name="AddTome", params=3)]
+    add_tome: il2cpp::Method
+    #[il2cpp_method(name="AddMaxedTome", params=1)]
+    add_maxed_tome: il2cpp::Method
+    #[il2cpp_method(name="GetTomeLevel", params=1)]
+    get_tome_level: il2cpp::Method
+    #[il2cpp_method(name="HasTome", params=1)]
+    has_tome: il2cpp::Method
+    #[il2cpp_method(name="IsMaxLevel", params=1)]
+    is_max_level: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl TomeInvProxy {
+    #[il2cpp_hook(method="is_max_level")]
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="DataManager")]
@@ -176,6 +231,138 @@ struct GameManagerProxy {
     dungeon_time: il2cpp::Field
     #[il2cpp_method(name="Update", params=0)]
     update: il2cpp::Method
+    #[il2cpp_hook(name="Update", params=0)]
+    timer_block: il2cpp::VoidBlockHook
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerMovement")]
+struct MovementProxy {
+    #[il2cpp_field="Instance"]
+    instance: il2cpp::Field
+    #[il2cpp_field="isNoclipping"]
+    noclip: il2cpp::Field
+    #[il2cpp_method(name="PushPlayer", params=1)]
+    push: il2cpp::Method
+    #[il2cpp_method(name="BouncePlayer", params=1)]
+    bounce: il2cpp::Method
+    #[il2cpp_method(name="PushPlayerButKeepMovement", params=0)]
+    push_keep: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl MovementProxy {
+    #[il2cpp_hook(method="push")]
+    fn on_push(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+
+    #[il2cpp_hook(method="bounce")]
+    fn on_bounce(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+
+    #[il2cpp_hook(method="push_keep")]
+    fn on_push_keep(ctx: il2cpp::HookContext, state: NoPushState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerCamera")]
+struct CameraProxy {
+    #[il2cpp_field="Instance"]
+    instance: il2cpp::Field
+    #[il2cpp_field="maxExtraZoomoutDistance"]
+    max_zoom: il2cpp::Field
+    #[il2cpp_field="currentZ"]
+    current_z: il2cpp::Field
+    #[il2cpp_field="offset3rdPerson"]
+    offset_3rd: il2cpp::Field
+    #[il2cpp_field="cameraState"]
+    camera_state: il2cpp::Field
+    #[il2cpp_method(name="PlayerCam", params=1)]
+    player_cam: il2cpp::Method
+    #[il2cpp_hook(name="UpdateZoom", params=0)]
+    zoom_block: il2cpp::VoidBlockHook
+}
+
+#[il2cpp_proxy]
+impl CameraProxy {
+    #[il2cpp_hook(method="player_cam")]
+    fn on_player_cam(ctx: il2cpp::HookContext, state: DetachCamState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
+    }
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="SaveManager")]
+struct SaveProxy {
+    #[il2cpp_field="<Instance>k__BackingField"]
+    instance: il2cpp::Field
+    #[il2cpp_field="progression"]
+    progression: il2cpp::Field
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Saves___Serialization.SaveFiles", class="ProgressionSaveFile")]
+struct ProgressionProxy {
+    #[il2cpp_field="silver"]
+    silver: il2cpp::Field
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="LoadingScreen")]
+struct LoadingProxy {
+    #[il2cpp_method(name="LoadSceneAsync", params=0)]
+    load_async: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl LoadingProxy {
+    #[il2cpp_hook(method="load_async")]
+    fn on_load(ctx: il2cpp::HookContext, state: SkipLoadState) -> _ {
+        if state.enabled.get() {
+            log::debug("skipping load animation");
+            Some(il2cpp::null())
+        } else {
+            None
+        }
+    }
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="LevelupScreen")]
+struct LevelupProxy {
+    #[il2cpp_hook(name="ShowLevelupScreen", params=0)]
+    block: il2cpp::VoidBlockHook
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="ChestWindowUi")]
+struct ChestProxy {
+    #[il2cpp_hook(name="Open", params=1)]
+    block: il2cpp::VoidBlockHook
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="EncounterUi")]
+struct EncounterProxy {
+    #[il2cpp_hook(name="Open", params=1)]
+    block: il2cpp::VoidBlockHook
+}
+
+#[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="InventoryUtility")]
+struct InvUtilProxy {
+    #[il2cpp_method(name="GetWeaponMaxLevel", params=0)]
+    get_weapon_max: il2cpp::Method
+    #[il2cpp_method(name="GetTomeMaxLevel", params=0)]
+    get_tome_max: il2cpp::Method
+}
+
+#[il2cpp_proxy]
+impl InvUtilProxy {
+    #[il2cpp_hook(method="get_weapon_max")]
+    fn on_get_weapon_max(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+        if state.enabled.get() { Some(999) } else { None }
+    }
+
+    #[il2cpp_hook(method="get_tome_max")]
+    fn on_get_tome_max(ctx: il2cpp::HookContext, state: NoMaxLevelState) -> _ {
+        if state.enabled.get() { Some(999) } else { None }
+    }
 }
 
 fn write_f32_raw(addr: i64, value: f32) {
@@ -205,209 +392,84 @@ fn enum_entries(cls: il2cpp::Class) -> _ {
 // GameRuntime
 // ---------------------------------------------------------------------------
 
+struct GameRuntime {
+    rt: il2cpp::Runtime
+    player: PlayerProxy
+    health: HealthProxy
+    inventory: InventoryProxy
+    item_inv: ItemInvProxy
+    weapon_inv: WeaponInvProxy
+    tome_inv: TomeInvProxy
+    data: DataProxy
+    gm: GameManagerProxy
+    movement: MovementProxy
+    camera: CameraProxy
+    save: SaveProxy
+    progression: ProgressionProxy
+    loading: LoadingProxy
+    levelup: LevelupProxy
+    chest: ChestProxy
+    encounter: EncounterProxy
+    inv_util: InvUtilProxy
+    // Hook state
+    godmode: GodmodeState
+    skip_loading: SkipLoadState
+    no_push: NoPushState
+    no_max_level: NoMaxLevelState
+    detach_camera: DetachCamState
+    freeze_timer: cell::Cell<bool>
+    noclip: cell::Cell<bool>
+    extended_zoom: cell::Cell<bool>
+    pc_offset3rd_z_off: i64
+    // Enum entries
+    weapons: [EnumEntry]
+    items: [EnumEntry]
+    tomes: [EnumEntry]
+}
+
 impl GameRuntime {
     fn init() -> Result<GameRuntime> {
         let rt = il2cpp::loaded()?;
         log::info("il2cpp runtime loaded");
 
         let asm = "Assembly-CSharp";
-        let player_cls = rt.class(asm, "Assets.Scripts.Actors.Player", "MyPlayer")?;
-        log::debug("  MyPlayer class found");
-        let health_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
-        log::debug("  PlayerHealth class found");
-        let inv_cls = rt.class(asm, "", "PlayerInventory")?;
-        log::debug("  PlayerInventory class found");
-        let item_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "ItemInventory")?;
-        log::debug("  ItemInventory class found");
-        let weapon_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Weapons", "WeaponInventory")?;
-        log::debug("  WeaponInventory class found");
-        let tome_inv_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "TomeInventory")?;
-        log::debug("  TomeInventory class found");
-        let dm_cls = rt.class(asm, "", "DataManager")?;
-        log::debug("  DataManager class found");
-        let gm_cls = rt.class(asm, "", "GameManager")?;
-        log::debug("  GameManager class found");
-        let pm_cls = rt.class(asm, "", "PlayerMovement")?;
-        log::debug("  PlayerMovement class found");
-        let pc_cls = rt.class(asm, "", "PlayerCamera")?;
-        log::debug("  PlayerCamera class found");
-        let sm_cls = rt.class(asm, "", "SaveManager")?;
-        log::debug("  SaveManager class found");
-        let prog_cls = rt.class(asm, "Assets.Scripts.Saves___Serialization.SaveFiles", "ProgressionSaveFile")?;
-        log::debug("  ProgressionSaveFile class found");
-        let levelup_cls = rt.class(asm, "", "LevelupScreen")?;
-        let chest_ui_cls = rt.class(asm, "", "ChestWindowUi")?;
-        let encounter_ui_cls = rt.class(asm, "", "EncounterUi")?;
-        log::debug("  LevelupScreen, ChestWindowUi, EncounterUi classes found");
+
+        let player = PlayerProxy::from_runtime(rt)?;
+        let health = HealthProxy::from_runtime(rt)?;
+        let inventory = InventoryProxy::from_runtime(rt)?;
+        let item_inv = ItemInvProxy::from_runtime(rt)?;
+        let weapon_inv = WeaponInvProxy::from_runtime(rt)?;
+        let tome_inv = TomeInvProxy::from_runtime(rt)?;
+        let data = DataProxy::from_runtime(rt)?;
+        let gm = GameManagerProxy::from_runtime(rt)?;
+        let movement = MovementProxy::from_runtime(rt)?;
+        let camera = CameraProxy::from_runtime(rt)?;
+        let save = SaveProxy::from_runtime(rt)?;
+        let progression = ProgressionProxy::from_runtime(rt)?;
+        let loading = LoadingProxy::from_runtime(rt)?;
+        let levelup = LevelupProxy::from_runtime(rt)?;
+        let chest = ChestProxy::from_runtime(rt)?;
+        let encounter = EncounterProxy::from_runtime(rt)?;
+        let inv_util = InvUtilProxy::from_runtime(rt)?;
+        log::info("all proxy structs initialised");
+
+        let pc_offset3rd_z_off = camera.offset_3rd.offset() + 8;
+        log::debug("  PlayerCamera offset3rd.z raw offset = {}", pc_offset3rd_z_off);
+
+        // Hook setup — shared no_max_level state across three proxies
+        let no_max_level = NoMaxLevelState::default();
+        let health_hooks = health.setup_hooks(None);
+        let loading_hooks = loading.setup_hooks(None);
+        let movement_hooks = movement.setup_hooks(None);
+        let camera_hooks = camera.setup_hooks(None);
+        weapon_inv.setup_hooks(Some(no_max_level));
+        tome_inv.setup_hooks(Some(no_max_level));
+        inv_util.setup_hooks(Some(no_max_level));
+        log::info("all hooks installed");
+
         let weapon_enum = rt.class(asm, "", "EWeapon")?;
         let item_enum = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "EItem")?;
         let tome_enum = rt.class(asm, "Assets.Scripts._Data.Tomes", "ETome")?;
-        log::info("all classes found");
-
-        let player_instance = player_cls.field("Instance")?;
-        let inventory_field = player_cls.field("inventory")?;
-        log::debug("  MyPlayer.Instance, inventory fields found");
-
-        let hp_field = health_cls.field("hp")?;
-        let max_hp_field = health_cls.field("maxHp")?;
-        let shield_field = health_cls.field("shield")?;
-        let max_shield_field = health_cls.field("maxShield")?;
-        log::debug("  PlayerHealth fields found (hp, maxHp, shield, maxShield)");
-
-        let player_health_field = inv_cls.field("playerHealth")?;
-        let weapon_inv_field = inv_cls.field("weaponInventory")?;
-        let item_inv_field = inv_cls.field("itemInventory")?;
-        let tome_inv_field = inv_cls.field("tomeInventory")?;
-        let gold_int_field = inv_cls.field("<goldInt>k__BackingField")?;
-        let gold_float_field = inv_cls.field("<gold>k__BackingField")?;
-        log::debug("  PlayerInventory fields found (health, weapons, items, tomes, gold)");
-
-        let add_item_method = item_inv_cls.method("AddItem", 1)?;
-        log::debug("  ItemInventory.AddItem(1) found");
-        let add_item_n_method = item_inv_cls.method("AddItem", 2)?;
-        log::debug("  ItemInventory.AddItem(2) found");
-        let remove_item_method = item_inv_cls.method("RemoveItem", 2)?;
-        log::debug("  ItemInventory.RemoveItem(2) found");
-        let get_item_amount = item_inv_cls.method("GetAmount", 1)?;
-        log::debug("  ItemInventory.GetAmount(1) found");
-
-        let add_weapon = weapon_inv_cls.method("AddWeapon", 2)?;
-        log::debug("  WeaponInventory.AddWeapon(2) found");
-        let get_weapon_level = weapon_inv_cls.method("GetWeaponLevel", 1)?;
-        log::debug("  WeaponInventory.GetWeaponLevel(1) found");
-        let weapon_is_maxed = weapon_inv_cls.field("isMaxed")?;
-        log::debug("  WeaponInventory.isMaxed field found");
-
-        let add_tome = tome_inv_cls.method("AddTome", 3)?;
-        log::debug("  TomeInventory.AddTome(3) found");
-        let add_maxed_tome = tome_inv_cls.method("AddMaxedTome", 1)?;
-        log::debug("  TomeInventory.AddMaxedTome(1) found");
-        let get_tome_level = tome_inv_cls.method("GetTomeLevel", 1)?;
-        log::debug("  TomeInventory.GetTomeLevel(1) found");
-        let has_tome = tome_inv_cls.method("HasTome", 1)?;
-        log::debug("  TomeInventory.HasTome(1) found");
-
-        let dm_instance = dm_cls.field("Instance")?;
-        let dm_get_weapon = dm_cls.method("GetWeapon", 1)?;
-        let dm_get_item = dm_cls.method("GetItem", 1)?;
-        let dm_get_tome = dm_cls.method("GetTome", 1)?;
-        log::debug("  DataManager fields and methods found");
-
-        let gm_instance = gm_cls.field("Instance")?;
-        let gm_timer = gm_cls.field("gameTimer")?;
-        let gm_stage_time = gm_cls.field("lastFoundStageTime")?;
-        let gm_next_stage_time = gm_cls.field("nextGetStageTime")?;
-        let gm_dungeon_time = gm_cls.field("<dungeonTimeToComplete>k__BackingField")?;
-        log::debug("  GameManager fields found");
-
-        let pm_instance = pm_cls.field("Instance")?;
-        let pm_noclip = pm_cls.field("isNoclipping")?;
-        log::debug("  PlayerMovement.Instance, isNoclipping found");
-
-        let pc_instance = pc_cls.field("Instance")?;
-        let pc_max_zoom = pc_cls.field("maxExtraZoomoutDistance")?;
-        let pc_current_z = pc_cls.field("currentZ")?;
-        let pc_offset3rd = pc_cls.field("offset3rdPerson")?;
-        let pc_offset3rd_z_off = pc_offset3rd.offset() + 8;
-        let pc_camera_state = pc_cls.field("cameraState")?;
-        log::debug("  PlayerCamera fields found (offset3rd.z raw offset = {})", pc_offset3rd_z_off);
-
-        let sm_instance = sm_cls.field("<Instance>k__BackingField")?;
-        let sm_progression = sm_cls.field("progression")?;
-        let prog_silver = prog_cls.field("silver")?;
-        log::debug("  SaveManager -> ProgressionSaveFile.silver found");
-
-        // Hook DamagePlayer(Enemy, Vector3, DcFlags) — when godmode is
-        // on the hook returns 0 (skip original), otherwise passes through.
-        let godmode = cell::new(false);
-        let damage_method = health_cls.method("DamagePlayer", 3)?;
-        log::info("DamagePlayer found, hooking...");
-        damage_method.hook(|ctx| {
-            if godmode.get() { Some(0) } else { None }
-        });
-        log::info("DamagePlayer hooked for godmode");
-
-        // Hook LoadingScreen.LoadSceneAsync to skip loading animation
-        let skip_loading = cell::new(false);
-        let loading_cls = rt.class(asm, "", "LoadingScreen")?;
-        let load_async = loading_cls.method("LoadSceneAsync", 0)?;
-        load_async.hook(|ctx| {
-            if skip_loading.get() {
-                log::debug("skipping load animation");
-                Some(il2cpp::null())
-            } else {
-                None
-            }
-        });
-        log::info("LoadSceneAsync hooked for skip loading");
-
-        // Hook IsMaxLevel on weapons and tomes to remove level cap
-        let no_max_level = cell::new(false);
-        let weapon_is_max = weapon_inv_cls.method("IsMaxLevel", 1)?;
-        weapon_is_max.hook(|ctx| {
-            if no_max_level.get() { Some(0) } else { None }
-        });
-        let tome_is_max = tome_inv_cls.method("IsMaxLevel", 1)?;
-        tome_is_max.hook(|ctx| {
-            if no_max_level.get() { Some(0) } else { None }
-        });
-        let inv_util_cls = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups", "InventoryUtility")?;
-        let get_weapon_max = inv_util_cls.method("GetWeaponMaxLevel", 0)?;
-        get_weapon_max.hook(|ctx| {
-            if no_max_level.get() { Some(999) } else { None }
-        });
-        let get_tome_max = inv_util_cls.method("GetTomeMaxLevel", 0)?;
-        get_tome_max.hook(|ctx| {
-            if no_max_level.get() { Some(999) } else { None }
-        });
-        log::info("IsMaxLevel/GetMaxLevel hooked for no max level");
-
-        // Hook PushPlayer/BouncePlayer on PlayerMovement for no-push
-        let no_push = cell::new(false);
-        let push_method = pm_cls.method("PushPlayer", 1)?;
-        push_method.hook(|ctx| {
-            if no_push.get() { Some(0) } else { None }
-        });
-        let bounce_method = pm_cls.method("BouncePlayer", 1)?;
-        bounce_method.hook(|ctx| {
-            if no_push.get() { Some(0) } else { None }
-        });
-        let push_keep_method = pm_cls.method("PushPlayerButKeepMovement", 0)?;
-        push_keep_method.hook(|ctx| {
-            if no_push.get() { Some(0) } else { None }
-        });
-        log::info("PushPlayer/BouncePlayer hooked for no push");
-
-        let detach_camera = cell::new(false);
-        let player_cam_method = pc_cls.method("PlayerCam", 1)?;
-        player_cam_method.hook(|ctx| {
-            if detach_camera.get() { Some(0) } else { None }
-        });
-        log::info("PlayerCamera.PlayerCam hooked for detach camera");
-
-        let freeze_timer = cell::new(false);
-        let gm_update = gm_cls.method("Update", 0)?;
-        let timer_block = gm_update.hook_void_block();
-        log::info("GameManager.Update void-blocked for freeze timer");
-
-        let show_levelup = levelup_cls.method("ShowLevelupScreen", 0)?;
-        let levelup_block = show_levelup.hook_void_block();
-        log::info("LevelupScreen.ShowLevelupScreen void-blocked");
-
-        let chest_open = chest_ui_cls.method("Open", 1)?;
-        let chest_block = chest_open.hook_void_block();
-        log::info("ChestWindowUi.Open void-blocked");
-
-        let encounter_open = encounter_ui_cls.method("Open", 1)?;
-        let encounter_block = encounter_open.hook_void_block();
-        log::info("EncounterUi.Open void-blocked");
-
-        let noclip = cell::new(false);
-        let extended_zoom = cell::new(false);
-        let update_zoom = pc_cls.method("UpdateZoom", 0)?;
-        let zoom_block = update_zoom.hook_void_block();
-        log::info("PlayerCamera.UpdateZoom void-blocked for manual zoom");
-
         let weapons = enum_entries(weapon_enum);
         let items = enum_entries(item_enum);
         let tomes = enum_entries(tome_enum);
@@ -416,154 +478,125 @@ impl GameRuntime {
 
         Ok(GameRuntime {
             rt,
-            player_instance,
-            inventory_field,
-            hp_field,
-            max_hp_field,
-            shield_field,
-            max_shield_field,
-            player_health_field,
-            weapon_inv_field,
-            item_inv_field,
-            tome_inv_field,
-            gold_int_field,
-            gold_float_field,
-            add_item_method,
-            add_item_n_method,
-            remove_item_method,
-            get_item_amount,
-            add_weapon,
-            get_weapon_level,
-            weapon_is_maxed,
-            add_tome,
-            add_maxed_tome,
-            get_tome_level,
-            has_tome,
-            dm_instance,
-            dm_get_weapon,
-            dm_get_item,
-            dm_get_tome,
-            gm_instance,
-            gm_timer,
-            gm_stage_time,
-            gm_next_stage_time,
-            gm_dungeon_time,
-            pm_instance,
-            pm_noclip,
-            pc_instance,
-            pc_max_zoom,
-            pc_current_z,
-            pc_offset3rd_z_off,
-            pc_camera_state,
-            sm_instance,
-            sm_progression,
-            prog_silver,
-            godmode,
-            skip_loading,
+            player,
+            health,
+            inventory,
+            item_inv,
+            weapon_inv,
+            tome_inv,
+            data,
+            gm,
+            movement,
+            camera,
+            save,
+            progression,
+            loading,
+            levelup,
+            chest,
+            encounter,
+            inv_util,
+            godmode: health_hooks.state,
+            skip_loading: loading_hooks.state,
+            no_push: movement_hooks.state,
             no_max_level,
-            no_push,
-            freeze_timer,
-            noclip,
-            extended_zoom,
-            zoom_block,
-            timer_block,
-            levelup_block,
-            chest_block,
-            encounter_block,
-            detach_camera,
+            detach_camera: camera_hooks.state,
+            freeze_timer: cell::new(false),
+            noclip: cell::new(false),
+            extended_zoom: cell::new(false),
+            pc_offset3rd_z_off,
             weapons,
             items,
             tomes,
         })
     }
 
-    fn player(self) -> il2cpp::Object {
-        self.player_instance.read_static()
+    fn player_obj(self) -> il2cpp::Object {
+        self.player.instance.read_static()
     }
 
     fn in_game(self) -> bool {
-        !self.player().is_null()
+        !self.player_obj().is_null()
     }
 
-    fn inventory(self) -> il2cpp::Object {
-        let p = self.player();
+    fn inventory_obj(self) -> il2cpp::Object {
+        let p = self.player_obj();
         if p.is_null() { return il2cpp::null(); }
-        self.inventory_field.read(p)
+        self.player.inventory.read(p)
     }
 
     fn health_obj(self) -> il2cpp::Object {
-        let inv = self.inventory();
+        let inv = self.inventory_obj();
         if inv.is_null() { return il2cpp::null(); }
-        self.player_health_field.read(inv)
+        self.inventory.player_health.read(inv)
     }
 
-    fn item_inv(self) -> il2cpp::Object {
-        let inv = self.inventory();
+    fn item_inv_obj(self) -> il2cpp::Object {
+        let inv = self.inventory_obj();
         if inv.is_null() { return il2cpp::null(); }
-        self.item_inv_field.read(inv)
+        self.inventory.item_inv.read(inv)
     }
 
-    fn weapon_inv(self) -> il2cpp::Object {
-        let inv = self.inventory();
+    fn weapon_inv_obj(self) -> il2cpp::Object {
+        let inv = self.inventory_obj();
         if inv.is_null() { return il2cpp::null(); }
-        self.weapon_inv_field.read(inv)
+        self.inventory.weapon_inv.read(inv)
     }
 
-    fn tome_inv(self) -> il2cpp::Object {
-        let inv = self.inventory();
+    fn tome_inv_obj(self) -> il2cpp::Object {
+        let inv = self.inventory_obj();
         if inv.is_null() { return il2cpp::null(); }
-        self.tome_inv_field.read(inv)
+        self.inventory.tome_inv.read(inv)
     }
 
     fn data_manager(self) -> il2cpp::Object {
-        self.dm_instance.read_static()
+        self.data.instance.read_static()
     }
 
     fn game_manager(self) -> il2cpp::Object {
-        self.gm_instance.read_static()
+        self.gm.instance.read_static()
     }
 
     fn player_movement(self) -> il2cpp::Object {
-        self.pm_instance.read_static()
+        self.movement.instance.read_static()
     }
 
     fn player_camera(self) -> il2cpp::Object {
-        self.pc_instance.read_static()
+        self.camera.instance.read_static()
     }
 
     // --- Combat ---
 
     fn set_godmode(self, enabled: bool) {
-        self.godmode.set(enabled);
+        self.godmode.enabled.set(enabled);
     }
 
     fn is_godmode(self) -> bool {
-        self.godmode.get()
+        self.godmode.enabled.get()
     }
 
     fn read_health(self) -> Option<HealthInfo> {
         let h = self.health_obj();
         if h.is_null() { return None; }
         Some(HealthInfo {
-            hp: self.hp_field.read(h),
-            max_hp: self.max_hp_field.read(h),
-            shield: self.shield_field.read(h),
-            max_shield: self.max_shield_field.read(h),
+            hp: self.health.hp.read(h),
+            max_hp: self.health.max_hp.read(h),
+            shield: self.health.shield.read(h),
+            max_shield: self.health.max_shield.read(h),
         })
     }
 
     fn full_heal(self) {
         let h = self.health_obj();
         if h.is_null() { return; }
-        let max = self.max_hp_field.read(h);
-        self.hp_field.write(h, max);
+        let max = self.health.max_hp.read(h);
+        self.health.hp.write(h, max);
     }
 
     fn max_shield(self) {
         let h = self.health_obj();
         if h.is_null() { return; }
-        let max = self.max_shield_field.read(h);
-        self.shield_field.write(h, max);
+        let max = self.health.max_shield.read(h);
+        self.health.shield.write(h, max);
     }
 
     // --- Timer ---
@@ -571,19 +604,19 @@ impl GameRuntime {
     fn get_timer(self) -> f32 {
         let gm = self.game_manager();
         if gm.is_null() { return 0.0; }
-        self.gm_timer.read(gm)
+        self.gm.timer.read(gm)
     }
 
     fn set_timer(self, value: f32) {
         let gm = self.game_manager();
         if gm.is_null() { return; }
-        self.gm_timer.write(gm, value);
+        self.gm.timer.write(gm, value);
     }
 
     fn get_stage_time_max(self) -> f32 {
         let gm = self.game_manager();
         if gm.is_null() { return 0.0; }
-        self.gm_stage_time.read(gm)
+        self.gm.stage_time.read(gm)
     }
 
     fn get_round_remaining(self) -> f32 {
@@ -596,14 +629,14 @@ impl GameRuntime {
     fn set_round_remaining(self, seconds: f32) {
         let gm = self.game_manager();
         if gm.is_null() { return; }
-        let current = self.gm_timer.read(gm);
-        let old_stage = self.gm_stage_time.read(gm);
+        let current = self.gm.timer.read(gm);
+        let old_stage = self.gm.stage_time.read(gm);
         let new_stage = current + seconds;
         let delta = new_stage - old_stage;
-        self.gm_stage_time.write(gm, new_stage);
-        self.gm_next_stage_time.write(gm, current + 99999.0);
-        let old_dungeon = self.gm_dungeon_time.read(gm);
-        self.gm_dungeon_time.write(gm, old_dungeon + delta);
+        self.gm.stage_time.write(gm, new_stage);
+        self.gm.next_stage_time.write(gm, current + 99999.0);
+        let old_dungeon = self.gm.dungeon_time.read(gm);
+        self.gm.dungeon_time.write(gm, old_dungeon + delta);
     }
 
     // --- Camera ---
@@ -611,116 +644,116 @@ impl GameRuntime {
     fn set_max_zoom(self, value: f32) {
         let pc = self.player_camera();
         if pc.is_null() { return; }
-        self.pc_max_zoom.write(pc, value);
+        self.camera.max_zoom.write(pc, value);
     }
 
     fn set_camera_z(self, value: f32) {
         let pc = self.player_camera();
         if pc.is_null() { return; }
-        self.pc_current_z.write(pc, value);
+        self.camera.current_z.write(pc, value);
         write_f32_raw(pc.address() + self.pc_offset3rd_z_off, value);
     }
 
     fn set_noclip(self, enabled: bool) {
         let pm = self.player_movement();
         if pm.is_null() { return; }
-        self.pm_noclip.write(pm, enabled);
+        self.movement.noclip.write(pm, enabled);
     }
 
     fn reset_camera(self) {
         self.noclip.set(false);
         self.set_noclip(false);
-        self.detach_camera.set(false);
+        self.detach_camera.enabled.set(false);
         self.extended_zoom.set(false);
-        self.zoom_block.set_blocked(false);
+        self.camera.zoom_block.set_blocked(false);
         self.set_max_zoom(0.0);
         let pc = self.player_camera();
         if !pc.is_null() {
-            self.pc_camera_state.write(pc, 1);
+            self.camera.camera_state.write(pc, 1);
         }
     }
 
     // --- Silver ---
 
     fn get_silver(self) -> i32 {
-        let sm = self.sm_instance.read_static();
+        let sm = self.save.instance.read_static();
         if sm.is_null() { return 0; }
-        let prog = self.sm_progression.read(sm);
+        let prog = self.save.progression.read(sm);
         if prog.is_null() { return 0; }
-        self.prog_silver.read(prog)
+        self.progression.silver.read(prog)
     }
 
     fn set_silver(self, value: i32) {
-        let sm = self.sm_instance.read_static();
+        let sm = self.save.instance.read_static();
         if sm.is_null() { return; }
-        let prog = self.sm_progression.read(sm);
+        let prog = self.save.progression.read(sm);
         if prog.is_null() { return; }
-        self.prog_silver.write(prog, value);
+        self.progression.silver.write(prog, value);
     }
 
     // --- Gold (direct field write to avoid ChangeGold event crash) ---
 
     fn get_gold(self) -> i32 {
-        let inv = self.inventory();
+        let inv = self.inventory_obj();
         if inv.is_null() { return 0; }
-        self.gold_int_field.read(inv)
+        self.inventory.gold_int.read(inv)
     }
 
     fn set_gold(self, amount: i32) {
-        let inv = self.inventory();
+        let inv = self.inventory_obj();
         if inv.is_null() { return; }
-        self.gold_int_field.write(inv, amount);
-        self.gold_float_field.write(inv, amount);
+        self.inventory.gold_int.write(inv, amount);
+        self.inventory.gold_float.write(inv, amount);
     }
 
     // --- Items ---
 
     fn add_item(self, value: i32) {
-        let ii = self.item_inv();
+        let ii = self.item_inv_obj();
         if ii.is_null() { return; }
-        self.add_item_method.invoke_on_main(ii, value);
+        self.item_inv.add_item.invoke_on_main(ii, value);
     }
 
     fn add_item_n(self, value: i32, n: i32) {
-        let ii = self.item_inv();
+        let ii = self.item_inv_obj();
         if ii.is_null() { return; }
-        self.add_item_n_method.invoke_on_main(ii, value, n);
+        self.item_inv.add_item_n.invoke_on_main(ii, value, n);
     }
 
     fn remove_item(self, value: i32) {
-        let ii = self.item_inv();
+        let ii = self.item_inv_obj();
         if ii.is_null() { return; }
-        self.remove_item_method.invoke_on_main(ii, value, false);
+        self.item_inv.remove_item.invoke_on_main(ii, value, false);
     }
 
     fn get_item_count(self, value: i32) -> i32 {
-        let ii = self.item_inv();
+        let ii = self.item_inv_obj();
         if ii.is_null() { return 0; }
-        self.get_item_amount.invoke(ii, value)
+        self.item_inv.get_amount.invoke(ii, value)
     }
 
     // --- Weapons ---
 
     fn unlock_weapon_cap(self) {
-        let wi = self.weapon_inv();
+        let wi = self.weapon_inv_obj();
         if wi.is_null() { return; }
-        self.weapon_is_maxed.write(wi, false);
+        self.weapon_inv.is_maxed.write(wi, false);
     }
 
     fn add_weapon_by_enum(self, value: i32) {
         let dm = self.data_manager();
         if dm.is_null() { return; }
-        let weapon_data = self.dm_get_weapon.invoke(dm, value);
+        let weapon_data = self.data.get_weapon.invoke(dm, value);
         if weapon_data.is_null() { return; }
-        let wi = self.weapon_inv();
+        let wi = self.weapon_inv_obj();
         if wi.is_null() { return; }
-        self.add_weapon.invoke_on_main(wi, weapon_data, il2cpp::null());
+        self.weapon_inv.add_weapon.invoke_on_main(wi, weapon_data, il2cpp::null());
     }
 
     fn get_weapon_lvl(self, value: i32) -> i32 {
-        let wi = self.weapon_inv();
+        let wi = self.weapon_inv_obj();
         if wi.is_null() { return 0; }
-        self.get_weapon_level.invoke(wi, value)
+        self.weapon_inv.get_weapon_level.invoke(wi, value)
     }
 
     fn add_weapon_n(self, value: i32, n: i32) {
@@ -736,17 +769,15 @@ impl GameRuntime {
     }
 
     // --- Tomes ---
-    // AddTome(TomeData, List<StatModifier>, ERarity) — pass null modifiers, rarity 0
-    // AddMaxedTome(TomeData) — adds at max level
 
     fn add_tome_by_enum(self, value: i32) {
         let dm = self.data_manager();
         if dm.is_null() { return; }
-        let tome_data = self.dm_get_tome.invoke(dm, value);
+        let tome_data = self.data.get_tome.invoke(dm, value);
         if tome_data.is_null() { return; }
-        let ti = self.tome_inv();
+        let ti = self.tome_inv_obj();
         if ti.is_null() { return; }
-        self.add_tome.invoke_on_main(ti, tome_data, il2cpp::null(), 0);
+        self.tome_inv.add_tome.invoke_on_main(ti, tome_data, il2cpp::null(), 0);
     }
 
     fn add_tome_n(self, value: i32, n: i32) {
@@ -760,17 +791,17 @@ impl GameRuntime {
     fn add_maxed_tome_by_enum(self, value: i32) {
         let dm = self.data_manager();
         if dm.is_null() { return; }
-        let tome_data = self.dm_get_tome.invoke(dm, value);
+        let tome_data = self.data.get_tome.invoke(dm, value);
         if tome_data.is_null() { return; }
-        let ti = self.tome_inv();
+        let ti = self.tome_inv_obj();
         if ti.is_null() { return; }
-        self.add_maxed_tome.invoke_on_main(ti, tome_data);
+        self.tome_inv.add_maxed_tome.invoke_on_main(ti, tome_data);
     }
 
     fn get_tome_lvl(self, value: i32) -> i32 {
-        let ti = self.tome_inv();
+        let ti = self.tome_inv_obj();
         if ti.is_null() { return 0; }
-        self.get_tome_level.invoke(ti, value)
+        self.tome_inv.get_tome_level.invoke(ti, value)
     }
 }
 
@@ -786,30 +817,30 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
         game.set_godmode(new_godmode);
     }
 
-    let no_push = game.no_push.get();
+    let no_push = game.no_push.enabled.get();
     let new_no_push = ui.checkbox(no_push, "No push / knockback");
     if new_no_push != no_push {
-        game.no_push.set(new_no_push);
+        game.no_push.enabled.set(new_no_push);
     }
 
-    let skip = game.skip_loading.get();
+    let skip = game.skip_loading.enabled.get();
     let new_skip = ui.checkbox(skip, "Skip loading animation");
     if new_skip != skip {
-        game.skip_loading.set(new_skip);
+        game.skip_loading.enabled.set(new_skip);
     }
 
-    let no_max = game.no_max_level.get();
+    let no_max = game.no_max_level.enabled.get();
     let new_no_max = ui.checkbox(no_max, "No max level cap");
     if new_no_max != no_max {
-        game.no_max_level.set(new_no_max);
+        game.no_max_level.enabled.set(new_no_max);
     }
 
-    let skip_levelup = game.levelup_block.is_blocked();
+    let skip_levelup = game.levelup.block.is_blocked();
     let new_skip_levelup = ui.checkbox(skip_levelup, "Skip upgrade offers");
     if new_skip_levelup != skip_levelup {
-        game.levelup_block.set_blocked(new_skip_levelup);
-        game.chest_block.set_blocked(new_skip_levelup);
-        game.encounter_block.set_blocked(new_skip_levelup);
+        game.levelup.block.set_blocked(new_skip_levelup);
+        game.chest.block.set_blocked(new_skip_levelup);
+        game.encounter.block.set_blocked(new_skip_levelup);
     }
 
     match game.read_health() {
@@ -832,10 +863,10 @@ fn draw_timer(ui: egui::Ui, game: GameRuntime, state: UiState) {
     let secs = total_secs - mins * 60;
     ui.heading(fmt::format("Round: {}m {}s", mins, secs));
 
-    let frozen = game.timer_block.is_blocked();
+    let frozen = game.gm.timer_block.is_blocked();
     let new_frozen = ui.checkbox(frozen, "Freeze timer");
     if new_frozen != frozen {
-        game.timer_block.set_blocked(new_frozen);
+        game.gm.timer_block.set_blocked(new_frozen);
         game.freeze_timer.set(new_frozen);
         if new_frozen {
             state.timer_value.set(remaining);
@@ -877,29 +908,29 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         }
     }
 
-    let blocked = game.zoom_block.is_blocked();
+    let blocked = game.camera.zoom_block.is_blocked();
     let new_blocked = ui.checkbox(blocked, "Manual zoom (blocks game zoom)");
     if new_blocked != blocked {
-        game.zoom_block.set_blocked(new_blocked);
+        game.camera.zoom_block.set_blocked(new_blocked);
     }
 
     let pc = game.player_camera();
     if !pc.is_null() {
-        let cur_z = game.pc_current_z.read(pc);
+        let cur_z = game.camera.current_z.read(pc);
         let new_z = ui.slider_float("Zoom", cur_z, -5.0, 60.0);
         if new_z != cur_z {
-            game.zoom_block.set_blocked(true);
+            game.camera.zoom_block.set_blocked(true);
             game.set_camera_z(new_z);
         }
-        if game.zoom_block.is_blocked() {
+        if game.camera.zoom_block.is_blocked() {
             game.set_camera_z(cur_z);
         }
     }
 
-    let detach = game.detach_camera.get();
+    let detach = game.detach_camera.enabled.get();
     let new_detach = ui.checkbox(detach, "Detach camera from player");
     if new_detach != detach {
-        game.detach_camera.set(new_detach);
+        game.detach_camera.enabled.set(new_detach);
     }
 
     let noclip = game.noclip.get();
@@ -1181,11 +1212,8 @@ fn stub_main() {
     let visible = true;
     let f1_down = false;
 
-    // Mutable UI state in a list — list elements are Arc-shared, so
-    // writes propagate through nested closures (window_sized, etc).
     let state = new_ui_state();
 
-    // Runtime (lazy init)
     let rt: Option<GameRuntime> = None;
     let rt_error: Option<str> = None;
 
@@ -1198,7 +1226,6 @@ fn stub_main() {
 
         if !visible { return; }
 
-        // Lazy-init after Il2Cpp is ready
         if rt.is_none() && rt_error.is_none() {
             match GameRuntime::init() {
                 Ok(game) => { rt = Some(game); }
