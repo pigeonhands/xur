@@ -297,20 +297,26 @@ impl LoadingProxy {
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="LevelupScreen")]
 struct LevelupProxy {
-    #[il2cpp_hook(name="ShowLevelupScreen", params=0)]
-    block: il2cpp::VoidBlockHook
+    #[il2cpp_method(name="ShowLevelupScreen", params=0)]
+    show: il2cpp::Method
+    #[il2cpp_method(name="OnClose", params=0)]
+    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="ChestWindowUi")]
 struct ChestProxy {
-    #[il2cpp_hook(name="Open", params=1)]
-    block: il2cpp::VoidBlockHook
+    #[il2cpp_method(name="Open", params=1)]
+    open: il2cpp::Method
+    #[il2cpp_method(name="OnClose", params=0)]
+    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="EncounterUi")]
 struct EncounterProxy {
-    #[il2cpp_hook(name="Open", params=1)]
-    block: il2cpp::VoidBlockHook
+    #[il2cpp_method(name="Open", params=1)]
+    open: il2cpp::Method
+    #[il2cpp_method(name="OnClose", params=0)]
+    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="InventoryUtility")]
@@ -383,6 +389,7 @@ struct GameRuntime {
     // Hook state
     godmode: HookState
     skip_loading: HookState
+    skip_offers: cell::Cell<bool>
     no_push: HookState
     no_max_level: HookState
     detach_camera: HookState
@@ -411,7 +418,12 @@ impl GameRuntime {
 
         let pc_offset3rd_z_off = camera.offset_3rd.offset() + 8;
 
+        let levelup = LevelupProxy::from_runtime(rt)?;
+        let chest = ChestProxy::from_runtime(rt)?;
+        let encounter = EncounterProxy::from_runtime(rt)?;
+
         let no_max_level = HookState::default();
+        let skip_offers = cell::new(false);
         let health_hooks = health.setup_hooks(None);
         let loading_hooks = loading.setup_hooks(None);
         let movement_hooks = movement.setup_hooks(None);
@@ -419,6 +431,29 @@ impl GameRuntime {
         weapon_inv.setup_hooks(Some(no_max_level));
         tome_inv.setup_hooks(Some(no_max_level));
         inv_util.setup_hooks(Some(no_max_level));
+
+        // Skip-offer hooks: when blocked, invoke OnClose to unpause
+        let lu_close = levelup.on_close;
+        levelup.show.hook(|ctx| {
+            if skip_offers.get() {
+                lu_close.invoke(ctx.arg(0));
+                Some(0)
+            } else { None }
+        });
+        let ch_close = chest.on_close;
+        chest.open.hook(|ctx| {
+            if skip_offers.get() {
+                ch_close.invoke(ctx.arg(0));
+                Some(0)
+            } else { None }
+        });
+        let enc_close = encounter.on_close;
+        encounter.open.hook(|ctx| {
+            if skip_offers.get() {
+                enc_close.invoke(ctx.arg(0));
+                Some(0)
+            } else { None }
+        });
         log::info("all hooks installed");
 
         let asm = "Assembly-CSharp";
@@ -443,12 +478,13 @@ impl GameRuntime {
             save: SaveProxy::from_runtime(rt)?,
             progression: ProgressionProxy::from_runtime(rt)?,
             loading,
-            levelup: LevelupProxy::from_runtime(rt)?,
-            chest: ChestProxy::from_runtime(rt)?,
-            encounter: EncounterProxy::from_runtime(rt)?,
+            levelup,
+            chest,
+            encounter,
             inv_util,
             godmode: health_hooks.state,
             skip_loading: loading_hooks.state,
+            skip_offers,
             no_push: movement_hooks.state,
             no_max_level,
             detach_camera: camera_hooks.state,
@@ -787,12 +823,10 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
         game.no_max_level.enabled.set(new_no_max);
     }
 
-    let skip_levelup = game.levelup.block.is_blocked();
+    let skip_levelup = game.skip_offers.get();
     let new_skip_levelup = ui.checkbox(skip_levelup, "Skip upgrade offers");
     if new_skip_levelup != skip_levelup {
-        game.levelup.block.set_blocked(new_skip_levelup);
-        game.chest.block.set_blocked(new_skip_levelup);
-        game.encounter.block.set_blocked(new_skip_levelup);
+        game.skip_offers.set(new_skip_levelup);
     }
 
     match game.read_health() {
