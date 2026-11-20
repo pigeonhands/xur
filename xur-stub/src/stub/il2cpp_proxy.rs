@@ -86,19 +86,31 @@ fn expand_struct(
     ))
 }
 
+struct DataEntry {
+    var_name: String,
+    param_name: String,
+    param_ty: String,
+}
+
 /// Generates `setup_hooks` for an impl block with `#[il2cpp_hook]` functions.
 ///
-/// When hook functions have extra parameters beyond `ctx`, those are
-/// treated as hook data: the expander generates `Type::default()` calls,
-/// captures the data in closures, and returns a record with handles.
+/// Hook data (extra params beyond `ctx`) is deduplicated by param name within
+/// the impl block — hooks sharing the same param name+type get the same
+/// instance. Each data entry becomes an `Option<Type>` parameter on
+/// `setup_hooks`, so the caller can pass `Some(value)` for pre-configured
+/// state or `None` to use `Type::default()`.
 fn expand_impl(
     self_ty: &str,
     functions: &[xur_resolve::macros::MacroFn],
     _attr_args: &[(String, String)],
 ) -> Result<String, MacroError> {
-    let mut data_lets = Vec::new();
-    let mut hook_lines = Vec::new();
-    let mut record_fields = Vec::new();
+    struct HookInfo {
+        fn_name: String,
+        method_field: String,
+        data_params: Vec<(String, String)>, // (name, type)
+    }
+
+    let mut hooks = Vec::new();
 
     for func in functions {
         let Some(hook_attr) = func.attrs.iter().find(|a| a.name == "il2cpp_hook") else {
@@ -114,50 +126,105 @@ fn expand_impl(
                 ))
             })?;
 
-        // Extra params beyond the first (ctx) are hook data.
-        let data_params: Vec<_> = func.params.iter().skip(1).collect();
+        let data_params: Vec<(String, String)> = func
+            .params
+            .iter()
+            .skip(1)
+            .map(|p| (p.name.clone(), p.ty.clone()))
+            .collect();
 
-        if data_params.is_empty() {
-            hook_lines.push(format!(
-                "        self.{method_field}.hook({self_ty}::{});",
-                func.name
-            ));
-        } else {
-            for param in &data_params {
-                let var = format!("_{fn}_{name}", fn = func.name, name = param.name);
-                data_lets.push(format!(
-                    "        let {var} = {ty}::default();",
-                    ty = param.ty
-                ));
-            }
+        hooks.push(HookInfo {
+            fn_name: func.name.clone(),
+            method_field: method_field.to_owned(),
+            data_params,
+        });
+    }
 
-            let call_args: Vec<String> = std::iter::once("ctx".to_owned())
-                .chain(data_params.iter().map(|p| {
-                    format!("_{fn}_{name}", fn = func.name, name = p.name)
-                }))
-                .collect();
+    if hooks.is_empty() {
+        return Ok(String::new());
+    }
 
-            hook_lines.push(format!(
-                "        self.{method_field}.hook(|ctx| {{\n            \
-                 {self_ty}::{}({})\n        }});",
-                func.name,
-                call_args.join(", ")
-            ));
+    // Deduplicate data params by name. Same name + same type = shared.
+    // Same name + different type = error.
+    let mut data_entries: Vec<DataEntry> = Vec::new();
+    let mut var_map: Vec<(String, String, usize)> = Vec::new();
 
-            for param in &data_params {
-                record_fields.push(format!(
-                    "{}: _{fn}_{name}",
-                    param.name,
-                    fn = func.name,
-                    name = param.name
-                ));
+    for hook in &hooks {
+        for (pname, pty) in &hook.data_params {
+            if let Some(idx) = data_entries.iter().position(|e| e.param_name == *pname) {
+                if data_entries[idx].param_ty != *pty {
+                    return Err(MacroError::new(format!(
+                        "hook data `{pname}` has conflicting types: `{}` vs `{pty}`",
+                        data_entries[idx].param_ty
+                    )));
+                }
+                var_map.push((hook.fn_name.clone(), pname.clone(), idx));
+            } else {
+                let idx = data_entries.len();
+                data_entries.push(DataEntry {
+                    var_name: format!("_{pname}"),
+                    param_name: pname.clone(),
+                    param_ty: pty.clone(),
+                });
+                var_map.push((hook.fn_name.clone(), pname.clone(), idx));
             }
         }
     }
 
-    if hook_lines.is_empty() {
-        return Ok(String::new());
+    // Generate setup_hooks params.
+    let sig_params: Vec<String> = data_entries
+        .iter()
+        .map(|e| format!("{}: Option<{}>", e.param_name, e.param_ty))
+        .collect();
+
+    // Generate let bindings.
+    let data_lets: Vec<String> = data_entries
+        .iter()
+        .map(|e| {
+            format!(
+                "        let {} = {}.unwrap_or({}::default());",
+                e.var_name, e.param_name, e.param_ty
+            )
+        })
+        .collect();
+
+    // Generate hook wiring.
+    let mut hook_lines = Vec::new();
+    for hook in &hooks {
+        if hook.data_params.is_empty() {
+            hook_lines.push(format!(
+                "        self.{}.hook({self_ty}::{});",
+                hook.method_field, hook.fn_name
+            ));
+        } else {
+            let call_args: Vec<String> = std::iter::once("ctx".to_owned())
+                .chain(hook.data_params.iter().map(|(pname, _)| {
+                    let idx = var_map
+                        .iter()
+                        .find(|(fn_name, param_name, _)| {
+                            *fn_name == hook.fn_name && *param_name == *pname
+                        })
+                        .unwrap()
+                        .2;
+                    data_entries[idx].var_name.clone()
+                }))
+                .collect();
+
+            hook_lines.push(format!(
+                "        self.{}.hook(|ctx| {{\n            \
+                 {self_ty}::{}({})\n        }});",
+                hook.method_field,
+                hook.fn_name,
+                call_args.join(", ")
+            ));
+        }
     }
+
+    // Generate record fields.
+    let record_fields: Vec<String> = data_entries
+        .iter()
+        .map(|e| format!("{}: {}", e.param_name, e.var_name))
+        .collect();
 
     let data_lets_str = if data_lets.is_empty() {
         String::new()
@@ -165,14 +232,21 @@ fn expand_impl(
         format!("{}\n", data_lets.join("\n"))
     };
 
+    let sig_extra = if sig_params.is_empty() {
+        String::new()
+    } else {
+        format!(", {}", sig_params.join(", "))
+    };
+
     let body = if record_fields.is_empty() {
         format!(
-            "impl {self_ty} {{\n    fn setup_hooks(self) {{\n{data_lets_str}{}\n    }}\n}}",
+            "impl {self_ty} {{\n    fn setup_hooks(self{sig_extra}) {{\n\
+             {data_lets_str}{}\n    }}\n}}",
             hook_lines.join("\n")
         )
     } else {
         format!(
-            "impl {self_ty} {{\n    fn setup_hooks(self) -> @ {{\n\
+            "impl {self_ty} {{\n    fn setup_hooks(self{sig_extra}) -> @ {{\n\
              {data_lets_str}{}\n        @{{ {} }}\n    }}\n}}",
             hook_lines.join("\n"),
             record_fields.join(", ")
