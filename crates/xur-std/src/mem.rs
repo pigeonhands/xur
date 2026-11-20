@@ -236,6 +236,11 @@ fn read_bytes(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [Value::Ptr(addr), Value::Int(len)] = args else {
         return Err(RuntimeError::new("`read_bytes` takes (ptr, len)"));
     };
+    if *len < 0 {
+        return Err(RuntimeError::new(format!(
+            "`read_bytes`: length must be non-negative, got {len}"
+        )));
+    }
     let src = *addr as usize as *const u8;
     let len = *len as usize;
     let mut buf = vec![0u8; len];

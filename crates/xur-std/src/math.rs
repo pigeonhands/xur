@@ -1,6 +1,6 @@
 //! `std::math`: plain Rust functions, registered with their facet types.
 
-use xur_runtime::Registry;
+use xur_runtime::{Registry, RuntimeError, Value};
 
 pub(crate) fn register(registry: &Registry) {
     registry
@@ -34,7 +34,20 @@ pub(crate) fn register(registry: &Registry) {
         .named_function("INFINITY", &[], || f64::INFINITY)
         .named_function("NAN", &[], || f64::NAN)
         // Utility
-        .named_function("clamp", &["val", "min", "max"], |x: f64, min: f64, max: f64| x.clamp(min, max))
+        .named_raw_function("clamp", &["val", "min", "max"], |_cx, args| {
+            let [Value::Float(x), Value::Float(min), Value::Float(max)] = args else {
+                return Err(RuntimeError::new("`clamp` takes (val: float, min: float, max: float)"));
+            };
+            if min.is_nan() || max.is_nan() {
+                return Err(RuntimeError::new("`clamp`: bounds must not be NaN"));
+            }
+            if min > max {
+                return Err(RuntimeError::new(format!(
+                    "`clamp`: min ({min}) must be <= max ({max})"
+                )));
+            }
+            Ok(Value::Float(x.clamp(*min, *max)))
+        })
         .named_function("lerp", &["a", "b", "t"], |a: f64, b: f64, t: f64| a + (b - a) * t)
         .named_function("fmin", &["a", "b"], |a: f64, b: f64| a.min(b))
         .named_function("fmax", &["a", "b"], |a: f64, b: f64| a.max(b));

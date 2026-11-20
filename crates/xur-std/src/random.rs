@@ -4,8 +4,16 @@ use xur_runtime::{Registry, RuntimeError, Value, lock};
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::random")
-        .function("int", |min: i64, max: i64| {
-            rand::rng().random_range(min..=max)
+        .raw_function("int", |_cx, args| {
+            let [Value::Int(min), Value::Int(max)] = args else {
+                return Err(RuntimeError::new("`int` takes (min: int, max: int)"));
+            };
+            if min > max {
+                return Err(RuntimeError::new(format!(
+                    "`int`: min ({min}) must be <= max ({max})"
+                )));
+            }
+            Ok(Value::Int(rand::rng().random_range(*min..=*max)))
         })
         .function("float", || rand::rng().random::<f64>())
         .function("bool", || rand::rng().random::<bool>())
@@ -32,9 +40,17 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(Value::list(items))
         })
-        .function("bytes", |len: i64| {
-            let mut buf = vec![0u8; len as usize];
+        .raw_function("bytes", |_cx, args| {
+            let [Value::Int(len)] = args else {
+                return Err(RuntimeError::new("`bytes` takes (len: int)"));
+            };
+            if *len < 0 {
+                return Err(RuntimeError::new(format!(
+                    "`bytes`: length must be non-negative, got {len}"
+                )));
+            }
+            let mut buf = vec![0u8; *len as usize];
             rand::rng().fill(&mut buf[..]);
-            buf
+            Ok(Value::Bytes(std::sync::Arc::new(buf.into())))
         });
 }
