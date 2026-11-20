@@ -180,7 +180,7 @@ pub fn draw_economy(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
 pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.weapons {
-        if entry.name == "None" || entry.name == "Test" { continue; }
+        if entry.data_obj.is_none() { continue; }
         let lvl = game.get_weapon_lvl(entry.value);
         if lvl > 0 {
             owned.push(entry);
@@ -190,17 +190,18 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
     ui.horizontal(|row| {
         if row.button("Add all") {
             for entry in game.weapons {
-                if entry.name == "None" || entry.name == "Test" { continue; }
+                if entry.data_obj.is_none() { continue; }
                 if game.get_weapon_lvl(entry.value) == 0 {
                     game.unlock_weapon_cap();
-                    game.add_weapon_by_enum(entry.value);
+                    game.unlock_weapon_cap();
+                    game.add_weapon(entry.data_obj?);
                 }
             }
         }
         if row.button("+100 all") {
             for entry in owned {
                 game.unlock_weapon_cap();
-                game.add_weapon_n(entry.value, 100);
+                game.add_weapon_n(entry.data_obj?, 100);
             }
         }
         if game.can_remove_all_weapons() {
@@ -210,68 +211,75 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
         }
     });
 
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("weapons_owned", 5, |g| {
-                for entry in owned {
-                    let lvl = game.get_weapon_lvl(entry.value);
+    let wt = state.weapon_tab.get();
+    ui.horizontal(|row| {
+        if row.selectable(wt == 0, fmt::format("Owned ({})", owned.len())) { state.weapon_tab.set(0); }
+        if row.selectable(wt == 1, "Add") { state.weapon_tab.set(1); }
+    });
+
+    if state.weapon_tab.get() == 0 {
+        if owned.len() > 0 {
+            ui.scroll(200.0, |scroll| {
+                scroll.grid("weapons_owned", 5, |g| {
+                    for entry in owned {
+                        let lvl = game.get_weapon_lvl(entry.value);
+                        match entry.icon {
+                            Some(id) => { g.image(id, 36.0, 36.0); }
+                            None => { g.label(""); }
+                        }
+                        g.label(fmt::format("{} lv{}", entry.name, lvl));
+                        if g.button("+") {
+                            game.unlock_weapon_cap();
+                            game.add_weapon(entry.data_obj?);
+                        }
+                        if g.button("+10") {
+                            game.unlock_weapon_cap();
+                            game.add_weapon_n(entry.data_obj?, 10);
+                        }
+                        if g.button("+100") {
+                            game.unlock_weapon_cap();
+                            game.add_weapon_max(entry.data_obj?);
+                        }
+                        g.end_row();
+                    }
+                });
+            });
+        } else {
+            ui.small("no weapons");
+        }
+    } else {
+        let new_search = ui.text_edit(state.weapon_search.get());
+        state.weapon_search.set(new_search);
+        let query = new_search.to_lower();
+        ui.scroll(200.0, |scroll| {
+            scroll.grid("weapons_add", 3, |g| {
+                for entry in game.weapons {
+                    if entry.data_obj.is_none() { continue; }
+                    if game.get_weapon_lvl(entry.value) > 0 { continue; }
+                    if query != "" && !entry.name.to_lower().contains(query) {
+                        continue;
+                    }
                     match entry.icon {
-                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        Some(id) => { g.image(id, 36.0, 36.0); }
                         None => { g.label(""); }
                     }
-                    g.label(fmt::format("{} lv{}", entry.name, lvl));
+                    g.label(entry.name);
                     if g.button("+") {
                         game.unlock_weapon_cap();
-                        game.add_weapon_by_enum(entry.value);
-                    }
-                    if g.button("+10") {
-                        game.unlock_weapon_cap();
-                        game.add_weapon_n(entry.value, 10);
-                    }
-                    if g.button("+100") {
-                        game.unlock_weapon_cap();
-                        game.add_weapon_max(entry.value);
+                        game.add_weapon(entry.data_obj?);
                     }
                     g.end_row();
                 }
             });
         });
-    } else {
-        ui.small("no weapons");
     }
-
-    ui.separator();
-    ui.small("Add weapon:");
-    let new_search = ui.text_edit(state.weapon_search.get());
-    state.weapon_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.weapons {
-            if entry.name == "None" || entry.name == "Test" { continue; }
-            if game.get_weapon_lvl(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") {
-                    game.unlock_weapon_cap();
-                    game.add_weapon_by_enum(entry.value);
-                }
-                match entry.icon {
-                    Some(id) => { row.image(id, 18.0, 18.0); }
-                    None => {}
-                }
-                row.label(entry.name);
-            });
-        }
-    });
 }
 
 pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.tomes {
-        let lvl = game.get_tome_lvl(entry.value);
-        if lvl > 0 {
+        if entry.data_obj.is_none() { continue; }
+        if game.has_tome(entry.value) {
             owned.push(entry);
         }
     }
@@ -281,8 +289,9 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
             let pass = 0;
             while pass < 2 {
                 for entry in game.tomes {
-                    if game.get_tome_lvl(entry.value) == 0 {
-                        game.add_tome_by_enum(entry.value);
+                    if entry.data_obj.is_none() { continue; }
+                    if !game.has_tome(entry.value) {
+                        game.add_tome(entry.data_obj?);
                     }
                 }
                 pass = pass + 1;
@@ -290,64 +299,73 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
         }
         if row.button("+100 all") {
             for entry in owned {
-                game.add_tome_n(entry.value, 100);
+                game.add_tome_n(entry.data_obj?, 100);
             }
         }
         if row.button("Max all") {
             for entry in owned {
-                game.add_maxed_tome_by_enum(entry.value);
+                game.add_maxed_tome(entry.data_obj?);
             }
         }
     });
 
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("tomes_owned", 6, |g| {
-                for entry in owned {
-                    let lvl = game.get_tome_lvl(entry.value);
+    let tt = state.tome_tab.get();
+    ui.horizontal(|row| {
+        if row.selectable(tt == 0, fmt::format("Owned ({})", owned.len())) { state.tome_tab.set(0); }
+        if row.selectable(tt == 1, "Add") { state.tome_tab.set(1); }
+    });
+
+    if state.tome_tab.get() == 0 {
+        if owned.len() > 0 {
+            ui.scroll(200.0, |scroll| {
+                scroll.grid("tomes_owned", 6, |g| {
+                    for entry in owned {
+                        let lvl = game.get_tome_lvl(entry.value);
+                        match entry.icon {
+                            Some(id) => { g.image(id, 36.0, 36.0); }
+                            None => { g.label(""); }
+                        }
+                        g.label(fmt::format("{} lv{}", entry.name, lvl));
+                        if g.button("+") { game.add_tome(entry.data_obj?); }
+                        if g.button("+10") { game.add_tome_n(entry.data_obj?, 10); }
+                        if g.button("+100") { game.add_tome_n(entry.data_obj?, 100); }
+                        if g.button("max") { game.add_maxed_tome(entry.data_obj?); }
+                        g.end_row();
+                    }
+                });
+            });
+        } else {
+            ui.small("no tomes");
+        }
+    } else {
+        let new_search = ui.text_edit(state.tome_search.get());
+        state.tome_search.set(new_search);
+        let query = new_search.to_lower();
+        ui.scroll(200.0, |scroll| {
+            scroll.grid("tomes_add", 3, |g| {
+                for entry in game.tomes {
+                    if entry.data_obj.is_none() { continue; }
+                    if game.has_tome(entry.value) { continue; }
+                    if query != "" && !entry.name.to_lower().contains(query) {
+                        continue;
+                    }
                     match entry.icon {
-                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        Some(id) => { g.image(id, 36.0, 36.0); }
                         None => { g.label(""); }
                     }
-                    g.label(fmt::format("{} lv{}", entry.name, lvl));
-                    if g.button("+") { game.add_tome_by_enum(entry.value); }
-                    if g.button("+10") { game.add_tome_n(entry.value, 10); }
-                    if g.button("+100") { game.add_tome_n(entry.value, 100); }
-                    if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
+                    g.label(entry.name);
+                    if g.button("+") { game.add_tome(entry.data_obj?); }
                     g.end_row();
                 }
             });
         });
-    } else {
-        ui.small("no tomes");
     }
-
-    ui.separator();
-    ui.small("Add tome:");
-    let new_search = ui.text_edit(state.tome_search.get());
-    state.tome_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.tomes {
-            if game.get_tome_lvl(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") { game.add_tome_by_enum(entry.value); }
-                match entry.icon {
-                    Some(id) => { row.image(id, 18.0, 18.0); }
-                    None => {}
-                }
-                row.label(entry.name);
-            });
-        }
-    });
 }
 
 pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.items {
+        if entry.data_obj.is_none() { continue; }
         let count = game.get_item_count(entry.value);
         if count > 0 {
             owned.push(entry);
@@ -359,6 +377,7 @@ pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
             let pass = 0;
             while pass < 2 {
                 for entry in game.items {
+                    if entry.data_obj.is_none() { continue; }
                     if game.get_item_count(entry.value) == 0 {
                         game.add_item(entry.value);
                     }
@@ -376,48 +395,56 @@ pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
         }
     });
 
-    if owned.len() > 0 {
-        ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("items_owned", 6, |g| {
-                for entry in owned {
-                    let count = game.get_item_count(entry.value);
+    let it = state.item_tab.get();
+    ui.horizontal(|row| {
+        if row.selectable(it == 0, fmt::format("Owned ({})", owned.len())) { state.item_tab.set(0); }
+        if row.selectable(it == 1, "Add") { state.item_tab.set(1); }
+    });
+
+    if state.item_tab.get() == 0 {
+        if owned.len() > 0 {
+            ui.scroll(200.0, |scroll| {
+                scroll.grid("items_owned", 6, |g| {
+                    for entry in owned {
+                        let count = game.get_item_count(entry.value);
+                        match entry.icon {
+                            Some(id) => { g.image(id, 36.0, 36.0); }
+                            None => { g.label(""); }
+                        }
+                        g.label(fmt::format("{} x{}", entry.name, count));
+                        if g.button("+") { game.add_item(entry.value); }
+                        if g.button("+10") { game.add_item_n(entry.value, 10); }
+                        if g.button("+100") { game.add_item_n(entry.value, 100); }
+                        if g.button("x") { game.remove_item(entry.value); }
+                        g.end_row();
+                    }
+                });
+            });
+        } else {
+            ui.small("no items");
+        }
+    } else {
+        let new_search = ui.text_edit(state.item_search.get());
+        state.item_search.set(new_search);
+        let query = new_search.to_lower();
+        ui.scroll(200.0, |scroll| {
+            scroll.grid("items_add", 4, |g| {
+                for entry in game.items {
+                    if entry.data_obj.is_none() { continue; }
+                    if game.get_item_count(entry.value) > 0 { continue; }
+                    if query != "" && !entry.name.to_lower().contains(query) {
+                        continue;
+                    }
                     match entry.icon {
-                        Some(id) => { g.image(id, 24.0, 24.0); }
+                        Some(id) => { g.image(id, 36.0, 36.0); }
                         None => { g.label(""); }
                     }
-                    g.label(fmt::format("{} x{}", entry.name, count));
+                    g.label(entry.name);
                     if g.button("+") { game.add_item(entry.value); }
                     if g.button("+10") { game.add_item_n(entry.value, 10); }
-                    if g.button("+100") { game.add_item_n(entry.value, 100); }
-                    if g.button("x") { game.remove_item(entry.value); }
                     g.end_row();
                 }
             });
         });
-    } else {
-        ui.small("no items");
     }
-
-    ui.separator();
-    ui.small("Add item:");
-    let new_search = ui.text_edit(state.item_search.get());
-    state.item_search.set(new_search);
-    let query = new_search.to_lower();
-    ui.scroll(150.0, |scroll| {
-        for entry in game.items {
-            if game.get_item_count(entry.value) > 0 { continue; }
-            if query != "" && !entry.name.to_lower().contains(query) {
-                continue;
-            }
-            scroll.horizontal(|row| {
-                if row.button("+") { game.add_item(entry.value); }
-                if row.button("+10") { game.add_item_n(entry.value, 10); }
-                match entry.icon {
-                    Some(id) => { row.image(id, 18.0, 18.0); }
-                    None => {}
-                }
-                row.label(entry.name);
-            });
-        }
-    });
 }

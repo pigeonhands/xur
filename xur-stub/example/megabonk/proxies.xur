@@ -26,6 +26,7 @@ pub struct EnumEntry {
     name: str
     value: i32
     icon: Option<i32>
+    data_obj: Option<il2cpp::Object>
 }
 
 pub struct UiState {
@@ -36,6 +37,9 @@ pub struct UiState {
     timer_value: cell::Cell<f32>
     silver_amount: cell::Cell<i32>
     tab: cell::Cell<i32>
+    weapon_tab: cell::Cell<i32>
+    tome_tab: cell::Cell<i32>
+    item_tab: cell::Cell<i32>
 }
 
 impl UiState {
@@ -48,6 +52,9 @@ impl UiState {
             timer_value: cell::new(0.0),
             silver_amount: cell::new(10000),
             tab: cell::new(0),
+            weapon_tab: cell::new(0),
+            tome_tab: cell::new(0),
+            item_tab: cell::new(0),
         }
     }
 }
@@ -330,6 +337,7 @@ fn enum_entries(cls: il2cpp::Class) -> _ {
                 name: field.name(),
                 value: field.read_static(),
                 icon: None,
+                data_obj: None,
             });
         }
     }
@@ -341,7 +349,7 @@ fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp
     let get_count = list_cls.method("get_Count", 0)?;
     let get_item = list_cls.method("get_Item", 1)?;
     let count: i32 = get_count.invoke(list_obj);
-    log::debug("loading {} icons from {}", count, list_cls.name());
+    log::debug("loading {} data entries from {}", count, list_cls.name());
     let j = 0;
     while j < count {
         let data_obj = get_item.invoke(list_obj, j);
@@ -349,7 +357,7 @@ fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp
         if data_obj.is_null() { continue; }
         let enum_val: i32 = enum_field.read(data_obj);
         let tex = icon_field.read(data_obj);
-        if tex.is_null() { continue; }
+        let tex_id = if !tex.is_null() { Some(egui::register_texture(tex)) } else { None };
         let i = 0;
         while i < entries.len() {
             if entries[i].value == enum_val {
@@ -357,7 +365,8 @@ fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp
                 entries[i] = EnumEntry {
                     name: entry.name,
                     value: entry.value,
-                    icon: Some(egui::register_texture(tex)),
+                    icon: tex_id,
+                    data_obj: Some(data_obj),
                 };
                 break;
             }
@@ -858,14 +867,10 @@ impl GameRuntime {
         self.weapon_inv.is_maxed.write(wi, false);
     }
 
-    fn add_weapon_by_enum(self, value: i32) {
-        let dm = self.data_manager();
-        if dm.is_null() { return; }
-        let weapon_data = self.data.get_weapon.invoke(dm, value);
-        if weapon_data.is_null() { return; }
+    fn add_weapon(self, data_obj: il2cpp::Object) {
         let wi = self.weapon_inv_obj();
         if wi.is_null() { return; }
-        self.weapon_inv.add_weapon.invoke_on_main(wi, weapon_data, il2cpp::null());
+        self.weapon_inv.add_weapon.invoke_on_main(wi, data_obj, il2cpp::null());
     }
 
     fn get_weapon_lvl(self, value: i32) -> i32 {
@@ -874,16 +879,16 @@ impl GameRuntime {
         self.weapon_inv.get_weapon_level.invoke(wi, value)
     }
 
-    fn add_weapon_n(self, value: i32, n: i32) {
+    fn add_weapon_n(self, data_obj: il2cpp::Object, n: i32) {
         let i = 0;
         while i < n {
-            self.add_weapon_by_enum(value);
+            self.add_weapon(data_obj);
             i = i + 1;
         }
     }
 
-    fn add_weapon_max(self, value: i32) {
-        self.add_weapon_n(value, 100);
+    fn add_weapon_max(self, data_obj: il2cpp::Object) {
+        self.add_weapon_n(data_obj, 100);
     }
 
     fn can_remove_all_weapons(self) -> bool {
@@ -901,32 +906,30 @@ impl GameRuntime {
 
     // --- Tomes ---
 
-    fn add_tome_by_enum(self, value: i32) {
-        let dm = self.data_manager();
-        if dm.is_null() { return; }
-        let tome_data = self.data.get_tome.invoke(dm, value);
-        if tome_data.is_null() { return; }
+    fn add_tome(self, data_obj: il2cpp::Object) {
         let ti = self.tome_inv_obj();
         if ti.is_null() { return; }
-        self.tome_inv.add_tome.invoke_on_main(ti, tome_data, il2cpp::null(), 0);
+        self.tome_inv.add_tome.invoke_on_main(ti, data_obj, il2cpp::null(), 0);
     }
 
-    fn add_tome_n(self, value: i32, n: i32) {
+    fn add_tome_n(self, data_obj: il2cpp::Object, n: i32) {
         let i = 0;
         while i < n {
-            self.add_tome_by_enum(value);
+            self.add_tome(data_obj);
             i = i + 1;
         }
     }
 
-    fn add_maxed_tome_by_enum(self, value: i32) {
-        let dm = self.data_manager();
-        if dm.is_null() { return; }
-        let tome_data = self.data.get_tome.invoke(dm, value);
-        if tome_data.is_null() { return; }
+    fn add_maxed_tome(self, data_obj: il2cpp::Object) {
         let ti = self.tome_inv_obj();
         if ti.is_null() { return; }
-        self.tome_inv.add_maxed_tome.invoke_on_main(ti, tome_data);
+        self.tome_inv.add_maxed_tome.invoke_on_main(ti, data_obj);
+    }
+
+    fn has_tome(self, value: i32) -> bool {
+        let ti = self.tome_inv_obj();
+        if ti.is_null() { return false; }
+        self.tome_inv.has_tome.invoke(ti, value)
     }
 
     fn get_tome_lvl(self, value: i32) -> i32 {
