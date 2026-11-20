@@ -243,7 +243,7 @@ pub(crate) fn register(registry: &Registry) {
 
     // set_process_event(addr: int) -> ()
     m.raw_function("set_process_event", |_cx, args| {
-        let Value::Int(addr) = &args[0] else {
+        let [Value::Int(addr)] = args else {
             return Err(err("`set_process_event` takes (addr: int)"));
         };
         let fn_ptr: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(*addr as usize) };
@@ -255,7 +255,7 @@ pub(crate) fn register(registry: &Registry) {
 
     // set_process_event_vtable(index: int) -> ()
     m.raw_function("set_process_event_vtable", |_cx, args| {
-        let Value::Int(index) = &args[0] else {
+        let [Value::Int(index)] = args else {
             return Err(err("`set_process_event_vtable` takes (index: int)"));
         };
         let sdk = get_sdk()?;
@@ -300,6 +300,9 @@ pub(crate) fn register(registry: &Registry) {
             Ok(xur_option(cx, outer))
         })
         .raw_function("is_a", |_cx, args| {
+            if args.len() != 2 {
+                return Err(err("`is_a` takes (class_name: str)"));
+            }
             let this = extract_uobject(&args[0])?;
             let Value::Str(class_name) = &args[1] else {
                 return Err(err("`is_a` takes (class_name: str)"));
@@ -312,9 +315,12 @@ pub(crate) fn register(registry: &Registry) {
             obj.0 as u64
         })
         .raw_function("get", |cx, args| {
+            if args.len() != 2 {
+                return Err(err("`get` takes (name: str)"));
+            }
             let this = extract_uobject(&args[0])?;
             let Value::Str(name) = &args[1] else {
-                return Err(err("expected string"));
+                return Err(err("`get` takes (name: str)"));
             };
             let sdk = get_sdk()?;
             let uobj = unrealkit::UObject::new(this.0, &sdk.names);
@@ -325,9 +331,12 @@ pub(crate) fn register(registry: &Registry) {
             property_value_to_xur(cx, pv)
         })
         .raw_function("set", |_cx, args| {
+            if args.len() != 3 {
+                return Err(err("`set` takes (name: str, value)"));
+            }
             let this = extract_uobject(&args[0])?;
             let Value::Str(name) = &args[1] else {
-                return Err(err("expected string"));
+                return Err(err("`set` takes (name: str, value)"));
             };
             let sdk = get_sdk()?;
             let uobj = unrealkit::UObject::new(this.0, &sdk.names);
@@ -384,9 +393,12 @@ pub(crate) fn register(registry: &Registry) {
             Ok(Value::list(chain))
         })
         .raw_function_returns::<XurUProperty>("property", |cx, args| {
+            if args.len() != 2 {
+                return Err(err("`property` takes (name: str)"));
+            }
             let this = extract_uclass(&args[0])?;
             let Value::Str(name) = &args[1] else {
-                return Err(err("expected string"));
+                return Err(err("`property` takes (name: str)"));
             };
             let sdk = get_sdk()?;
             let ucls = unrealkit::UClass::new(this.0, &sdk.names);
@@ -420,9 +432,12 @@ pub(crate) fn register(registry: &Registry) {
             Ok(Value::list(props?))
         })
         .raw_function_returns::<XurUFunction>("method", |cx, args| {
+            if args.len() != 2 {
+                return Err(err("`method` takes (name: str)"));
+            }
             let this = extract_uclass(&args[0])?;
             let Value::Str(name) = &args[1] else {
-                return Err(err("expected string"));
+                return Err(err("`method` takes (name: str)"));
             };
             let sdk = get_sdk()?;
             let ucls = unrealkit::UClass::new(this.0, &sdk.names);
@@ -479,6 +494,9 @@ pub(crate) fn register(registry: &Registry) {
             prop.0 as usize as i64
         })
         .raw_function("read", |cx, args| {
+            if args.len() != 2 {
+                return Err(err("`read` takes (obj: UObject)"));
+            }
             let this = extract_uproperty(&args[0])?;
             let obj = extract_uobject(&args[1])?;
             let sdk = get_sdk()?;
@@ -487,6 +505,9 @@ pub(crate) fn register(registry: &Registry) {
             property_value_to_xur(cx, pv)
         })
         .raw_function("write", |_cx, args| {
+            if args.len() != 3 {
+                return Err(err("`write` takes (obj: UObject, value)"));
+            }
             let this = extract_uproperty(&args[0])?;
             let obj = extract_uobject(&args[1])?;
             let sdk = get_sdk()?;
@@ -543,6 +564,9 @@ pub(crate) fn register(registry: &Registry) {
             Ok(Value::list(params?))
         })
         .raw_function("hook", |_cx, args| {
+            if args.len() != 2 {
+                return Err(err("`hook` takes (detour_addr: int)"));
+            }
             let this = extract_ufunction(&args[0])?;
             let Value::Int(detour_addr) = &args[1] else {
                 return Err(err("`hook` takes (detour_addr: int)"));
@@ -559,9 +583,14 @@ pub(crate) fn register(registry: &Registry) {
             .map_err(|e| err(format!("{e}")))?;
             unsafe { hook.apply_hook() }
                 .map_err(|e| err(format!("{e}")))?;
-            Ok(Value::Int(hook.original_function().as_ptr() as i64))
+            let original = hook.original_function().as_ptr() as i64;
+            std::mem::forget(hook);
+            Ok(Value::Int(original))
         })
         .raw_function("invoke", |cx, args| {
+            if args.len() < 2 {
+                return Err(err("`invoke` takes (obj: UObject, ...params)"));
+            }
             let this = extract_ufunction(&args[0])?;
             let obj = extract_uobject(&args[1])?;
             let pe = PROCESS_EVENT
