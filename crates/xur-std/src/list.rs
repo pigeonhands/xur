@@ -155,10 +155,10 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(1);
             };
             let mut items = lock(list).clone();
+            let failed = Cell::new(false);
             let error: Cell<Option<RuntimeError>> = Cell::new(None);
             items.sort_by(|a, b| {
-                if error.take().is_some() {
-                    // A previous comparison already failed; skip the rest.
+                if failed.get() {
                     return std::cmp::Ordering::Equal;
                 }
                 match cx.call(f, &[a.clone(), b.clone()]) {
@@ -172,12 +172,14 @@ pub(crate) fn register(registry: &Registry) {
                         }
                     }
                     Ok(_) => {
+                        failed.set(true);
                         error.set(Some(RuntimeError::new(
                             "sort_by comparator must return an Int (-1, 0, or 1)",
                         )));
                         std::cmp::Ordering::Equal
                     }
                     Err(e) => {
+                        failed.set(true);
                         error.set(Some(e));
                         std::cmp::Ordering::Equal
                     }
@@ -291,15 +293,20 @@ pub(crate) fn register(registry: &Registry) {
                 return arity(0);
             };
             let mut items = lock(list).clone();
-            let mut err = false;
-            items.sort_by(|a, b| match compare(a, b) {
-                Some(ord) => ord,
-                None => {
-                    err = true;
-                    std::cmp::Ordering::Equal
+            let err = Cell::new(false);
+            items.sort_by(|a, b| {
+                if err.get() {
+                    return std::cmp::Ordering::Equal;
+                }
+                match compare(a, b) {
+                    Some(ord) => ord,
+                    None => {
+                        err.set(true);
+                        std::cmp::Ordering::Equal
+                    }
                 }
             });
-            if err {
+            if err.get() {
                 return Err(RuntimeError::new(
                     "sort: elements are not comparable (must be all Int, all Float, or all Str)",
                 ));
