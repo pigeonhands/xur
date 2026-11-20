@@ -1,7 +1,7 @@
 // Unreal Engine object discovery — run via LD_PRELOAD into a UE game.
 //
 // This script initialises the unrealkit SDK by AOB-scanning the game's
-// .text section, then dumps the first 50 UObjects and inspects one class.
+// main module, then dumps the first 50 UObjects and inspects one class.
 //
 // Usage (Linux/Proton):
 //   LD_PRELOAD=target/release/libxur_stub.so %command%
@@ -9,14 +9,15 @@
 
 use std::stub::unreal;
 use std::io;
-use std::mem;
+use std::re::proc;
 
 fn main() {
-    // Auto-discover GNames + GObjects by scanning the .text section.
+    // Auto-discover GNames + GObjects by scanning the main module.
     // Change the version to 4 for UE4 games.
     let version = 5;
-    let text = mem::find_module_section(".text");
-    let sdk = unreal::init(version, text.base, text.size).unwrap();
+    let handle = proc::open_current().unwrap();
+    let main_mod = handle.modules().unwrap()[0];
+    let sdk = unreal::init(version, main_mod.base, main_mod.size).unwrap();
     io::println("SDK initialised");
 
     // Dump the first 50 objects.

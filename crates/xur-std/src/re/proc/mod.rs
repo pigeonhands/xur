@@ -282,7 +282,7 @@ fn region_record(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value
         None => Value::Unit,
     };
     let fields = [
-        ("base", Value::Int(region.base.get() as i64)),
+        ("base", Value::Ptr(region.base.get() as u64)),
         ("size", Value::Int(region.size as i64)),
         ("protection", Value::Int(region.protection.bits().into())),
         ("kind", to_value(cx, &region.kind)?),
@@ -305,7 +305,7 @@ fn module_record(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value
     let fields = [
         ("name", Value::str(&module.name.to_string_lossy())),
         ("path", Value::str(&module.path.display().to_string())),
-        ("base", Value::Int(module.base.get() as i64)),
+        ("base", Value::Ptr(module.base.get() as u64)),
         ("size", Value::Int(module.size as i64)),
     ];
     let record = Record {
