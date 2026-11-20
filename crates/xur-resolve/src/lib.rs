@@ -16,11 +16,13 @@
 
 mod collect;
 mod def;
+pub(crate) mod expand;
 mod ident;
 mod imports;
 mod lang;
 mod late;
 mod loader;
+pub mod macros;
 mod names;
 mod native;
 mod natives;

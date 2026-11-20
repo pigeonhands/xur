@@ -39,6 +39,7 @@ use facet::{Facet, Peek, Shape, StructKind, StructType, Type, UserType};
 use xur_resolve::{
     DefId, NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
     NativeVariantDecl, NativeVariantKind,
+    macros::MacroExpander,
 };
 
 use xur_span::Symbol;
@@ -163,6 +164,7 @@ struct ModuleData {
     children: Vec<usize>,
     functions: Vec<NativeFnDecl>,
     types: Vec<NativeTypeId>,
+    macros: HashMap<String, Arc<dyn MacroExpander>>,
 }
 
 /// Every native function and type, organised into modules.
@@ -706,6 +708,7 @@ impl Inner {
             children: Vec::new(),
             functions: Vec::new(),
             types: Vec::new(),
+            macros: HashMap::new(),
         });
         match parent {
             Some(parent) => self.modules[parent].children.push(module),
@@ -744,6 +747,37 @@ impl NativeProvider for Registry {
 
     fn expand(&self, path: &[String]) -> NativeModule {
         Registry::expand(self, path)
+    }
+
+    fn macro_expander(&self, path: &[&str]) -> Option<Arc<dyn MacroExpander>> {
+        if path.is_empty() {
+            return None;
+        }
+        let (module_path, macro_name) = path.split_at(path.len() - 1);
+        let macro_name = macro_name[0];
+
+        // Walk the module tree, expanding lazy modules along the way.
+        let mut module: Option<usize> = None;
+        for name in module_path {
+            let siblings = match module {
+                Some(parent) => &self.read().modules[parent].children,
+                None => &self.read().roots,
+            };
+            let idx = siblings
+                .iter()
+                .find(|&&m| self.read().modules[m].name == *name)
+                .copied()?;
+
+            // Expand lazy module if needed (same pattern as Registry::expand).
+            let init = self.write().modules[idx].init.take();
+            if let Some(init) = init {
+                init(&mut ModuleBuilder::new(self, idx));
+            }
+            module = Some(idx);
+        }
+
+        let parent = module?;
+        self.read().modules[parent].macros.get(macro_name).cloned()
     }
 
     fn register_enum_builtins(&self, enum_def: DefId) -> Vec<NativeFnDecl> {

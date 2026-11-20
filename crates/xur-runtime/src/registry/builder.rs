@@ -101,6 +101,21 @@ impl<'r> ModuleBuilder<'r> {
 }
 
 impl ModuleBuilder<'_> {
+    /// Registers a compile-time macro expander in this module. Items with
+    /// `#[name(...)]` attributes are expanded before name resolution.
+    pub fn register_macro(
+        &mut self,
+        name: &str,
+        expander: impl xur_resolve::macros::MacroExpander + 'static,
+    ) -> &mut Self {
+        self.registry.with_inner(|inner| {
+            inner.modules[self.module]
+                .macros
+                .insert(name.to_owned(), std::sync::Arc::new(expander));
+        });
+        self
+    }
+
     /// Registers a Rust function or closure whose argument and return
     /// types implement [`Facet`].
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {

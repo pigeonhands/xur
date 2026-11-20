@@ -29,6 +29,16 @@ pub trait NativeProvider: Send + Sync {
     fn register_enum_builtins(&self, _enum_def: super::DefId) -> Vec<NativeFnDecl> {
         Vec::new()
     }
+
+    /// Returns the macro expander at `path`, if any. The path is a split
+    /// module path like `["std", "stub", "il2cpp", "il2cpp_proxy"]` where
+    /// the last segment is the macro name and the rest is its module.
+    fn macro_expander(
+        &self,
+        _path: &[&str],
+    ) -> Option<std::sync::Arc<dyn super::macros::MacroExpander>> {
+        None
+    }
 }
 
 impl<T: NativeProvider + ?Sized> NativeProvider for std::sync::Arc<T> {
@@ -42,6 +52,13 @@ impl<T: NativeProvider + ?Sized> NativeProvider for std::sync::Arc<T> {
 
     fn register_enum_builtins(&self, enum_def: super::DefId) -> Vec<NativeFnDecl> {
         (**self).register_enum_builtins(enum_def)
+    }
+
+    fn macro_expander(
+        &self,
+        path: &[&str],
+    ) -> Option<std::sync::Arc<dyn super::macros::MacroExpander>> {
+        (**self).macro_expander(path)
     }
 }
 

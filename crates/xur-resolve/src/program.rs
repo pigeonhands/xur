@@ -49,6 +49,8 @@ impl Program {
         let root = loader.add_tree(&mut krate, normalize(root), src, &mut diags);
         debug_assert_eq!(root, krate.root);
 
+        crate::expand::expand_macros(&mut krate, natives.as_ref(), &mut loader.ids, &mut diags);
+
         let resolutions = Resolutions::new(&natives.modules());
         let (resolutions, resolve_diags) = resolve_modules(
             &krate,
@@ -94,6 +96,13 @@ impl Program {
         let first_new = self.krate.modules.len();
         let mut diags = Vec::new();
         let idx = self.loader.add_tree(&mut self.krate, path, src, &mut diags);
+
+        crate::expand::expand_macros(
+            &mut self.krate,
+            self.natives.as_ref(),
+            &mut self.loader.ids,
+            &mut diags,
+        );
 
         let resolutions = self
             .resolutions

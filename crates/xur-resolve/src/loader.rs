@@ -144,7 +144,7 @@ impl<'ast> Visitor<'ast> for ImportFinder {
 pub(crate) struct Loader {
     file_loader: Box<dyn FileLoader>,
     by_path: HashMap<PathBuf, ModuleIdx>,
-    ids: NodeIdGen,
+    pub(crate) ids: NodeIdGen,
 }
 
 impl Loader {

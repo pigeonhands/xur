@@ -800,6 +800,8 @@ fn marshal_call_result(
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::il2cpp", |m| {
+    m.register_macro("il2cpp_proxy", super::il2cpp_proxy::Il2CppProxyExpander);
+
     // --- loaded() ---
     m.raw_function_returns::<XurIl2Cpp>("loaded", |cx, args| {
         if !args.is_empty() {

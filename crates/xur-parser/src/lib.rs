@@ -6,5 +6,5 @@ pub mod unescape;
 
 pub use error::{LexError, LexErrorKind};
 pub use lexer::Lexer;
-pub use parser::{PResult, Parser, PathStyle, parse_file};
+pub use parser::{PResult, Parser, PathStyle, parse_file, parse_items};
 pub use token::{Keyword, Token, TokenKind};

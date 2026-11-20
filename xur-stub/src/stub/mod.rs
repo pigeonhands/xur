@@ -6,6 +6,8 @@ pub(crate) mod hooking;
 mod godot;
 #[cfg(feature = "il2cpp-runtime")]
 pub(crate) mod il2cpp;
+#[cfg(feature = "il2cpp-runtime")]
+mod il2cpp_proxy;
 mod re;
 #[cfg(feature = "il2cpp-unity")]
 mod time;

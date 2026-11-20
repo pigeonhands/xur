@@ -20,7 +20,7 @@ mod ty;
 #[cfg(test)]
 mod tests;
 
-use xur_ast::{Module, NodeId, NodeIdGen};
+use xur_ast::{Item, Module, NodeId, NodeIdGen};
 use xur_errors::Diag;
 use xur_span::{Ident, SourceFile, Span, Symbol};
 
@@ -39,6 +39,21 @@ pub fn parse_file(file: &SourceFile, ids: &mut NodeIdGen) -> (Module, Vec<Diag>)
     let module = parser.parse_module();
     *ids = std::mem::take(&mut parser.ids);
     (module, parser.finish())
+}
+
+/// Parses `source` as module-level items. A synthetic file is added to
+/// `source_map` so that diagnostics can point into the generated code.
+pub fn parse_items(
+    source: &str,
+    source_map: &mut xur_span::SourceMap,
+    ids: &mut NodeIdGen,
+) -> (Vec<Item>, Vec<Diag>) {
+    let file = source_map.add_file("<macro expansion>".to_owned(), source.to_owned());
+    let mut parser = Parser::for_file(&file);
+    parser.ids = std::mem::take(ids);
+    let module = parser.parse_module();
+    *ids = std::mem::take(&mut parser.ids);
+    (module.items, parser.finish())
 }
 
 /// The result of a parsing function. The error has not been reported yet:
