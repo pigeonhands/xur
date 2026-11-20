@@ -36,10 +36,10 @@ use hao::dotnet::md::streams::tables_stream::{
 use hao::dotnet::module::{ModuleKind, TargetRuntime};
 use hao::dotnet::signature::{MethodSig, SignatureFlags, TypeSig};
 use xur_runtime::convert::{into_value, reflect_error, to_value};
-use xur_runtime::registry::{ModuleBuilder, XurType};
+use xur_runtime::registry::{ElemHint, ModuleBuilder, XurType};
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use crate::{error_text, result};
+use crate::{error_text, option, result};
 
 // ---------------------------------------------------------------------------
 // Opaque wrapper types
@@ -291,35 +291,35 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 into_value(cx, fields)
             })
         })
-        .raw_function("find_type", |cx, args| {
+        .raw_function_returns_xur("find_type", XurType::Named("Option", &[ElemHint::Name("TypeDefEntry")]), |cx, args| {
             let [this, Value::Str(namespace), Value::Str(name)] = args else {
                 return Err(RuntimeError::new(
                     "`find_type` takes (namespace: str, name: str)",
                 ));
             };
-            with_module(this, |m| match m.find_type(namespace, name) {
-                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
-                None => Ok(Value::Unit),
+            with_module(this, |m| {
+                let val = m.find_type(namespace, name).map(|e| into_value(cx, DotnetTypeDef(e))).transpose()?;
+                Ok(option(cx, val))
             })
         })
-        .raw_function("find_type_by_full_name", |cx, args| {
+        .raw_function_returns_xur("find_type_by_full_name", XurType::Named("Option", &[ElemHint::Name("TypeDefEntry")]), |cx, args| {
             let [this, Value::Str(full_name)] = args else {
                 return Err(RuntimeError::new(
                     "`find_type_by_full_name` takes a string",
                 ));
             };
-            with_module(this, |m| match m.find_type_by_full_name(full_name) {
-                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
-                None => Ok(Value::Unit),
+            with_module(this, |m| {
+                let val = m.find_type_by_full_name(full_name).map(|e| into_value(cx, DotnetTypeDef(e))).transpose()?;
+                Ok(option(cx, val))
             })
         })
-        .raw_function("global_type", |cx, args| {
+        .raw_function_returns_xur("global_type", XurType::Named("Option", &[ElemHint::Name("TypeDefEntry")]), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`global_type` takes no arguments"));
             };
-            with_module(this, |m| match m.global_type() {
-                Some(entry) => into_value(cx, DotnetTypeDef(entry)),
-                None => Ok(Value::Unit),
+            with_module(this, |m| {
+                let val = m.global_type().map(|e| into_value(cx, DotnetTypeDef(e))).transpose()?;
+                Ok(option(cx, val))
             })
         })
         .method("original_image", |m: &DotnetModule| {
@@ -645,13 +645,13 @@ fn register_type_def_methods(dotnet: &mut ModuleBuilder<'_>) {
             t.0.get().is_value_type()
         })
         .method("is_visible", |t: &DotnetTypeDef| t.0.get().is_visible())
-        .raw_function("base_type", |cx, args| {
+        .raw_function_returns_xur("base_type", XurType::Named("Option", &[ElemHint::Name("BaseTypeRef")]), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`base_type` takes no arguments"));
             };
-            with_type_def(this, |td| match &td.extends {
-                Some(e) => into_value(cx, DotnetTypeRef(e.clone())),
-                None => Ok(Value::Unit),
+            with_type_def(this, |td| {
+                let val = td.extends.as_ref().map(|e| into_value(cx, DotnetTypeRef(e.clone()))).transpose()?;
+                Ok(option(cx, val))
             })
         })
         .raw_function("fields", |cx, args| {
@@ -726,13 +726,13 @@ fn register_method_entry_methods(dotnet: &mut ModuleBuilder<'_>) {
             m.0.get().flags.contains(MethodFlags::Abstract)
         })
         .method("flags", |m: &DotnetMethodEntry| m.0.get().flags.bits() as i64)
-        .raw_function("body", |cx, args| {
+        .raw_function_returns_xur("body", XurType::Named("Option", &[ElemHint::Name("MethodBody")]), |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`body` takes no arguments"));
             };
-            with_method_entry(this, |m| match &m.body {
-                Some(body) => into_value(cx, DotnetMethodBody(body.clone())),
-                None => Ok(Value::Unit),
+            with_method_entry(this, |m| {
+                let val = m.body.as_ref().map(|b| into_value(cx, DotnetMethodBody(b.clone()))).transpose()?;
+                Ok(option(cx, val))
             })
         });
 

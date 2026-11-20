@@ -17,10 +17,10 @@ use std::sync::Arc;
 use facet::Facet;
 use hao_il2cpp::{FieldView, Game, MethodView, ParameterView, TypeView};
 use xur_runtime::convert::into_value;
-use xur_runtime::registry::{ModuleBuilder, XurType};
+use xur_runtime::registry::{ElemHint, ModuleBuilder, XurType};
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use crate::{error_text, result};
+use crate::{error_text, option, result};
 
 // ---------------------------------------------------------------------------
 // Opaque wrappers — Game owns its data; views borrow it with lifetimes that
@@ -245,7 +245,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 Err(e) => Ok(result(cx, Err(e))),
             }
         })
-        .raw_function("bytes_at", |_cx, args| {
+        .raw_function_returns_xur("bytes_at", XurType::Named("Option", &[ElemHint::Name("bytes")]), |cx, args| {
             let [this, Value::Int(vaddr), Value::Int(len)] = args else {
                 return Err(RuntimeError::new("`bytes_at` takes (vaddr: int, len: int)"));
             };
@@ -255,10 +255,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             let result = obj
                 .with(|g: &Il2CppGame| g.0.bytes_at(*vaddr as u64, *len as usize))
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))?;
-            match result {
-                Some(bytes) => Ok(Value::bytes(bytes)),
-                None => Ok(Value::Unit),
-            }
+            Ok(option(cx, result.map(Value::bytes)))
         });
 
     // --- TypeView methods ---
