@@ -49,11 +49,16 @@ Attach to and interact with running processes.
 .B open(pid, access)
 Open a process handle.
 .I access
-is one of
-.BR \(dqread\(dq ,
-.BR \(dqwrite\(dq ,
+is an
+.B Access
+enum variant:
+.BR Access::Read ,
+.BR Access::ReadWrite ,
 or
-.BR \(dqall\(dq .
+.BR Access::All .
+Strings
+.RB ( \(dqread\(dq
+etc.) are accepted for backwards compatibility.
 .TP
 .B handle.modules()
 List loaded modules (name, base address, size).

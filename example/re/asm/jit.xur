@@ -26,7 +26,7 @@ fn main() -> Result<()> {
 
     // Spawn a disposable child process.
     let child = std::process::spawn("sleep", ["10"])?;
-    let handle = proc::open(child.pid(), "readwrite")?;
+    let handle = proc::open(child.pid(), proc::Access::ReadWrite)?;
 
     // Inject the code and call it.
     let address = handle.inject_bytes(code)?;

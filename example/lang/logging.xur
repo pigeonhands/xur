@@ -7,7 +7,7 @@ use std::io;
 
 fn main() -> Result<()> {
     log::subscriber()
-        .with_max_level("debug")
+        .with_max_level(log::Level::Debug)
         .with_target(false)
         .with_ansi(true)
         .init();

@@ -6,7 +6,7 @@
 // a consenting, disposable target, then loads `libc` into it — a library
 // already loaded in virtually every process, so this just confirms the
 // mechanism rather than changing anything about the child's behavior.
-// `load_library` needs write access to the target, hence "readwrite".
+// `load_library` needs write access to the target, hence ReadWrite.
 
 use std::io;
 use std::re::proc;
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
     }
 
     let child = std::process::spawn("sleep", ["5"])?;
-    let handle = proc::open(child.pid(), "readwrite")?;
+    let handle = proc::open(child.pid(), proc::Access::ReadWrite)?;
 
     // `LoadMethod::Loader` uses the target's own OS loader (`dlopen`), so
     // the library shows up in its normal module list afterward.
