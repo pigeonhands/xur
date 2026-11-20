@@ -74,6 +74,18 @@ impl Resolver<'_> {
             if let Some(&(_, binding)) = found.first() {
                 privacy.extend(self.privacy_error(scope, binding, last.ident, import.module));
             } else {
+                // The name may be a macro registered on the native module —
+                // those live outside the type/value namespaces but are valid
+                // import targets for attribute macro resolution.
+                let segments: Vec<&str> = path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.name.as_str())
+                    .collect();
+                if self.natives.macro_expander(&segments).is_some() {
+                    self.res.insert(path.id, Res::Err);
+                    return Ok(());
+                }
                 let scope_path = self.def_path(scope);
                 return Err(Some(unresolved_import(
                     &import.tree.path,
