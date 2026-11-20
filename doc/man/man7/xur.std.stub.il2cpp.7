@@ -204,10 +204,65 @@ method. Functions annotated with
 .B #[il2cpp_hook(method="field")]
 are wired up as
 .BR self.field.hook(Self::fn) .
-For hooks requiring closures with captured state, wire them manually
-using the exposed Method handle.
+.SS Hook Data
+Extra parameters beyond
+.B ctx
+on a hook function are treated as shared state.
+The expander generates a
+.B Type::default()
+call for each, wraps the hook in a closure that passes them through, and
+returns a record from
+.B setup_hooks()
+so the caller can read and write the data at runtime.
+.PP
+The data type must have a static
+.B default()
+function (conventionally marked with
+.BR #[default] )
+that returns an instance. Fields using
+.B cell::Cell
+share identity through
+.B Arc
+when captured, so both the hook closure and the returned record see the
+same mutable state.
+.PP
+.nf
+struct HookState {
+    godmode: cell::Cell<bool>
+}
+impl HookState {
+    #[default]
+    fn default() -> HookState {
+        HookState { godmode: cell::new(false) }
+    }
+}
+
+#[il2cpp_proxy]
+impl HealthProxy {
+    #[il2cpp_hook(method="damage")]
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
+        if state.godmode.get() { Some(0) } else { None }
+    }
+}
+
+let hooks = proxy.setup_hooks();
+hooks.state.godmode.set(true);
+.fi
+.SS Scoped Import
+The macro lives in the
+.B std::stub::il2cpp
+module. Import it before use:
+.PP
+.nf
+use std::stub::il2cpp::il2cpp_proxy;
+.fi
+.PP
+Or use the full path directly:
+.B #[std::stub::il2cpp::il2cpp_proxy(...)]
 .SS Example
 .nf
+use std::stub::il2cpp::il2cpp_proxy;
+
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerHealth")]
 struct HealthProxy {
     #[il2cpp_field="hp"]

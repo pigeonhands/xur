@@ -49,6 +49,13 @@ pub struct MacroField {
 pub struct MacroFn {
     pub name: String,
     pub attrs: Vec<MacroAttr>,
+    pub params: Vec<MacroParam>,
+}
+
+/// A parameter of a function inside an annotated impl block.
+pub struct MacroParam {
+    pub name: String,
+    pub ty: String,
 }
 
 /// A parsed attribute on a field or function.

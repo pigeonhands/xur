@@ -87,28 +87,71 @@ fn expand_struct(
 }
 
 /// Generates `setup_hooks` for an impl block with `#[il2cpp_hook]` functions.
+///
+/// When hook functions have extra parameters beyond `ctx`, those are
+/// treated as hook data: the expander generates `Type::default()` calls,
+/// captures the data in closures, and returns a record with handles.
 fn expand_impl(
     self_ty: &str,
     functions: &[xur_resolve::macros::MacroFn],
     _attr_args: &[(String, String)],
 ) -> Result<String, MacroError> {
+    let mut data_lets = Vec::new();
     let mut hook_lines = Vec::new();
+    let mut record_fields = Vec::new();
 
     for func in functions {
-        if let Some(hook_attr) = func.attrs.iter().find(|a| a.name == "il2cpp_hook") {
-            let method_field = hook_attr
-                .arg("method")
-                .or_else(|| hook_attr.value_or_name_arg())
-                .ok_or_else(|| {
-                    MacroError::new(format!(
-                        "#[il2cpp_hook] on `{}` requires `method` argument",
-                        func.name
-                    ))
-                })?;
+        let Some(hook_attr) = func.attrs.iter().find(|a| a.name == "il2cpp_hook") else {
+            continue;
+        };
+        let method_field = hook_attr
+            .arg("method")
+            .or_else(|| hook_attr.value_or_name_arg())
+            .ok_or_else(|| {
+                MacroError::new(format!(
+                    "#[il2cpp_hook] on `{}` requires `method` argument",
+                    func.name
+                ))
+            })?;
+
+        // Extra params beyond the first (ctx) are hook data.
+        let data_params: Vec<_> = func.params.iter().skip(1).collect();
+
+        if data_params.is_empty() {
             hook_lines.push(format!(
                 "        self.{method_field}.hook({self_ty}::{});",
                 func.name
             ));
+        } else {
+            for param in &data_params {
+                let var = format!("_{fn}_{name}", fn = func.name, name = param.name);
+                data_lets.push(format!(
+                    "        let {var} = {ty}::default();",
+                    ty = param.ty
+                ));
+            }
+
+            let call_args: Vec<String> = std::iter::once("ctx".to_owned())
+                .chain(data_params.iter().map(|p| {
+                    format!("_{fn}_{name}", fn = func.name, name = p.name)
+                }))
+                .collect();
+
+            hook_lines.push(format!(
+                "        self.{method_field}.hook(|ctx| {{\n            \
+                 {self_ty}::{}({})\n        }});",
+                func.name,
+                call_args.join(", ")
+            ));
+
+            for param in &data_params {
+                record_fields.push(format!(
+                    "{}: _{fn}_{name}",
+                    param.name,
+                    fn = func.name,
+                    name = param.name
+                ));
+            }
         }
     }
 
@@ -116,10 +159,27 @@ fn expand_impl(
         return Ok(String::new());
     }
 
-    Ok(format!(
-        "impl {self_ty} {{\n    fn setup_hooks(self) {{\n{}\n    }}\n}}",
-        hook_lines.join("\n")
-    ))
+    let data_lets_str = if data_lets.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", data_lets.join("\n"))
+    };
+
+    let body = if record_fields.is_empty() {
+        format!(
+            "impl {self_ty} {{\n    fn setup_hooks(self) {{\n{data_lets_str}{}\n    }}\n}}",
+            hook_lines.join("\n")
+        )
+    } else {
+        format!(
+            "impl {self_ty} {{\n    fn setup_hooks(self) -> @ {{\n\
+             {data_lets_str}{}\n        @{{ {} }}\n    }}\n}}",
+            hook_lines.join("\n"),
+            record_fields.join(", ")
+        )
+    };
+
+    Ok(body)
 }
 
 enum FieldKind<'a> {

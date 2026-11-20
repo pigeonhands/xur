@@ -57,23 +57,46 @@ struct HealthProxy {
 
 // Hook wiring: #[il2cpp_hook] on an impl-block function generates
 // a `setup_hooks()` method that calls `self.field.hook(Self::fn)`.
+//
+// Hook data: extra parameters beyond `ctx` are treated as shared state.
+// The expander generates `Type::default()` to initialise them, wraps the
+// hook in a closure that passes them in, and returns a record so the
+// caller can read/write the data at runtime.
+
+struct HookState {
+    godmode: cell::Cell<bool>
+}
+
+impl HookState {
+    #[default]
+    fn default() -> HookState {
+        HookState { godmode: cell::new(false) }
+    }
+}
 
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext) -> _ {
-        None
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
+        if state.godmode.get() { Some(0) } else { None }
     }
 }
 
-// For hooks with captured state, wire them manually:
+// Generated (conceptual):
 //
-//   let godmode = cell::new(false);
-//   proxy.damage.hook(|ctx| {
-//       if godmode.get() { Some(0) } else { None }
-//   });
+//   impl HealthProxy {
+//       fn setup_hooks(self) -> @ {
+//           let _on_damage_state = HookState::default();
+//           self.damage.hook(|ctx| {
+//               HealthProxy::on_damage(ctx, _on_damage_state)
+//           });
+//           @{ state: _on_damage_state }
+//       }
+//   }
 
 fn main() -> Result<()> {
     let proxy = HealthProxy::from_runtime(il2cpp::loaded()?)?;
+    let hooks = proxy.setup_hooks();
+    hooks.state.godmode.set(true);  // hook now blocks all damage
     Ok(())
 }

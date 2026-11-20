@@ -15,7 +15,7 @@ use xur_ast::NodeIdGen;
 use xur_errors::Diag;
 
 use crate::loader::Crate;
-use crate::macros::{MacroAttr, MacroField, MacroFn, MacroTrigger, TriggerKind};
+use crate::macros::{MacroAttr, MacroField, MacroFn, MacroParam, MacroTrigger, TriggerKind};
 use crate::NativeProvider;
 
 /// Expands macros in every module of `krate`, mutating it in place.
@@ -159,10 +159,28 @@ fn extract_impl_fns(imp: &Impl) -> Vec<MacroFn> {
     imp.items
         .iter()
         .filter_map(|item| match &item.kind {
-            ItemKind::Fn(func) => Some(MacroFn {
-                name: func.ident.name.to_string(),
-                attrs: extract_field_attrs(&item.attrs),
-            }),
+            ItemKind::Fn(func) => {
+                let params = func
+                    .decl
+                    .inputs
+                    .iter()
+                    .filter_map(|param| {
+                        let name = match &param.pat.kind {
+                            xur_ast::PatKind::Ident(ident) => ident.name.to_string(),
+                            _ => return None,
+                        };
+                        Some(MacroParam {
+                            name,
+                            ty: ty_to_string(&param.ty),
+                        })
+                    })
+                    .collect();
+                Some(MacroFn {
+                    name: func.ident.name.to_string(),
+                    attrs: extract_field_attrs(&item.attrs),
+                    params,
+                })
+            }
             _ => None,
         })
         .collect()
