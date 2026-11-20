@@ -61,10 +61,15 @@ fn access_from_int(v: i64) -> RunResult<Access> {
     }
 }
 
-fn access_arg(val: &Value) -> RunResult<Access> {
+fn access_arg(cx: &mut dyn xur_runtime::Context, val: &Value) -> RunResult<Access> {
     match val {
         Value::Str(s) => access_from_str(s),
         Value::Int(v) => access_from_int(*v),
+        Value::Adt(adt) => {
+            let v = cx.repr_value(adt.ctor)
+                .ok_or_else(|| RuntimeError::new("expected an Access enum value"))?;
+            access_from_int(v)
+        }
         _ => Err(RuntimeError::new("expected an Access or access string")),
     }
 }
@@ -244,7 +249,8 @@ fn open(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
         _ => return Err(RuntimeError::new("`open` takes (pid, access)")),
     };
     let pid = u32::try_from(pid).map_err(|_| RuntimeError::new("invalid pid"))?;
-    handle_result(cx, ProcessHandle::open(pid, access_arg(access_val)?))
+    let access = access_arg(cx, access_val)?;
+    handle_result(cx, ProcessHandle::open(pid, access))
 }
 
 /// `process.open(access)`: a handle to this process.
@@ -253,7 +259,7 @@ fn open_process(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<
         [this, val] => (this, val),
         _ => return Err(RuntimeError::new("`open` takes an access")),
     };
-    let access = access_arg(access_val)?;
+    let access = access_arg(cx, access_val)?;
     let Value::Native(object) = this else {
         return Err(RuntimeError::new("expected a `Process`"));
     };

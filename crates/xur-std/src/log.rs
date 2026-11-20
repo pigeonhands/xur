@@ -133,13 +133,18 @@ fn parse_level_int(v: i64) -> RunResult<&'static str> {
     }
 }
 
-fn level_string(args: &[Value], pos: usize) -> RunResult<String> {
+fn level_string(cx: &mut dyn Context, args: &[Value], pos: usize) -> RunResult<String> {
     match args.get(pos) {
         Some(Value::Str(s)) => {
             parse_level(s)?;
             Ok(s.to_string())
         }
         Some(Value::Int(v)) => Ok(parse_level_int(*v)?.to_string()),
+        Some(Value::Adt(adt)) => {
+            let v = cx.repr_value(adt.ctor)
+                .ok_or_else(|| RuntimeError::new("expected a Level enum value"))?;
+            Ok(parse_level_int(v)?.to_string())
+        }
         _ => Err(RuntimeError::new("expected a Level or level string")),
     }
 }
@@ -306,8 +311,8 @@ pub(crate) fn register(registry: &Registry) {
         ]);
 
         module.ty::<SubscriberBuilder>("SubscriberBuilder")
-            .raw_function_returns::<SubscriberBuilder>("with_max_level", |_cx, args| {
-                let level = level_string(args, 1)?;
+            .raw_function_returns::<SubscriberBuilder>("with_max_level", |cx, args| {
+                let level = level_string(cx, args, 1)?;
                 with_config(args, |c| c.max_level = level)
             })
             .raw_function_returns::<SubscriberBuilder>("with_target", |_cx, args| {
