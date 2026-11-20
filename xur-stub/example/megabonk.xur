@@ -401,31 +401,16 @@ impl GameRuntime {
         let rt = il2cpp::loaded()?;
         log::info("il2cpp runtime loaded");
 
-        let asm = "Assembly-CSharp";
-
-        let player = PlayerProxy::from_runtime(rt)?;
         let health = HealthProxy::from_runtime(rt)?;
-        let inventory = InventoryProxy::from_runtime(rt)?;
-        let item_inv = ItemInvProxy::from_runtime(rt)?;
-        let weapon_inv = WeaponInvProxy::from_runtime(rt)?;
-        let tome_inv = TomeInvProxy::from_runtime(rt)?;
-        let data = DataProxy::from_runtime(rt)?;
-        let gm = GameManagerProxy::from_runtime(rt)?;
+        let loading = LoadingProxy::from_runtime(rt)?;
         let movement = MovementProxy::from_runtime(rt)?;
         let camera = CameraProxy::from_runtime(rt)?;
-        let save = SaveProxy::from_runtime(rt)?;
-        let progression = ProgressionProxy::from_runtime(rt)?;
-        let loading = LoadingProxy::from_runtime(rt)?;
-        let levelup = LevelupProxy::from_runtime(rt)?;
-        let chest = ChestProxy::from_runtime(rt)?;
-        let encounter = EncounterProxy::from_runtime(rt)?;
+        let weapon_inv = WeaponInvProxy::from_runtime(rt)?;
+        let tome_inv = TomeInvProxy::from_runtime(rt)?;
         let inv_util = InvUtilProxy::from_runtime(rt)?;
-        log::info("all proxy structs initialised");
 
         let pc_offset3rd_z_off = camera.offset_3rd.offset() + 8;
-        log::debug("  PlayerCamera offset3rd.z raw offset = {}", pc_offset3rd_z_off);
 
-        // Hook setup — shared no_max_level state across three proxies
         let no_max_level = HookState::default();
         let health_hooks = health.setup_hooks(None);
         let loading_hooks = loading.setup_hooks(None);
@@ -436,33 +421,31 @@ impl GameRuntime {
         inv_util.setup_hooks(Some(no_max_level));
         log::info("all hooks installed");
 
-        let weapon_enum = rt.class(asm, "", "EWeapon")?;
-        let item_enum = rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "EItem")?;
-        let tome_enum = rt.class(asm, "Assets.Scripts._Data.Tomes", "ETome")?;
-        let weapons = enum_entries(weapon_enum);
-        let items = enum_entries(item_enum);
-        let tomes = enum_entries(tome_enum);
+        let asm = "Assembly-CSharp";
+        let weapons = enum_entries(rt.class(asm, "", "EWeapon")?);
+        let items = enum_entries(rt.class(asm, "Assets.Scripts.Inventory__Items__Pickups.Items", "EItem")?);
+        let tomes = enum_entries(rt.class(asm, "Assets.Scripts._Data.Tomes", "ETome")?);
         log::info("discovered {} weapons, {} items, {} tomes",
             weapons.len(), items.len(), tomes.len());
 
         Ok(GameRuntime {
             rt,
-            player,
+            player: PlayerProxy::from_runtime(rt)?,
             health,
-            inventory,
-            item_inv,
+            inventory: InventoryProxy::from_runtime(rt)?,
+            item_inv: ItemInvProxy::from_runtime(rt)?,
             weapon_inv,
             tome_inv,
-            data,
-            gm,
+            data: DataProxy::from_runtime(rt)?,
+            gm: GameManagerProxy::from_runtime(rt)?,
             movement,
             camera,
-            save,
-            progression,
+            save: SaveProxy::from_runtime(rt)?,
+            progression: ProgressionProxy::from_runtime(rt)?,
             loading,
-            levelup,
-            chest,
-            encounter,
+            levelup: LevelupProxy::from_runtime(rt)?,
+            chest: ChestProxy::from_runtime(rt)?,
+            encounter: EncounterProxy::from_runtime(rt)?,
             inv_util,
             godmode: health_hooks.state,
             skip_loading: loading_hooks.state,
