@@ -1,9 +1,12 @@
 //! Format strings, as used by `std::io::print` and `println`.
 
+use std::fmt::Write;
+
 use xur_runtime::{Context, RunResult, RuntimeError, Value};
 
 /// Replaces each `{}` in `template` by the next argument, displayed; `{{`
-/// and `}}` write literal braces.
+/// and `}}` write literal braces.  `{:x}` and `{:X}` format integers as
+/// lowercase or uppercase hexadecimal.
 pub(crate) fn format(cx: &dyn Context, template: &str, args: &[Value]) -> RunResult<String> {
     let mut out = String::with_capacity(template.len());
     let mut args = args.iter();
@@ -20,6 +23,46 @@ pub(crate) fn format(cx: &dyn Context, template: &str, args: &[Value]) -> RunRes
                     RuntimeError::new("the format string has more `{}` than arguments")
                 })?;
                 out.push_str(&cx.display(arg));
+            }
+            ('{', Some(':')) => {
+                chars.next(); // consume ':'
+                let spec = chars.next().ok_or_else(|| {
+                    RuntimeError::new("unexpected end of format spec after `{:`")
+                })?;
+                let close = chars.next().ok_or_else(|| {
+                    RuntimeError::new("unexpected end of format spec, expected `}`")
+                })?;
+                if close != '}' {
+                    return Err(RuntimeError::new(format!(
+                        "expected `}}` after format spec `:{spec}`, found `{close}`"
+                    )));
+                }
+                let arg = args.next().ok_or_else(|| {
+                    RuntimeError::new("the format string has more format specifiers than arguments")
+                })?;
+                match spec {
+                    'x' => match arg {
+                        Value::Int(n) => write!(out, "{n:x}").unwrap(),
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "format spec `:x` requires an integer argument",
+                            ))
+                        }
+                    },
+                    'X' => match arg {
+                        Value::Int(n) => write!(out, "{n:X}").unwrap(),
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "format spec `:X` requires an integer argument",
+                            ))
+                        }
+                    },
+                    _ => {
+                        return Err(RuntimeError::new(format!(
+                            "unknown format spec `:{spec}`; supported: `:x`, `:X`"
+                        )))
+                    }
+                }
             }
             ('{' | '}', _) => {
                 return Err(RuntimeError::new(format!(
@@ -54,6 +97,27 @@ mod tests {
             error(&mut cx, &[Value::str("x"), Value::Int(1)]),
             "more arguments than `{}` in the format string"
         );
+    }
+
+    #[test]
+    fn hex_format() {
+        let registry = registry();
+        let cx = TestCx::new(&registry, crate::PRELUDE);
+        let result = super::format(&cx, "addr: {:x}", &[Value::Int(0xDEAD)]).unwrap();
+        assert_eq!(result, "addr: dead");
+        let result = super::format(&cx, "ADDR: {:X}", &[Value::Int(0xBEEF)]).unwrap();
+        assert_eq!(result, "ADDR: BEEF");
+        let result =
+            super::format(&cx, "{} at {:x}", &[Value::str("foo"), Value::Int(255)]).unwrap();
+        assert_eq!(result, "foo at ff");
+    }
+
+    #[test]
+    fn hex_format_requires_int() {
+        let registry = registry();
+        let cx = TestCx::new(&registry, crate::PRELUDE);
+        let err = super::format(&cx, "{:x}", &[Value::str("nope")]).unwrap_err();
+        assert!(err.message.contains("integer"), "{}", err.message);
     }
 
     #[test]
