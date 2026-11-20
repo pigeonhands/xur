@@ -118,7 +118,7 @@ impl GameMethods {
 
         // Godmode — hook LoseHpInternal and DamageBlockInternal on
         // Creature. When godmode is on, returns Some(0) to skip the
-        // method for all creatures.
+        // method for the player creature only.
         let godmode = cell::new(false);
         let player_creature_addr = cell::new(0);
         let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;

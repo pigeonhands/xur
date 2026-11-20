@@ -9,6 +9,7 @@
 //         LD_PRELOAD=target/release/libxur_stub.so ./some_game
 
 use std::cell;
+use std::stub::hooking;
 use std::stub::il2cpp;
 use std::log;
 
@@ -19,14 +20,14 @@ fn main() -> Result<()> {
     // --- Pattern 1: Block a method (godmode) --------------------------
     //
     // Return Some(value) to skip the original; None to let it run.
-    // For void methods, Some(0) skips, None passes through.
+    // For void methods, use hooking::Skip() to skip.
 
     let health_cls = rt.class(asm, "Game", "PlayerHealth")?;
     let damage = health_cls.method("DamagePlayer", 3)?;
 
     let godmode = cell::new(false);
     damage.hook(|ctx| {
-        if godmode.get() { Some(0) } else { None }
+        if godmode.get() { Some(hooking::Skip()) } else { None }
     });
 
     // Toggle from UI:

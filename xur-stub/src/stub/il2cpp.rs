@@ -65,6 +65,8 @@ impl std::fmt::Display for XurIl2Cpp {
     }
 }
 
+use super::hooking::XurSkip;
+
 #[derive(Facet, Clone)]
 #[facet(opaque)]
 struct XurClass(usize); // rt::Class doesn't impl Clone, store the raw pointer
@@ -730,7 +732,9 @@ fn value_to_override(val: Value, return_element: i32) -> hooking::HookAction {
         }
         Value::Float(f) => hooking::HookAction::OverrideFloat(f),
         Value::Native(ref n) => {
-            if let Some(ptr) = n.with(|o: &XurObject| o.0 as u64) {
+            if n.with(|_: &XurSkip| ()).is_some() {
+                hooking::HookAction::OverrideInt(0)
+            } else if let Some(ptr) = n.with(|o: &XurObject| o.0 as u64) {
                 hooking::HookAction::OverrideInt(ptr)
             } else {
                 hooking::HookAction::OverrideInt(0)

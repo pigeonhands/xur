@@ -103,6 +103,9 @@ and returns
 passes through to the original,
 .B Some(value)
 overrides the return value.
+For void methods, use
+.B Some(hooking::Skip())
+to skip the original without providing a return value.
 .TP
 .B hook_void_block() -> VoidBlockHook
 Install a simple block/unblock hook. When blocked, the method returns
@@ -256,8 +259,8 @@ impl HookState {
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> Option<hooking::Skip> {
+        if state.enabled.get() { Some(hooking::Skip()) } else { None }
     }
 }
 
@@ -303,6 +306,7 @@ fn main() -> Result<()> {
 .fi
 .SH EXAMPLES
 .nf
+use std::stub::hooking;
 use std::stub::il2cpp;
 use std::log;
 
@@ -319,7 +323,7 @@ fn stub_main() {
     // Godmode: intercept damage calls
     damage.hook(|ctx| {
         log::info("blocked damage");
-        Some(0)
+        Some(hooking::Skip())
     });
 }
 .fi

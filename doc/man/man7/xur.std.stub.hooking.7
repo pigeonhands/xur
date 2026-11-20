@@ -15,6 +15,11 @@ arbitrary native functions where you manage the calling convention
 yourself.
 .SH FUNCTIONS
 .TP
+.B Skip() -> Skip
+Sentinel value for skipping void method hooks.
+Return \fBSome(hooking::Skip())\fR from a hook callback to skip the original
+method without providing a return value.
+.TP
 .B create(target, destination) -> Hook
 Create a hook that redirects calls from
 .I target

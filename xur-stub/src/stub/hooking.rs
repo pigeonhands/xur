@@ -15,6 +15,16 @@ use std::sync::Mutex;
 use facet::Facet;
 use xur_runtime::{Registry, RuntimeError, Value};
 
+#[derive(Facet, Clone)]
+#[facet(opaque)]
+pub(crate) struct XurSkip;
+
+impl std::fmt::Display for XurSkip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Skip")
+    }
+}
+
 #[derive(Facet)]
 #[facet(opaque)]
 struct XurHook(Mutex<hooking::Hook<'static>>);
@@ -36,6 +46,15 @@ impl Clone for XurHook {
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::hooking", |m| {
+
+    m.ty::<XurSkip>("Skip");
+    m.raw_function_returns::<XurSkip>("Skip", |cx, args| {
+        if !args.is_empty() {
+            return Err(RuntimeError::new("`Skip` takes no arguments"));
+        }
+        xur_runtime::convert::into_value(cx, XurSkip)
+    });
+
     m.raw_function("create", |_cx, args| {
         let [Value::Int(target), Value::Int(dest)] = args else {
             return Err(RuntimeError::new(

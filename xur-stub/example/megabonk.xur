@@ -15,6 +15,7 @@ use std::bytes;
 use std::fmt;
 use std::mem;
 use std::ptr;
+use std::stub::hooking;
 use std::stub::il2cpp;
 use std::stub::il2cpp::il2cpp_proxy;
 use std::stub::re::unity::egui;
@@ -92,15 +93,22 @@ struct HealthProxy {
     shield: il2cpp::Field
     #[il2cpp_field="maxShield"]
     max_shield: il2cpp::Field
-    #[il2cpp_method(name="DamagePlayer", params=3)]
+    #[il2cpp_method(name="Damage", params=2)]
     damage: il2cpp::Method
+    #[il2cpp_method(name="KillPlayer", params=0)]
+    kill_player: il2cpp::Method
 }
 
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
+    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> Option<hooking::Skip> {
+        if state.enabled.get() { Some(hooking::Skip()) } else { None }
+    }
+
+    #[il2cpp_hook(method="kill_player")]
+    fn on_kill(ctx: il2cpp::HookContext, state: HookState) -> Option<hooking::Skip> {
+        if state.enabled.get() { Some(hooking::Skip()) } else { None }
     }
 }
 
@@ -147,8 +155,8 @@ struct WeaponInvProxy {
 #[il2cpp_proxy]
 impl WeaponInvProxy {
     #[il2cpp_hook(method="is_max_level")]
-    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> Option<bool> {
+        if state.enabled.get() { Some(false) } else { None }
     }
 }
 
@@ -169,8 +177,8 @@ struct TomeInvProxy {
 #[il2cpp_proxy]
 impl TomeInvProxy {
     #[il2cpp_hook(method="is_max_level")]
-    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
+    fn on_is_max_level(ctx: il2cpp::HookContext, state: HookState) -> Option<bool> {
+        if state.enabled.get() { Some(false) } else { None }
     }
 }
 
@@ -210,31 +218,10 @@ struct MovementProxy {
     instance: il2cpp::Field
     #[il2cpp_field="isNoclipping"]
     noclip: il2cpp::Field
-    #[il2cpp_method(name="PushPlayer", params=1)]
-    push: il2cpp::Method
-    #[il2cpp_method(name="BouncePlayer", params=1)]
-    bounce: il2cpp::Method
-    #[il2cpp_method(name="PushPlayerButKeepMovement", params=0)]
-    push_keep: il2cpp::Method
+    #[il2cpp_field="playerCollider"]
+    player_collider: il2cpp::Field
 }
 
-#[il2cpp_proxy]
-impl MovementProxy {
-    #[il2cpp_hook(method="push")]
-    fn on_push(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
-    }
-
-    #[il2cpp_hook(method="bounce")]
-    fn on_bounce(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
-    }
-
-    #[il2cpp_hook(method="push_keep")]
-    fn on_push_keep(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
-    }
-}
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="PlayerCamera")]
 struct CameraProxy {
@@ -257,8 +244,8 @@ struct CameraProxy {
 #[il2cpp_proxy]
 impl CameraProxy {
     #[il2cpp_hook(method="player_cam")]
-    fn on_player_cam(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.enabled.get() { Some(0) } else { None }
+    fn on_player_cam(ctx: il2cpp::HookContext, state: HookState) -> Option<hooking::Skip> {
+        if state.enabled.get() { Some(hooking::Skip()) } else { None }
     }
 }
 
@@ -285,7 +272,7 @@ struct LoadingProxy {
 #[il2cpp_proxy]
 impl LoadingProxy {
     #[il2cpp_hook(method="load_async")]
-    fn on_load(ctx: il2cpp::HookContext, state: HookState) -> _ {
+    fn on_load(ctx: il2cpp::HookContext, state: HookState) -> Option<il2cpp::Object> {
         if state.enabled.get() {
             log::debug("skipping load animation");
             Some(il2cpp::null())
@@ -299,24 +286,18 @@ impl LoadingProxy {
 struct LevelupProxy {
     #[il2cpp_method(name="ShowLevelupScreen", params=0)]
     show: il2cpp::Method
-    #[il2cpp_method(name="OnClose", params=0)]
-    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="ChestWindowUi")]
 struct ChestProxy {
     #[il2cpp_method(name="Open", params=1)]
     open: il2cpp::Method
-    #[il2cpp_method(name="OnClose", params=0)]
-    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="", class="EncounterUi")]
 struct EncounterProxy {
     #[il2cpp_method(name="Open", params=1)]
     open: il2cpp::Method
-    #[il2cpp_method(name="OnClose", params=0)]
-    on_close: il2cpp::Method
 }
 
 #[il2cpp_proxy(asm="Assembly-CSharp", ns="Assets.Scripts.Inventory__Items__Pickups", class="InventoryUtility")]
@@ -330,12 +311,12 @@ struct InvUtilProxy {
 #[il2cpp_proxy]
 impl InvUtilProxy {
     #[il2cpp_hook(method="get_weapon_max")]
-    fn on_get_weapon_max(ctx: il2cpp::HookContext, state: HookState) -> _ {
+    fn on_get_weapon_max(ctx: il2cpp::HookContext, state: HookState) -> Option<i32> {
         if state.enabled.get() { Some(999) } else { None }
     }
 
     #[il2cpp_hook(method="get_tome_max")]
-    fn on_get_tome_max(ctx: il2cpp::HookContext, state: HookState) -> _ {
+    fn on_get_tome_max(ctx: il2cpp::HookContext, state: HookState) -> Option<i32> {
         if state.enabled.get() { Some(999) } else { None }
     }
 }
@@ -386,11 +367,14 @@ struct GameRuntime {
     chest: ChestProxy
     encounter: EncounterProxy
     inv_util: InvUtilProxy
+    enemy_collider_field: il2cpp::Field
+    ignore_collision: il2cpp::Method
+    push_apply_frames: cell::Cell<i32>
     // Hook state
     godmode: HookState
     skip_loading: HookState
     skip_offers: cell::Cell<bool>
-    no_push: HookState
+    no_push: cell::Cell<bool>
     no_max_level: HookState
     detach_camera: HookState
     freeze_timer: cell::Cell<bool>
@@ -422,36 +406,83 @@ impl GameRuntime {
         let chest = ChestProxy::from_runtime(rt)?;
         let encounter = EncounterProxy::from_runtime(rt)?;
 
+        let physics = rt.class("UnityEngine.PhysicsModule", "UnityEngine", "Physics")?;
+        let ignore_collision = physics.method("IgnoreCollision", 3)?;
+
+        let enemy_class = rt.class("Assembly-CSharp", "Assets.Scripts.Actors.Enemies", "Enemy")?;
+        let enemy_collider_field = enemy_class.field("collider")?;
+        let enemy_init = enemy_class.method("InitEnemy", 7)?;
+        let enemy_fixed = enemy_class.method("MyFixedUpdate", 0)?;
+        let no_push = cell::new(false);
+        let push_apply_frames = cell::new(0);
+        let pm_instance = movement.instance;
+        let pm_collider = movement.player_collider;
+        enemy_init.hook(|ctx| {
+            if no_push.get() {
+                let pm = pm_instance.read_static();
+                if !pm.is_null() {
+                    let pc = pm_collider.read(pm);
+                    let ec = enemy_collider_field.read(ctx.arg(0));
+                    if !pc.is_null() && !ec.is_null() {
+                        ignore_collision.invoke(il2cpp::null(), pc, ec, true);
+                    }
+                }
+            }
+            None
+        });
+        enemy_fixed.hook(|ctx| {
+            let frames = push_apply_frames.get();
+            if frames > 0 {
+                push_apply_frames.set(frames - 1);
+                let pm = pm_instance.read_static();
+                if !pm.is_null() {
+                    let pc = pm_collider.read(pm);
+                    let ec = enemy_collider_field.read(ctx.arg(0));
+                    if !pc.is_null() && !ec.is_null() {
+                        ignore_collision.invoke(il2cpp::null(), pc, ec, no_push.get());
+                    }
+                }
+            }
+            None
+        });
+
+        let ew_class = rt.class("Assembly-CSharp", "Assets.Scripts.UI.InGame.Levelup", "EncounterWindows")?;
+        let ew_reward_finished = ew_class.method("RewardFinished", 0)?;
+        let ew_in_progress = ew_class.field("<encounterInProgress>k__BackingField")?;
+        let ew_instance = cell::new(il2cpp::null());
+        ew_class.method("Awake", 0)?.hook(|ctx| {
+            ew_instance.set(ctx.arg(0));
+            None
+        });
+
         let no_max_level = HookState::default();
         let skip_offers = cell::new(false);
         let health_hooks = health.setup_hooks(None);
         let loading_hooks = loading.setup_hooks(None);
-        let movement_hooks = movement.setup_hooks(None);
         let camera_hooks = camera.setup_hooks(None);
         weapon_inv.setup_hooks(Some(no_max_level));
         tome_inv.setup_hooks(Some(no_max_level));
         inv_util.setup_hooks(Some(no_max_level));
 
-        // Skip-offer hooks: when blocked, invoke OnClose to unpause
-        let lu_close = levelup.on_close;
         levelup.show.hook(|ctx| {
-            if skip_offers.get() {
-                lu_close.invoke(ctx.arg(0));
-                Some(0)
+            let ew = ew_instance.get();
+            if skip_offers.get() && !ew.is_null() && ew_in_progress.read(ew) {
+                ew_reward_finished.invoke(ew);
+                Some(hooking::Skip())
             } else { None }
         });
-        let ch_close = chest.on_close;
         chest.open.hook(|ctx| {
-            if skip_offers.get() {
-                ch_close.invoke(ctx.arg(0));
-                Some(0)
+            let ew = ew_instance.get();
+            if skip_offers.get() && !ew.is_null() && ew_in_progress.read(ew) {
+                ew_reward_finished.invoke(ew);
+                Some(hooking::Skip())
             } else { None }
         });
-        let enc_close = encounter.on_close;
         encounter.open.hook(|ctx| {
-            if skip_offers.get() {
-                enc_close.invoke(ctx.arg(0));
-                Some(0)
+            let ew = ew_instance.get();
+            if skip_offers.get() && !ew.is_null() && ew_in_progress.read(ew) {
+                ew_reward_finished.invoke(ew);
+                Some(hooking::Skip())
             } else { None }
         });
         log::info("all hooks installed");
@@ -482,10 +513,13 @@ impl GameRuntime {
             chest,
             encounter,
             inv_util,
+            enemy_collider_field,
+            ignore_collision,
+            push_apply_frames,
             godmode: health_hooks.state,
             skip_loading: loading_hooks.state,
             skip_offers,
-            no_push: movement_hooks.state,
+            no_push,
             no_max_level,
             detach_camera: camera_hooks.state,
             freeze_timer: cell::new(false),
@@ -805,10 +839,11 @@ fn draw_combat(ui: egui::Ui, game: GameRuntime) {
         game.set_godmode(new_godmode);
     }
 
-    let no_push = game.no_push.enabled.get();
+    let no_push = game.no_push.get();
     let new_no_push = ui.checkbox(no_push, "No push / knockback");
     if new_no_push != no_push {
-        game.no_push.enabled.set(new_no_push);
+        game.no_push.set(new_no_push);
+        game.push_apply_frames.set(150);
     }
 
     let skip = game.skip_loading.enabled.get();
@@ -907,8 +942,7 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
         if new_z != cur_z {
             game.camera.zoom_block.set_blocked(true);
             game.set_camera_z(new_z);
-        }
-        if game.camera.zoom_block.is_blocked() {
+        } else if game.camera.zoom_block.is_blocked() {
             game.set_camera_z(cur_z);
         }
     }
@@ -936,7 +970,7 @@ fn draw_camera(ui: egui::Ui, game: GameRuntime) {
 
 fn draw_speed(ui: egui::Ui) {
     ui.heading("Speed");
-    let speed = ui.slider_float("Time scale", time::scale(), 0.0, 5.0);
+    let speed = ui.slider_float("Time scale", time::scale(), 0.0, 20.0);
     time::set_scale(speed);
     ui.horizontal(|row| {
         if row.button("pause") { time::set_scale(0.0); }
@@ -944,6 +978,8 @@ fn draw_speed(ui: egui::Ui) {
         if row.button("1x")    { time::set_scale(1.0); }
         if row.button("2x")    { time::set_scale(2.0); }
         if row.button("5x")    { time::set_scale(5.0); }
+        if row.button("10x")   { time::set_scale(10.0); }
+        if row.button("20x")   { time::set_scale(20.0); }
     });
 }
 
