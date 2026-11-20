@@ -757,18 +757,22 @@ impl NativeProvider for Registry {
         let macro_name = macro_name[0];
 
         // Walk the module tree, expanding lazy modules along the way.
+        // Each lock is acquired and released before the next to avoid
+        // deadlocking when a lazy init needs a write lock.
         let mut module: Option<usize> = None;
         for name in module_path {
-            let siblings = match module {
-                Some(parent) => &self.read().modules[parent].children,
-                None => &self.read().roots,
+            let idx = {
+                let inner = self.read();
+                let siblings = match module {
+                    Some(parent) => &inner.modules[parent].children,
+                    None => &inner.roots,
+                };
+                siblings
+                    .iter()
+                    .find(|&&m| inner.modules[m].name == *name)
+                    .copied()?
             };
-            let idx = siblings
-                .iter()
-                .find(|&&m| self.read().modules[m].name == *name)
-                .copied()?;
 
-            // Expand lazy module if needed (same pattern as Registry::expand).
             let init = self.write().modules[idx].init.take();
             if let Some(init) = init {
                 init(&mut ModuleBuilder::new(self, idx));
