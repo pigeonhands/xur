@@ -207,13 +207,29 @@ are wired up as
 .SS Hook Data
 Extra parameters beyond
 .B ctx
-on a hook function are treated as shared state.
-The expander generates a
-.B Type::default()
-call for each, wraps the hook in a closure that passes them through, and
-returns a record from
-.B setup_hooks()
-so the caller can read and write the data at runtime.
+on a hook function become
+.B Option<Type>
+parameters on the generated
+.BR setup_hooks() .
+The caller passes
+.B None
+to use
+.BR Type::default() ,
+or
+.B Some(value)
+to provide pre-configured state.
+.PP
+Hooks in the same impl block that share a param name and type share one
+instance automatically. This makes it easy to wire multiple hooks to the
+same state within a proxy.
+.PP
+For cross-class sharing (e.g. a
+.B NoMaxLevelState
+shared across weapon, tome, and utility proxies), the caller creates one
+instance and passes
+.B Some(state)
+to each proxy's
+.BR setup_hooks() .
 .PP
 The data type must have a static
 .B default()
@@ -227,26 +243,31 @@ when captured, so both the hook closure and the returned record see the
 same mutable state.
 .PP
 .nf
-struct HookState {
-    godmode: cell::Cell<bool>
+struct GodmodeState {
+    enabled: cell::Cell<bool>
 }
-impl HookState {
+impl GodmodeState {
     #[default]
-    fn default() -> HookState {
-        HookState { godmode: cell::new(false) }
+    fn default() -> GodmodeState {
+        GodmodeState { enabled: cell::new(false) }
     }
 }
 
 #[il2cpp_proxy]
 impl HealthProxy {
     #[il2cpp_hook(method="damage")]
-    fn on_damage(ctx: il2cpp::HookContext, state: HookState) -> _ {
-        if state.godmode.get() { Some(0) } else { None }
+    fn on_damage(ctx: il2cpp::HookContext, state: GodmodeState) -> _ {
+        if state.enabled.get() { Some(0) } else { None }
     }
 }
 
-let hooks = proxy.setup_hooks();
-hooks.state.godmode.set(true);
+// None = use GodmodeState::default()
+let hooks = proxy.setup_hooks(None);
+hooks.state.enabled.set(true);
+
+// Or provide pre-configured state:
+let my_state = GodmodeState { enabled: cell::new(true) };
+let hooks = proxy.setup_hooks(Some(my_state));
 .fi
 .SS Scoped Import
 The macro lives in the
