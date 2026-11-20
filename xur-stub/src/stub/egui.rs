@@ -10,7 +10,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use facet::Facet;
 use hao_il2cpp_unity::egui as hao_egui;
-use hao_il2cpp_unity::egui::{Color32, Context, Frame, Grid, ScrollArea, Slider, Window};
+use hao_il2cpp_unity::egui::{Color32, Context, Frame, Grid, ScrollArea, SelectableLabel, Slider, Window};
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
@@ -607,6 +607,20 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
         with_ui(this, |ui| {
             ui.end_row();
             Ok(Value::Unit)
+        })
+    });
+
+    ty.raw_function("selectable", |_cx, args| {
+        let [this, Value::Bool(selected), Value::Str(text)] = args else {
+            return Err(RuntimeError::new(
+                "`selectable` takes (selected: bool, text: str)",
+            ));
+        };
+        with_ui(this, |ui| {
+            Ok(Value::Bool(
+                ui.add(SelectableLabel::new(*selected, text.as_ref()))
+                    .clicked(),
+            ))
         })
     });
 

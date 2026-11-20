@@ -78,6 +78,11 @@ Draw a horizontal separator line.
 .B checkbox(checked, label) -> bool
 Display a checkbox. Returns the new checked state.
 .TP
+.B selectable(selected, text) -> bool
+Display a selectable label. Returns true when clicked. Useful for tab
+bars: render several selectables in a
+.BR horizontal() .
+.TP
 .B slider_float(label, value, min, max) -> float
 Display a float slider. Returns the new value.
 .TP
