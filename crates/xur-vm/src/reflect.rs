@@ -75,6 +75,7 @@ impl Interp<'_> {
             .items
             .read()
             .unwrap_or_else(PoisonError::into_inner);
+        let registry = &self.shared.registry;
         resolutions
             .assoc_fns(ty)
             .into_iter()
@@ -82,8 +83,16 @@ impl Interp<'_> {
                 Some(ItemRef::Fn { item, .. }) => item.decl.inputs.first().is_some_and(
                     |param| matches!(param.pat.kind, PatKind::Ident(ident) if ident.name.as_str() == "self"),
                 ),
-                // Functions registered for a native type.
-                _ => true,
+                _ => {
+                    let def_data = resolutions.defs.get(def);
+                    match def_data.kind {
+                        DefKind::NativeFn(id) => {
+                            let f = registry.function(id);
+                            f.param_names.first().is_some_and(|n| n == "self")
+                        }
+                        _ => true,
+                    }
+                }
             })
             .map(|(name, _)| name.to_string())
             .collect()

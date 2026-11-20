@@ -210,6 +210,7 @@ fn resolve_modules(
     resolver.collect_impls(&new);
     resolver.inject_enum_builtins();
     resolver.resolve_bodies(&new);
+    resolver.inject_enum_builtins();
     resolver.suspend()
 }
 

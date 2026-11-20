@@ -61,6 +61,14 @@ impl Scope {
         }
     }
 
+    pub fn replace(&mut self, ns: Namespace, name: Symbol, binding: Binding) {
+        let names = match ns {
+            Namespace::Type => &mut self.types,
+            Namespace::Value => &mut self.values,
+        };
+        names.insert(name, binding);
+    }
+
     /// Every name declared in `ns`, in no particular order.
     pub fn iter(&self, ns: Namespace) -> impl Iterator<Item = (Symbol, Binding)> + '_ {
         self.names(ns)

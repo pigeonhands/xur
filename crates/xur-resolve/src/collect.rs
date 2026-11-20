@@ -173,7 +173,14 @@ impl<'a> Resolver<'a> {
             })
             .collect::<Vec<_>>();
         if let Some(&(ns, existing)) = clash.first() {
-            self.report(duplicate_definition(ident, existing, ns));
+            let is_injected_builtin = existing.span.is_none()
+                && matches!(existing.res, Res::Def(DefKind::NativeFn(_), _));
+            if is_injected_builtin {
+                let scope_data = self.scopes.get_mut(&scope).expect("declaring in a scope");
+                scope_data.replace(ns, ident.name, binding);
+            } else {
+                self.report(duplicate_definition(ident, existing, ns));
+            }
         }
     }
 }
