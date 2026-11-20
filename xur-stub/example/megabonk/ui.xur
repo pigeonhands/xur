@@ -203,14 +203,16 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
                 game.add_weapon_n(entry.value, 100);
             }
         }
-        if row.button("Remove all") {
-            game.remove_all_weapons();
+        if game.can_remove_all_weapons() {
+            if row.button("Remove all") {
+                game.remove_all_weapons();
+            }
         }
     });
 
     if owned.len() > 0 {
         ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("weapons_owned", 5, |g| {
+            section.grid("weapons_owned", 4, |g| {
                 for entry in owned {
                     let lvl = game.get_weapon_lvl(entry.value);
                     g.label(fmt::format("{} lv{}", entry.name, lvl));
@@ -225,9 +227,6 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
                     if g.button("+100") {
                         game.unlock_weapon_cap();
                         game.add_weapon_max(entry.value);
-                    }
-                    if g.button("x") {
-                        game.remove_weapon(entry.value);
                     }
                     g.end_row();
                 }
@@ -291,14 +290,11 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
                 game.add_maxed_tome_by_enum(entry.value);
             }
         }
-        if row.button("Remove all") {
-            game.remove_all_tomes();
-        }
     });
 
     if owned.len() > 0 {
         ui.collapsing(fmt::format("Owned ({})", owned.len()), |section| {
-            section.grid("tomes_owned", 6, |g| {
+            section.grid("tomes_owned", 5, |g| {
                 for entry in owned {
                     let lvl = game.get_tome_lvl(entry.value);
                     g.label(fmt::format("{} lv{}", entry.name, lvl));
@@ -306,7 +302,6 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
                     if g.button("+10") { game.add_tome_n(entry.value, 10); }
                     if g.button("+100") { game.add_tome_n(entry.value, 100); }
                     if g.button("max") { game.add_maxed_tome_by_enum(entry.value); }
-                    if g.button("x") { game.remove_tome(entry.value); }
                     g.end_row();
                 }
             });

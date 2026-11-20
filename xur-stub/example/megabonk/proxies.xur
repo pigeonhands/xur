@@ -134,8 +134,6 @@ struct ItemInvProxy {
 struct WeaponInvProxy {
     #[il2cpp_method(name="AddWeapon", params=2)]
     add_weapon: il2cpp::Method
-    #[il2cpp_method(name="RemoveWeapon", params=1)]
-    remove_weapon: il2cpp::Method
     #[il2cpp_method(name="GetWeaponLevel", params=1)]
     get_weapon_level: il2cpp::Method
     #[il2cpp_field="isMaxed"]
@@ -158,8 +156,6 @@ struct TomeInvProxy {
     add_tome: il2cpp::Method
     #[il2cpp_method(name="AddMaxedTome", params=1)]
     add_maxed_tome: il2cpp::Method
-    #[il2cpp_method(name="RemoveTome", params=1)]
-    remove_tome: il2cpp::Method
     #[il2cpp_method(name="GetTomeLevel", params=1)]
     get_tome_level: il2cpp::Method
     #[il2cpp_method(name="HasTome", params=1)]
@@ -374,6 +370,8 @@ pub struct GameRuntime {
     noclip: cell::Cell<bool>
     extended_zoom: cell::Cell<bool>
     pc_offset3rd_z_off: i64
+    // RemoveWeapon() takes 0 params — clears all weapons at once
+    remove_all_weapons_method: Option<il2cpp::Method>
     // Enum entries
     weapons: [EnumEntry]
     items: [EnumEntry]
@@ -394,6 +392,12 @@ impl GameRuntime {
         let inv_util = InvUtilProxy::from_runtime(rt)?;
 
         let pc_offset3rd_z_off = camera.offset_3rd.offset() + 8;
+
+        let weapon_cls = rt.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups.Weapons", "WeaponInventory")?;
+        let remove_all_weapons_method = match weapon_cls.method("RemoveWeapon", 0) {
+            Ok(m) => { log::info("found RemoveWeapon(0)"); Some(m) }
+            Err(_) => { log::info("no RemoveWeapon method"); None }
+        };
 
         let levelup = LevelupProxy::from_runtime(rt)?;
         let chest = ChestProxy::from_runtime(rt)?;
@@ -519,6 +523,7 @@ impl GameRuntime {
             noclip: cell::new(false),
             extended_zoom: cell::new(false),
             pc_offset3rd_z_off,
+            remove_all_weapons_method,
             weapons,
             items,
             tomes,
@@ -794,18 +799,16 @@ impl GameRuntime {
         self.add_weapon_n(value, 100);
     }
 
-    fn remove_weapon(self, value: i32) {
-        let wi = self.weapon_inv_obj();
-        if wi.is_null() { return; }
-        self.weapon_inv.remove_weapon.invoke_on_main(wi, value);
+    fn can_remove_all_weapons(self) -> bool {
+        self.remove_all_weapons_method.is_some()
     }
 
     fn remove_all_weapons(self) {
-        for entry in self.weapons {
-            if entry.name == "None" || entry.name == "Test" { continue; }
-            if self.get_weapon_lvl(entry.value) > 0 {
-                self.remove_weapon(entry.value);
-            }
+        let wi = self.weapon_inv_obj();
+        if wi.is_null() { return; }
+        match self.remove_all_weapons_method {
+            Some(m) => { m.invoke_on_main(wi); }
+            None => {}
         }
     }
 
@@ -843,19 +846,5 @@ impl GameRuntime {
         let ti = self.tome_inv_obj();
         if ti.is_null() { return 0; }
         self.tome_inv.get_tome_level.invoke(ti, value)
-    }
-
-    fn remove_tome(self, value: i32) {
-        let ti = self.tome_inv_obj();
-        if ti.is_null() { return; }
-        self.tome_inv.remove_tome.invoke_on_main(ti, value);
-    }
-
-    fn remove_all_tomes(self) {
-        for entry in self.tomes {
-            if self.get_tome_lvl(entry.value) > 0 {
-                self.remove_tome(entry.value);
-            }
-        }
     }
 }
