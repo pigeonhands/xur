@@ -58,7 +58,12 @@ fn expand_struct(
                     field.name
                 ));
             }
-            FieldKind::Plain => continue,
+            FieldKind::Plain => {
+                field_inits.push(format!(
+                    "            {}: {}::default(),",
+                    field.name, field.ty
+                ));
+            }
         }
     }
 

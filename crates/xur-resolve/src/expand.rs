@@ -164,15 +164,15 @@ fn extract_impl_fns(imp: &Impl) -> Vec<MacroFn> {
                     .decl
                     .inputs
                     .iter()
-                    .filter_map(|param| {
+                    .map(|param| {
                         let name = match &param.pat.kind {
                             xur_ast::PatKind::Ident(ident) => ident.name.to_string(),
-                            _ => return None,
+                            _ => "_".to_string(),
                         };
-                        Some(MacroParam {
+                        MacroParam {
                             name,
                             ty: ty_to_string(&param.ty),
-                        })
+                        }
                     })
                     .collect();
                 Some(MacroFn {
