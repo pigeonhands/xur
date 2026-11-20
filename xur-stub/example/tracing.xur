@@ -11,7 +11,7 @@ use std::io;
 use std::log;
 
 fn ctor() {
-    log::subscriber().with_max_level("debug").init();
+    log::subscriber().with_max_level(log::Level::Debug).init();
 }
 
 fn main() -> Result<()> {
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
     io::println("[tracing] log messages emitted — check stderr or log file");
 
     // To log to a file instead:
-    //   log::subscriber().to_file("/tmp/game.log").with_max_level("debug").init();
+    //   log::subscriber().to_file("/tmp/game.log").with_max_level(log::Level::Debug).init();
     //
     // Other subscriber options:
     //   .with_target(false)       — hide module path

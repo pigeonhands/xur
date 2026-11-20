@@ -6,7 +6,7 @@
 //! written by address, and the loaded modules and mapped regions enumerated.
 //!
 //! ```text
-//! let handle = std::re::proc::open(pid, "read").unwrap();
+//! let handle = std::re::proc::open(pid, proc::Access::Read).unwrap();
 //! for module in handle.modules().unwrap() { ... }
 //! let bytes = handle.read(module.base, 16).unwrap();
 //! ```
@@ -37,15 +37,35 @@ struct Proc(Arc<Process>);
 #[facet(opaque)]
 struct Handle(Arc<ProcessHandle>);
 
-/// Reads an [`Access`] from a name: `"read"`, `"readwrite"` or `"all"`.
-fn access(name: &str) -> RunResult<Access> {
+const ACCESS_READ: i64 = 0;
+const ACCESS_READ_WRITE: i64 = 1;
+const ACCESS_ALL: i64 = 2;
+
+fn access_from_str(name: &str) -> RunResult<Access> {
     match name.to_ascii_lowercase().replace('_', "").as_str() {
         "read" => Ok(Access::Read),
         "readwrite" | "write" => Ok(Access::ReadWrite),
         "all" => Ok(Access::All),
         _ => Err(RuntimeError::new(format!(
-            "unknown access `{name}`; use \"read\", \"readwrite\" or \"all\""
+            "unknown access `{name}`; use Read, ReadWrite, or All"
         ))),
+    }
+}
+
+fn access_from_int(v: i64) -> RunResult<Access> {
+    match v {
+        ACCESS_READ => Ok(Access::Read),
+        ACCESS_READ_WRITE => Ok(Access::ReadWrite),
+        ACCESS_ALL => Ok(Access::All),
+        _ => Err(RuntimeError::new(format!("unknown access value {v}"))),
+    }
+}
+
+fn access_arg(val: &Value) -> RunResult<Access> {
+    match val {
+        Value::Str(s) => access_from_str(s),
+        Value::Int(v) => access_from_int(*v),
+        _ => Err(RuntimeError::new("expected an Access or access string")),
     }
 }
 
@@ -109,6 +129,12 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
         let address: &Address = peek.get().map_err(reflect_error)?;
         Ok(Value::Int(address.get() as i64))
     });
+
+    proc.repr_enum("Access", &[
+        ("Read", ACCESS_READ),
+        ("ReadWrite", ACCESS_READ_WRITE),
+        ("All", ACCESS_ALL),
+    ]);
 
     proc.function("processes", || {
         procodile::process::processes()
@@ -213,19 +239,21 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
 
 /// `proc::open(pid, access)`: a handle, as a Xur `Result`.
 fn open(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Int(pid), Value::Str(name)] = args else {
-        return Err(RuntimeError::new("`open` takes a pid and an access string"));
+    let (pid, access_val) = match args {
+        [Value::Int(pid), val] => (*pid, val),
+        _ => return Err(RuntimeError::new("`open` takes (pid, access)")),
     };
-    let pid = u32::try_from(*pid).map_err(|_| RuntimeError::new("invalid pid"))?;
-    handle_result(cx, ProcessHandle::open(pid, access(name)?))
+    let pid = u32::try_from(pid).map_err(|_| RuntimeError::new("invalid pid"))?;
+    handle_result(cx, ProcessHandle::open(pid, access_arg(access_val)?))
 }
 
 /// `process.open(access)`: a handle to this process.
 fn open_process(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Str(name)] = args else {
-        return Err(RuntimeError::new("`open` takes an access string"));
+    let (this, access_val) = match args {
+        [this, val] => (this, val),
+        _ => return Err(RuntimeError::new("`open` takes an access")),
     };
-    let access = access(name)?;
+    let access = access_arg(access_val)?;
     let Value::Native(object) = this else {
         return Err(RuntimeError::new("expected a `Process`"));
     };

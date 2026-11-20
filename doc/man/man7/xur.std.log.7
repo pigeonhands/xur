@@ -28,18 +28,32 @@ Emit a warning-level event.
 .TP
 .B error(format, args...) -> ()
 Emit an error-level event.
+.SH ENUMS
+.TP
+.B Level
+Log severity level:
+.BR Trace ,
+.BR Debug ,
+.BR Info ,
+.BR Warn ,
+.BR Error .
 .SH SUBSCRIBERBUILDER METHODS
 .TP
 .B with_max_level(level) -> SubscriberBuilder
 Set the maximum log level.
 .I level
-is
-.BR \(dqtrace\(dq ,
-.BR \(dqdebug\(dq ,
-.BR \(dqinfo\(dq ,
-.BR \(dqwarn\(dq ,
+is a
+.B Level
+enum variant:
+.BR Level::Trace ,
+.BR Level::Debug ,
+.BR Level::Info ,
+.BR Level::Warn ,
 or
-.BR \(dqerror\(dq .
+.BR Level::Error .
+Strings
+.RB ( \(dqdebug\(dq
+etc.) are accepted for backwards compatibility.
 .TP
 .B with_target(bool) -> SubscriberBuilder
 Show or hide the target (module path) in output.
@@ -83,7 +97,7 @@ use std::io;
 
 fn main() {
     log::subscriber()
-        .with_max_level("debug")
+        .with_max_level(log::Level::Debug)
         .with_ansi(true)
         .init();
 

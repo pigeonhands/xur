@@ -14,7 +14,7 @@ use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/egui_overlay.log").with_max_level("debug").init();
+    log::subscriber().to_file("/tmp/egui_overlay.log").with_max_level(log::Level::Debug).init();
     egui::init();
 }
 

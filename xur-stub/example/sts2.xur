@@ -401,7 +401,7 @@ fn draw_player(ui: gui::Ui, game: GameMethods) {
 // ---------------------------------------------------------------------------
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level("info").init();
+    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Info).init();
 }
 
 fn stub_main() {

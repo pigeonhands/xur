@@ -4,7 +4,7 @@
 //! use std::log;
 //!
 //! log::subscriber()
-//!     .with_max_level("debug")
+//!     .with_max_level(log::Level::Debug)
 //!     .with_target(true)
 //!     .with_ansi(true)
 //!     .init();
@@ -103,6 +103,12 @@ fn with_config(
     native(&args[0], SubscriberBuilder(Arc::new(config)))
 }
 
+const LEVEL_TRACE: i64 = 0;
+const LEVEL_DEBUG: i64 = 1;
+const LEVEL_INFO: i64 = 2;
+const LEVEL_WARN: i64 = 3;
+const LEVEL_ERROR: i64 = 4;
+
 fn parse_level(s: &str) -> RunResult<tracing::Level> {
     match s {
         "trace" => Ok(tracing::Level::TRACE),
@@ -111,8 +117,30 @@ fn parse_level(s: &str) -> RunResult<tracing::Level> {
         "warn" => Ok(tracing::Level::WARN),
         "error" => Ok(tracing::Level::ERROR),
         _ => Err(RuntimeError::new(format!(
-            "unknown level \"{s}\": expected \"trace\", \"debug\", \"info\", \"warn\", or \"error\""
+            "unknown level \"{s}\": expected trace, debug, info, warn, or error"
         ))),
+    }
+}
+
+fn parse_level_int(v: i64) -> RunResult<&'static str> {
+    match v {
+        LEVEL_TRACE => Ok("trace"),
+        LEVEL_DEBUG => Ok("debug"),
+        LEVEL_INFO => Ok("info"),
+        LEVEL_WARN => Ok("warn"),
+        LEVEL_ERROR => Ok("error"),
+        _ => Err(RuntimeError::new(format!("unknown level value {v}"))),
+    }
+}
+
+fn level_string(args: &[Value], pos: usize) -> RunResult<String> {
+    match args.get(pos) {
+        Some(Value::Str(s)) => {
+            parse_level(s)?;
+            Ok(s.to_string())
+        }
+        Some(Value::Int(v)) => Ok(parse_level_int(*v)?.to_string()),
+        _ => Err(RuntimeError::new("expected a Level or level string")),
     }
 }
 
@@ -269,11 +297,18 @@ fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::log", |module| {
         // subscriber() — returns a new SubscriberBuilder with defaults.
+        module.repr_enum("Level", &[
+            ("Trace", LEVEL_TRACE),
+            ("Debug", LEVEL_DEBUG),
+            ("Info", LEVEL_INFO),
+            ("Warn", LEVEL_WARN),
+            ("Error", LEVEL_ERROR),
+        ]);
+
         module.ty::<SubscriberBuilder>("SubscriberBuilder")
             .raw_function_returns::<SubscriberBuilder>("with_max_level", |_cx, args| {
-                let level = str_arg(args, 1, "with_max_level")?;
-                parse_level(&level)?;
-                with_config(args, |c| c.max_level = level.to_string())
+                let level = level_string(args, 1)?;
+                with_config(args, |c| c.max_level = level)
             })
             .raw_function_returns::<SubscriberBuilder>("with_target", |_cx, args| {
                 let b = bool_arg(args, 1, "with_target")?;

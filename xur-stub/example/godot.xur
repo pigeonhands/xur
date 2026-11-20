@@ -16,7 +16,7 @@ use std::stub::re::godot;
 use std::log;
 
 fn ctor() {
-    log::subscriber().with_max_level("info").init();
+    log::subscriber().with_max_level(log::Level::Info).init();
 }
 
 fn main() -> Result<()> {

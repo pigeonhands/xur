@@ -55,7 +55,7 @@ fn draw_inventory(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
 // ---------------------------------------------------------------------------
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level("debug").init();
+    log::subscriber().to_file("/tmp/megabonk.log").truncate().with_max_level(log::Level::Debug).init();
     egui::init();
     egui::set_scale(0.75);
 }
