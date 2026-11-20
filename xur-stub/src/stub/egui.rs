@@ -10,11 +10,13 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use facet::Facet;
 use hao_il2cpp_unity::egui as hao_egui;
-use hao_il2cpp_unity::egui::{Color32, Context, Frame, Grid, ScrollArea, SelectableLabel, Slider, Window};
+use hao_il2cpp_unity::egui::{Color32, Context, Frame, Grid, Image, ScrollArea, SelectableLabel, Slider, TextureId, Vec2, Window};
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
+
+use super::il2cpp::XurObject;
 
 // -----------------------------------------------------------------------
 // Global bridge
@@ -196,6 +198,31 @@ pub(crate) fn register(registry: &Registry) {
                 return Err(RuntimeError::new("scale factor must be positive"));
             }
             hao_egui::set_ui_scale(f);
+            Ok(Value::Unit)
+        });
+
+        m.raw_function("register_texture", |_cx, args| {
+            let [obj_val] = args else {
+                return Err(RuntimeError::new("`register_texture` takes a Unity Object"));
+            };
+            let Value::Native(n) = obj_val else {
+                return Err(RuntimeError::new("`register_texture` takes a Unity Object"));
+            };
+            let obj = n.with(|o: &XurObject| o.obj())
+                .ok_or_else(|| RuntimeError::new("expected an il2cpp Object"))?;
+            let tex_id = hao_egui::register_user_texture(obj)
+                .map_err(|e| RuntimeError::new(format!("register_texture: {e}")))?;
+            match tex_id {
+                TextureId::User(id) => Ok(Value::Int(id as i64)),
+                _ => unreachable!(),
+            }
+        });
+
+        m.raw_function("unregister_texture", |_cx, args| {
+            let [Value::Int(id)] = args else {
+                return Err(RuntimeError::new("`unregister_texture` takes a texture id (int)"));
+            };
+            hao_egui::unregister_user_texture(TextureId::User(*id as u64));
             Ok(Value::Unit)
         });
 
@@ -621,6 +648,22 @@ fn register_ui_methods(registry: &Registry, m: &mut ModuleBuilder<'_>) {
                 ui.add(SelectableLabel::new(*selected, text.as_ref()))
                     .clicked(),
             ))
+        })
+    });
+
+    ty.raw_function("image", |_cx, args| {
+        let [this, Value::Int(tex_id), Value::Float(width), Value::Float(height)] = args else {
+            return Err(RuntimeError::new(
+                "`image` takes (texture_id: int, width: float, height: float)",
+            ));
+        };
+        with_ui(this, |ui| {
+            let sized = hao_egui::load::SizedTexture::new(
+                TextureId::User(*tex_id as u64),
+                Vec2::new(*width as f32, *height as f32),
+            );
+            ui.add(Image::new(sized));
+            Ok(Value::Unit)
         })
     });
 

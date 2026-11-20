@@ -33,6 +33,15 @@ This function blocks forever.
 .B frame_count() -> int
 The number of frames rendered since
 .BR run() " started."
+.TP
+.B register_texture(object) -> int
+Register a Unity texture (Texture, Texture2D, Sprite, etc.) for use as
+an egui image. Returns a texture id to pass to
+.BR image() .
+The object is GC\-pinned while registered.
+.TP
+.B unregister_texture(id) -> ()
+Unpin and remove a previously registered texture.
 .SH Ctx METHODS
 The context object passed to the draw callback.
 .TP
@@ -112,13 +121,16 @@ End the current row in a
 .TP
 .B colored_label(r, g, b, text) -> ()
 Display a label with an RGB colour.
+.TP
+.B image(texture_id, width, height) -> ()
+Display a registered texture as an image at the given size in points.
 .SH EXAMPLES
 .nf
 use std::stub::re::unity::egui;
 use std::log;
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/mod.log").init();
+    log::subscriber().to_file("/tmp/mod.log").with_max_level(log::Level::Debug).init();
     egui::init();
 }
 

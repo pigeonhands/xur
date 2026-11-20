@@ -222,7 +222,7 @@ impl std::fmt::Display for XurHookContext {
 
 #[derive(Facet, Clone, Copy)]
 #[facet(opaque)]
-struct XurObject(usize); // Object raw pointer
+pub(crate) struct XurObject(usize); // Object raw pointer
 
 unsafe impl Send for XurObject {}
 unsafe impl Sync for XurObject {}
@@ -232,7 +232,7 @@ impl XurObject {
         Self(obj.as_ptr() as usize)
     }
 
-    fn obj(&self) -> rt::Object {
+    pub(crate) fn obj(&self) -> rt::Object {
         rt::Object(self.0 as *mut c_void)
     }
 }
