@@ -23,6 +23,7 @@ use crate::token::{Keyword, TokenKind};
 enum AssocOp {
     Binary(BinOpKind),
     Assign,
+    CompoundAssign(BinOpKind),
     Range(RangeLimits),
 }
 
@@ -47,6 +48,9 @@ impl AssocOp {
             TokenKind::Gt => binary(BinOpKind::Gt),
             TokenKind::GtEq => binary(BinOpKind::Ge),
             TokenKind::Eq => Some(Self::Assign),
+            TokenKind::PlusEq => Some(Self::CompoundAssign(BinOpKind::Add)),
+            TokenKind::MinusEq => Some(Self::CompoundAssign(BinOpKind::Sub)),
+            TokenKind::StarEq => Some(Self::CompoundAssign(BinOpKind::Mul)),
             TokenKind::DotDot => Some(Self::Range(RangeLimits::HalfOpen)),
             TokenKind::DotDotEq => Some(Self::Range(RangeLimits::Closed)),
             _ => None,
@@ -56,7 +60,7 @@ impl AssocOp {
     fn precedence(self) -> Precedence {
         match self {
             Self::Binary(op) => op.precedence(),
-            Self::Assign => Precedence::Assign,
+            Self::Assign | Self::CompoundAssign(_) => Precedence::Assign,
             Self::Range(_) => Precedence::Range,
         }
     }
@@ -64,7 +68,7 @@ impl AssocOp {
     fn fixity(self) -> Fixity {
         match self {
             Self::Binary(op) => op.fixity(),
-            Self::Assign => Fixity::Right,
+            Self::Assign | Self::CompoundAssign(_) => Fixity::Right,
             Self::Range(_) => Fixity::None,
         }
     }
@@ -234,6 +238,18 @@ impl Parser<'_> {
                 AssocOp::Assign => {
                     let rhs = self.with_res(rhs_res, |this| this.parse_expr_assoc_with(rhs_min))?;
                     ExprKind::Assign(Box::new(lhs), Box::new(rhs), op_span)
+                }
+                AssocOp::CompoundAssign(kind) => {
+                    let rhs = self.with_res(rhs_res, |this| this.parse_expr_assoc_with(rhs_min))?;
+                    let op = BinOp {
+                        kind,
+                        span: op_span,
+                    };
+                    let bin = Expr {
+                        kind: ExprKind::Binary(op, Box::new(lhs.clone()), Box::new(rhs)),
+                        span: op_span,
+                    };
+                    ExprKind::Assign(Box::new(lhs), Box::new(bin), op_span)
                 }
                 AssocOp::Binary(kind) => {
                     let rhs = self.with_res(rhs_res, |this| this.parse_expr_assoc_with(rhs_min))?;

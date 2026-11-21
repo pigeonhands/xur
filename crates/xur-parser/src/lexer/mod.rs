@@ -117,7 +117,9 @@ impl<'src> Lexer<'src> {
             ';' => TokenKind::Semi,
             ',' => TokenKind::Comma,
             '#' => TokenKind::Hash,
+            '+' if c.eat('=') => TokenKind::PlusEq,
             '+' => TokenKind::Plus,
+            '*' if c.eat('=') => TokenKind::StarEq,
             '*' => TokenKind::Star,
             '/' => TokenKind::Slash,
             '%' => TokenKind::Percent,
@@ -134,6 +136,7 @@ impl<'src> Lexer<'src> {
             }
             '.' => TokenKind::Dot,
             '-' if c.eat('>') => TokenKind::Arrow,
+            '-' if c.eat('=') => TokenKind::MinusEq,
             '-' => TokenKind::Minus,
             '=' if c.eat('=') => TokenKind::EqEq,
             '=' if c.eat('>') => TokenKind::FatArrow,
