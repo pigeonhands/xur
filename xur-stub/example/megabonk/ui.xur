@@ -2,6 +2,7 @@
 
 use std::cell;
 use std::fmt;
+use std::log;
 use std::stub::re::unity::egui;
 use std::stub::re::unity::time;
 
@@ -187,15 +188,31 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
         }
     }
 
+    if state.adding_all_weapons.get() {
+        let found = false;
+        for entry in game.weapons {
+            if entry.data_obj.is_none() { continue; }
+            if game.get_weapon_lvl(entry.value) == 0 {
+                game.unlock_weapon_cap();
+                game.unlock_weapon_cap();
+                game.add_weapon(entry.data_obj?);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            state.adding_all_weapons.set(false);
+        }
+    }
+
     ui.horizontal(|row| {
-        if row.button("Add all") {
-            for entry in game.weapons {
-                if entry.data_obj.is_none() { continue; }
-                if game.get_weapon_lvl(entry.value) == 0 {
-                    game.unlock_weapon_cap();
-                    game.unlock_weapon_cap();
-                    game.add_weapon(entry.data_obj?);
-                }
+        if state.adding_all_weapons.get() {
+            if row.button("Stop") {
+                state.adding_all_weapons.set(false);
+            }
+        } else {
+            if row.button("Add all") {
+                state.adding_all_weapons.set(true);
             }
         }
         if row.button("+100 all") {
@@ -284,27 +301,29 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
         }
     }
 
+    if state.adding_all_tomes.get() {
+        let found = false;
+        for entry in game.tomes {
+            if entry.data_obj.is_none() { continue; }
+            if !game.has_tome(entry.value) {
+                game.add_tome(entry.data_obj?);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            state.adding_all_tomes.set(false);
+        }
+    }
+
     ui.horizontal(|row| {
-        if row.button("Add all") {
-            let pass = 0;
-            while pass < 2 {
-                for entry in game.tomes {
-                    if entry.data_obj.is_none() { continue; }
-                    if !game.has_tome(entry.value) {
-                        game.add_tome(entry.data_obj?);
-                    }
-                }
-                pass = pass + 1;
+        if state.adding_all_tomes.get() {
+            if row.button("Stop") {
+                state.adding_all_tomes.set(false);
             }
-        }
-        if row.button("+100 all") {
-            for entry in owned {
-                game.add_tome_n(entry.data_obj?, 100);
-            }
-        }
-        if row.button("Max all") {
-            for entry in owned {
-                game.add_maxed_tome(entry.data_obj?);
+        } else {
+            if row.button("Add all") {
+                state.adding_all_tomes.set(true);
             }
         }
     });
@@ -318,7 +337,7 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
     if state.tome_tab.get() == 0 {
         if owned.len() > 0 {
             ui.scroll(200.0, |scroll| {
-                scroll.grid("tomes_owned", 6, |g| {
+                scroll.grid("tomes_owned", 3, |g| {
                     for entry in owned {
                         let lvl = game.get_tome_lvl(entry.value);
                         match entry.icon {
@@ -326,10 +345,6 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
                             None => { g.label(""); }
                         }
                         g.label(fmt::format("{} lv{}", entry.name, lvl));
-                        if g.button("+") { game.add_tome(entry.data_obj?); }
-                        if g.button("+10") { game.add_tome_n(entry.data_obj?, 10); }
-                        if g.button("+100") { game.add_tome_n(entry.data_obj?, 100); }
-                        if g.button("max") { game.add_maxed_tome(entry.data_obj?); }
                         g.end_row();
                     }
                 });
@@ -382,7 +397,7 @@ pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
                         game.add_item(entry.value);
                     }
                 }
-                pass = pass + 1;
+                pass += 1;
             }
         }
         if row.button("+100 all") {

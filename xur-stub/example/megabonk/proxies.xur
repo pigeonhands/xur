@@ -40,6 +40,8 @@ pub struct UiState {
     weapon_tab: cell::Cell<i32>
     tome_tab: cell::Cell<i32>
     item_tab: cell::Cell<i32>
+    adding_all_tomes: cell::Cell<bool>
+    adding_all_weapons: cell::Cell<bool>
 }
 
 impl UiState {
@@ -55,6 +57,8 @@ impl UiState {
             weapon_tab: cell::new(0),
             tome_tab: cell::new(0),
             item_tab: cell::new(0),
+            adding_all_tomes: cell::new(false),
+            adding_all_weapons: cell::new(false),
         }
     }
 }
@@ -370,7 +374,7 @@ fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp
                 };
                 break;
             }
-            i = i + 1;
+            i += 1;
         }
     }
 }
@@ -854,7 +858,7 @@ impl GameRuntime {
             let i = 0;
             while i < count {
                 self.remove_item(entry.value);
-                i = i + 1;
+                i += 1;
             }
         }
     }
@@ -883,7 +887,7 @@ impl GameRuntime {
         let i = 0;
         while i < n {
             self.add_weapon(data_obj);
-            i = i + 1;
+            i += 1;
         }
     }
 
@@ -907,20 +911,6 @@ impl GameRuntime {
     // --- Tomes ---
 
     fn add_tome(self, data_obj: il2cpp::Object) {
-        let ti = self.tome_inv_obj();
-        if ti.is_null() { return; }
-        self.tome_inv.add_tome.invoke_on_main(ti, data_obj, il2cpp::null(), 0);
-    }
-
-    fn add_tome_n(self, data_obj: il2cpp::Object, n: i32) {
-        let i = 0;
-        while i < n {
-            self.add_tome(data_obj);
-            i = i + 1;
-        }
-    }
-
-    fn add_maxed_tome(self, data_obj: il2cpp::Object) {
         let ti = self.tome_inv_obj();
         if ti.is_null() { return; }
         self.tome_inv.add_maxed_tome.invoke_on_main(ti, data_obj);
