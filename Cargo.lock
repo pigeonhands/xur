@@ -1619,6 +1619,7 @@ name = "hao-godot"
 version = "0.0.5"
 dependencies = [
  "hao-runtime",
+ "hooking",
  "tracing",
  "tracing-subscriber",
 ]
