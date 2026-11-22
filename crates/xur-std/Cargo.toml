@@ -28,7 +28,8 @@ re-dotnet-runtime = ["re-dotnet", "dep:hao-runtime"]
 re-demangle       = ["dep:rekit"]
 re-unreal         = ["dep:unrealkit"]
 re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime", "re-demangle", "re-unreal"]
-gui               = ["dep:eframe", "dep:winit"]
+egui-widgets      = ["dep:egui"]
+gui               = ["dep:eframe", "dep:winit", "egui-widgets"]
 
 [dependencies]
 xur-ast.workspace = true
@@ -54,6 +55,7 @@ md-5 = { version = "0.10", optional = true }
 crc32fast = { version = "1", optional = true }
 rekit = { workspace = true, features = ["demangle", "pattern"], optional = true }
 unrealkit = { workspace = true, optional = true }
+egui = { version = "0.37", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

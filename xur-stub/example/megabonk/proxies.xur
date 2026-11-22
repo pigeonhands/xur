@@ -8,7 +8,7 @@ use std::ptr;
 use std::stub::hooking;
 use std::stub::il2cpp;
 use std::stub::il2cpp::il2cpp_proxy;
-use std::stub::re::unity::egui;
+use std::stub::unity::egui;
 use std::log;
 
 // ---------------------------------------------------------------------------

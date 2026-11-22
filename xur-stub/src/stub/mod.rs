@@ -1,7 +1,5 @@
 #[cfg(feature = "hao-runtime")]
 mod coreclr;
-#[cfg(feature = "egui")]
-pub(crate) mod egui;
 #[cfg(feature = "godot")]
 mod godot;
 #[cfg(feature = "hooking")]
@@ -11,10 +9,12 @@ pub(crate) mod il2cpp;
 #[cfg(feature = "il2cpp-runtime")]
 mod il2cpp_proxy;
 #[cfg(feature = "overlay")]
-mod overlay_egui;
+mod overlay;
 mod re;
 #[cfg(feature = "il2cpp-unity")]
 mod time;
+#[cfg(feature = "egui")]
+mod unity;
 #[cfg(feature = "unreal")]
 mod unreal;
 
@@ -24,8 +24,6 @@ pub(crate) fn register(registry: &Registry) {
     re::register(registry);
     #[cfg(feature = "il2cpp-unity")]
     time::register(registry);
-    #[cfg(feature = "egui")]
-    egui::register(registry);
     #[cfg(feature = "hooking")]
     hooking::register(registry);
     #[cfg(feature = "hao-runtime")]
@@ -36,6 +34,8 @@ pub(crate) fn register(registry: &Registry) {
     godot::register(registry);
     #[cfg(feature = "unreal")]
     unreal::register(registry);
+    #[cfg(feature = "egui")]
+    unity::egui::register(registry);
     #[cfg(feature = "overlay")]
-    overlay_egui::register(registry);
+    overlay::register(registry);
 }

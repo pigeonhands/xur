@@ -10,7 +10,8 @@
 //     XUR_STUB_PATH=xur-stub/example/megabonk/main.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
-use std::stub::re::unity::egui;
+use std::gui;
+use std::stub::unity::egui;
 use std::log;
 
 const proxies = std::import("./proxies.xur");
@@ -20,7 +21,7 @@ const draw = std::import("./ui.xur");
 // Tab bar
 // ---------------------------------------------------------------------------
 
-fn tab_bar(ui: egui::Ui, state: proxies::UiState) {
+fn tab_bar(ui: gui::Ui, state: proxies::UiState) {
     let tab = state.tab.get();
     ui.horizontal(|row| {
         if row.selectable(tab == 0, "Combat")    { state.tab.set(0); }
@@ -34,7 +35,7 @@ fn tab_bar(ui: egui::Ui, state: proxies::UiState) {
 // Inventory sub-tabs
 // ---------------------------------------------------------------------------
 
-fn draw_inventory(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+fn draw_inventory(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     ui.horizontal(|row| {
         if row.selectable(state.tab.get() == 3, "Weapons") { state.tab.set(3); }
         if row.selectable(state.tab.get() == 4, "Tomes")   { state.tab.set(4); }

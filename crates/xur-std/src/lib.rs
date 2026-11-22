@@ -19,8 +19,8 @@ mod hash;
 mod datetime;
 mod fmt;
 mod fs;
-#[cfg(feature = "gui")]
-mod gui;
+#[cfg(feature = "egui-widgets")]
+pub mod gui;
 #[cfg(feature = "http")]
 mod http;
 mod io;
@@ -86,7 +86,7 @@ pub fn register(registry: &Registry) {
     any::register(registry);
     assert::register(registry);
     reflect::register(registry);
-    #[cfg(feature = "gui")]
+    #[cfg(feature = "egui-widgets")]
     gui::register(registry);
     #[cfg(feature = "http")]
     http::register(registry);

@@ -10,7 +10,7 @@
 use std::fmt;
 use std::xur;
 use std::log;
-use std::stub::re::unity::egui;
+use std::stub::unity::egui;
 use std::stub::re::unity::time;
 
 fn ctor() {

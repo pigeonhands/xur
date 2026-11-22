@@ -270,6 +270,24 @@ impl ModuleBuilder<'_> {
         self
     }
 
+    /// Returns a [`TypeBuilder`] for a type `T` that was already registered
+    /// (by this or another module's [`ty`](Self::ty)). Use it to add methods
+    /// to a shared type from a different module. Panics if `T` has not been
+    /// registered yet.
+    pub fn ty_existing<T: Facet<'static> + Clone + Send + 'static>(
+        &mut self,
+    ) -> TypeBuilder<'_, T> {
+        let id = self
+            .registry
+            .type_of_shape(T::SHAPE)
+            .expect("ty_existing: type not registered");
+        TypeBuilder {
+            registry: self.registry,
+            ty: id,
+            _ty: PhantomData,
+        }
+    }
+
     /// Registers the Rust type `T` as `name`. Values of `T` passed to Xur
     /// become native objects holding the Rust value.
     pub fn ty<T: Facet<'static> + Clone + Send + 'static>(

@@ -2,13 +2,14 @@
 
 use std::cell;
 use std::fmt;
+use std::gui;
 use std::log;
-use std::stub::re::unity::egui;
+use std::stub::unity::egui;
 use std::stub::re::unity::time;
 
 const proxies = std::import("./proxies.xur");
 
-pub fn draw_combat(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+pub fn draw_combat(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let godmode = game.is_godmode();
     let new_godmode = ui.checkbox(godmode, "Godmode");
     if new_godmode != godmode {
@@ -106,7 +107,7 @@ pub fn draw_combat(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiS
     });
 }
 
-pub fn draw_camera(ui: egui::Ui, game: proxies::GameRuntime) {
+pub fn draw_camera(ui: gui::Ui, game: proxies::GameRuntime) {
     let ext = game.extended_zoom.get();
     let new_ext = ui.checkbox(ext, "Extended zoom range");
     if new_ext != ext {
@@ -157,7 +158,7 @@ pub fn draw_camera(ui: egui::Ui, game: proxies::GameRuntime) {
     }
 }
 
-pub fn draw_economy(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+pub fn draw_economy(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     ui.heading(fmt::format("Gold: {}", game.get_gold()));
     let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
     state.gold_amount.set(new_amount);
@@ -178,7 +179,7 @@ pub fn draw_economy(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
     });
 }
 
-pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+pub fn draw_weapons(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.weapons {
         if entry.data_obj.is_none() { continue; }
@@ -292,7 +293,7 @@ pub fn draw_weapons(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::Ui
     }
 }
 
-pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+pub fn draw_tomes(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.tomes {
         if entry.data_obj.is_none() { continue; }
@@ -377,7 +378,7 @@ pub fn draw_tomes(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiSt
     }
 }
 
-pub fn draw_items(ui: egui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+pub fn draw_items(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let owned = [];
     for entry in game.items {
         if entry.data_obj.is_none() { continue; }

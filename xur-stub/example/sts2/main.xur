@@ -10,6 +10,7 @@
 //     XUR_STUB_PATH=xur-stub/example/sts2/main.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
 
+use std::gui;
 use std::stub::overlay::egui;
 use std::stub::godot;
 use std::log;
