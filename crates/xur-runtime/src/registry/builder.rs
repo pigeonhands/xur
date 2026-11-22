@@ -4,7 +4,9 @@ use facet::{Facet, Shape};
 use xur_resolve::NativeTypeId;
 
 use super::hooks::TypeHooks;
-use super::into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
+use super::into_native::{
+    IntoBuiltinMethod, IntoBuiltinMethodMut, IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut,
+};
 use super::{CallFn, Context, NativeType, Registry, Signature};
 use crate::{BuiltinType, RunResult, Value};
 use xur_resolve::{NativeVariantDecl, NativeVariantKind};
@@ -438,7 +440,36 @@ impl<'r> BuiltinBuilder<'r> {
 
     /// Registers a method as a Rust function taking the receiver, converted,
     /// first: `|s: String| s.to_uppercase()` for `"a".to_upper()`.
+    ///
+    /// **Note:** this clones the receiver out of its `Value` wrapper. For
+    /// builtin types backed by `Arc<Mutex<..>>` (bytes, list), prefer
+    /// [`method`](Self::method) which borrows in place.
     pub fn function<Marker>(&mut self, name: &str, f: impl IntoNativeFn<Marker>) -> &mut Self {
+        let (signature, call) = f.into_native();
+        self.add(name, Some(signature), call, None)
+    }
+
+    /// Registers a method that borrows the receiver without cloning:
+    /// `|bytes: &[u8], i: i64| -> Option<i64>`.
+    ///
+    /// `Recv` is `[u8]` for bytes or `str` for strings — any type that
+    /// implements [`BuiltinRecv`].
+    pub fn method<Recv: ?Sized + 'static, Marker>(
+        &mut self,
+        name: &str,
+        f: impl IntoBuiltinMethod<Recv, Marker>,
+    ) -> &mut Self {
+        let (signature, call) = f.into_native();
+        self.add(name, Some(signature), call, None)
+    }
+
+    /// Like [`method`](Self::method) but borrows mutably:
+    /// `|bytes: &mut Vec<u8>, val: i64| { bytes.push(val as u8); }`.
+    pub fn method_mut<Recv: 'static, Marker>(
+        &mut self,
+        name: &str,
+        f: impl IntoBuiltinMethodMut<Recv, Marker>,
+    ) -> &mut Self {
         let (signature, call) = f.into_native();
         self.add(name, Some(signature), call, None)
     }

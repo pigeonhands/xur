@@ -49,7 +49,10 @@ use crate::value::NativeObject;
 use crate::{AdtInfo, BuiltinType, RunResult, RuntimeError, TypeRef, Value};
 
 pub use builder::{BuiltinBuilder, ElemHint, ModuleBuilder, ReturnHint, Returns, TypeBuilder, XurType};
-pub use into_native::{IntoNativeFn, IntoNativeMethod, IntoNativeMethodMut};
+pub use into_native::{
+    BuiltinRecv, BuiltinRecvMut, IntoBuiltinMethod, IntoBuiltinMethodMut, IntoNativeFn,
+    IntoNativeMethod, IntoNativeMethodMut,
+};
 
 use hooks::TypeHooks;
 

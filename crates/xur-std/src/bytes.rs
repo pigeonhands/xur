@@ -9,8 +9,6 @@ use std::sync::{Arc, Mutex};
 use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
 use xur_runtime::registry::XurType;
 
-use crate::option;
-
 type Bytes = Arc<Mutex<Vec<u8>>>;
 
 pub(crate) fn register(registry: &Registry) {
@@ -26,25 +24,10 @@ pub(crate) fn register(registry: &Registry) {
 
     let mut methods = registry.builtin(BuiltinType::Bytes);
     methods
-        .raw_function_returns::<i64>("len", |_, args| {
-            let (bytes, []) = receiver(args)? else {
-                return arity(0);
-            };
-            Ok(Value::Int(lock(bytes).len() as i64))
-        })
-        .raw_function_returns::<bool>("is_empty", |_, args| {
-            let (bytes, []) = receiver(args)? else {
-                return arity(0);
-            };
-            Ok(Value::Bool(lock(bytes).is_empty()))
-        })
-        .raw_function_returns_xur("push", XurType::UNIT, |_, args| {
-            let (bytes, [byte]) = receiver(args)? else {
-                return arity(1);
-            };
-            let byte = to_byte(byte)?;
-            lock(bytes).push(byte);
-            Ok(Value::Unit)
+        .method("len", |bytes: &[u8]| -> i64 { bytes.len() as i64 })
+        .method("is_empty", |bytes: &[u8]| -> bool { bytes.is_empty() })
+        .method_mut("push", |bytes: &mut Vec<u8>, byte: i64| {
+            bytes.push(byte as u8);
         })
         .raw_function_returns_xur("extend", XurType::UNIT, |_, args| {
             let (bytes, [Value::Bytes(other)]) = receiver(args)? else {
@@ -55,50 +38,26 @@ pub(crate) fn register(registry: &Registry) {
             lock(bytes).extend(other);
             Ok(Value::Unit)
         })
-        .raw_function("find", |cx, args| {
-            let (bytes, [Value::Bytes(needle)]) = receiver(args)? else {
-                return Err(RuntimeError::new("`find` takes the bytes to look for"));
-            };
-            let needle = lock(needle).clone();
-            let found = find(&lock(bytes), &needle).map(|at| Value::Int(at as i64));
-            Ok(option(cx, found))
+        .method("find", |bytes: &[u8], needle: Vec<u8>| -> Option<i64> {
+            find(bytes, &needle).map(|at| at as i64)
         })
-        .raw_function_returns::<bool>("starts_with", |_, args| {
-            let (bytes, [Value::Bytes(prefix)]) = receiver(args)? else {
-                return Err(RuntimeError::new("`starts_with` takes bytes"));
-            };
-            let prefix = lock(prefix).clone();
-            Ok(Value::Bool(lock(bytes).starts_with(&prefix)))
+        .method("starts_with", |bytes: &[u8], prefix: Vec<u8>| -> bool {
+            bytes.starts_with(&prefix)
         })
-        .raw_function_returns::<String>("to_hex", |_, args| {
-            let (bytes, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let hex: String = lock(bytes)
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect();
-            Ok(Value::str(&hex))
+        .method("to_hex", |bytes: &[u8]| -> String {
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
         })
-        .raw_function("decode", |cx, args| {
-            let (bytes, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let lang = cx.lang();
-            Ok(match String::from_utf8(lock(bytes).clone()) {
-                Ok(text) => Value::adt(lang.ok, vec![Value::str(&text)]),
-                Err(error) => Value::adt(lang.err, vec![Value::str(&error.to_string())]),
-            })
+        .method("decode", |bytes: &[u8]| -> Result<String, String> {
+            String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())
         })
-        .raw_function_returns_xur("to_list", XurType::list::<u8>(), |_, args| {
-            let (bytes, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(bytes)
-                .iter()
-                .map(|&byte| Value::Int(byte.into()))
-                .collect();
-            Ok(Value::list(items))
+        .method("to_list", |bytes: &[u8]| -> Vec<i64> {
+            bytes.iter().map(|&b| b as i64).collect()
+        })
+        .method("get", |bytes: &[u8], index: i64| -> Option<i64> {
+            usize::try_from(index)
+                .ok()
+                .and_then(|i| bytes.get(i).copied())
+                .map(|b| b as i64)
         });
 
     macro_rules! numbers {
@@ -165,10 +124,6 @@ fn arity(expected: usize) -> RunResult<Value> {
     Err(RuntimeError::new(format!(
         "expected {expected} argument(s)"
     )))
-}
-
-fn to_byte(value: &Value) -> RunResult<u8> {
-    number_from(value, "u8")
 }
 
 /// The `N` bytes at `offset`.
