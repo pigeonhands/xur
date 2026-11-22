@@ -35,7 +35,7 @@ procodile = { version = "0.3.1", default-features = false, features = ["reflect"
 bitflags = "2.13"
 hao = { version = "0.0.9", features = ["reflect"] }
 hao-il2cpp = { version = "0.0.5", features = ["reflect"] }
-hao-runtime = { version = "0.0.5", features = ["reflect"] }
+hao-runtime = { version = "0.0.6", features = ["reflect"] }
 hao-il2cpp-runtime = { version = "0.0.5", features = ["reflect"] }
 hao-il2cpp-unity = { version = "0.0.6", features = ["reflect"] }
 hao-godot = { version = "0.0.5", features = ["reflect"] }
@@ -63,3 +63,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 [patch.crates-io]
 hao-il2cpp-unity = { path = "../hao/crates/hao-il2cpp-unity" }
 hao-il2cpp-runtime = { path = "../hao/crates/hao-il2cpp-runtime" }
+hao-runtime = { path = "../hao/crates/hao-runtime" }
+hao-godot = { path = "../hao/crates/hao-godot" }

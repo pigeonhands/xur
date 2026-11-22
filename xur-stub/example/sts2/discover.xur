@@ -1,0 +1,53 @@
+// Slay the Spire 2 class discovery — reads sts2.dll offline to find
+// game classes, fields, and methods for building a trainer.
+//
+//     xur run xur-stub/example/sts2_discover.xur
+
+use std::fmt;
+use std::io;
+use std::re::dotnet;
+
+fn dump_type(module: dotnet::Module, full_name: str) {
+    let ty = module.find_type_by_full_name(full_name);
+    if ty == () {
+        io::println(fmt::format("NOT FOUND: {}", full_name));
+        return;
+    }
+    io::println(fmt::format("=== {} ===", ty.full_name()));
+    let base = ty.base_type();
+    if base != () {
+        io::println(fmt::format("  base: {}", base));
+    }
+    io::println("  fields:");
+    for f in ty.fields() {
+        let tag = if f.is_static() { " (static)" } else { "" };
+        io::println("    " + f.name() + tag);
+    }
+    io::println("  methods:");
+    for m in ty.methods() {
+        let tag = if m.is_static() { " (static)" } else { "" };
+        let pub_tag = if m.is_public() { "pub " } else { "" };
+        io::println("    " + pub_tag + m.name() + tag);
+    }
+    io::println("");
+}
+
+fn main() -> Result<()> {
+    let path = "/games/SteamLibrary/steamapps/common/Slay the Spire 2/data_sts2_linuxbsd_x86_64/sts2.dll";
+    let data = std::fs::read(path)?;
+    let module = dotnet::parse(data)?;
+    io::println(fmt::format("Loaded {} ({} types)", module.name(), module.all_types().len()));
+    io::println("");
+
+    let targets = [
+        "MegaCrit.Sts2.Core.Runs.RunManager",
+        "MegaCrit.Sts2.Core.Runs.RunState",
+        "MegaCrit.Sts2.Core.Combat.CombatRoom",
+    ];
+
+    for name in targets {
+        dump_type(module, name);
+    }
+
+    Ok(())
+}

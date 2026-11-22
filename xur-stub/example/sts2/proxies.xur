@@ -1,0 +1,309 @@
+// STS2 trainer — game method proxies and data types.
+//
+// Resolves all CoreCLR methods and provides high-level wrappers for
+// gold, energy, HP, block, stars, and godmode.
+
+use std::cell;
+use std::fmt;
+use std::log;
+use std::stub::coreclr;
+
+// ---------------------------------------------------------------------------
+// Data types
+// ---------------------------------------------------------------------------
+
+pub struct GameMethods {
+    rt: coreclr::Runtime
+    // RunManager → RunState → Player
+    get_rm_instance: coreclr::MethodPtr
+    get_state: coreclr::MethodPtr
+    get_debug_state: coreclr::MethodPtr
+    get_in_progress: coreclr::MethodPtr
+    get_players: coreclr::MethodPtr
+    // Player properties
+    get_gold: coreclr::MethodPtr
+    set_gold: coreclr::MethodPtr
+    get_max_energy: coreclr::MethodPtr
+    set_max_energy: coreclr::MethodPtr
+    get_combat_state: coreclr::MethodPtr
+    get_creature: coreclr::MethodPtr
+    // PlayerCombatState
+    get_energy: coreclr::MethodPtr
+    set_energy: coreclr::MethodPtr
+    get_max_energy_combat: coreclr::MethodPtr
+    gain_energy: coreclr::MethodPtr
+    get_stars: coreclr::MethodPtr
+    gain_stars: coreclr::MethodPtr
+    // Creature (HP/Block)
+    get_current_hp: coreclr::MethodPtr
+    get_max_hp: coreclr::MethodPtr
+    get_block: coreclr::MethodPtr
+    heal_internal: coreclr::MethodPtr
+    set_max_hp_internal: coreclr::MethodPtr
+    gain_block_internal: coreclr::MethodPtr
+    // Godmode toggle
+    godmode: cell::Cell<bool>
+    player_creature_addr: cell::Cell<i64>
+}
+
+pub struct UiState {
+    gold_amount: cell::Cell<i32>
+    energy_amount: cell::Cell<i32>
+}
+
+// ---------------------------------------------------------------------------
+// GameMethods — resolve all method pointers
+// ---------------------------------------------------------------------------
+
+impl GameMethods {
+    pub fn init(rt: coreclr::Runtime) -> Result<GameMethods> {
+        let asm = "sts2";
+        let player_t = "MegaCrit.Sts2.Core.Entities.Players.Player";
+        let pcs_t = "MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState";
+        let creature_t = "MegaCrit.Sts2.Core.Entities.Creatures.Creature";
+        let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
+        let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+
+        log::info("resolving RunManager...");
+        let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
+        log::info(fmt::format("  get_Instance @ {}", get_rm_instance.address()));
+        let get_state = rt.method(asm, rm_t, "get_State")?;
+        log::info(fmt::format("  get_State @ {}", get_state.address()));
+        let get_debug_state = rt.method(asm, rm_t, "DebugOnlyGetState")?;
+        log::info(fmt::format("  DebugOnlyGetState @ {}", get_debug_state.address()));
+        let get_in_progress = rt.method(asm, rm_t, "get_IsInProgress")?;
+        log::info(fmt::format("  get_IsInProgress @ {}", get_in_progress.address()));
+        let get_players = rt.method(asm, rs_t, "get_Players")?;
+        log::info(fmt::format("  get_Players @ {}", get_players.address()));
+
+        log::info("resolving Player methods...");
+        let get_gold = rt.method(asm, player_t, "get_Gold")?;
+        let set_gold = rt.method(asm, player_t, "set_Gold")?;
+        let get_max_energy = rt.method(asm, player_t, "get_MaxEnergy")?;
+        let set_max_energy = rt.method(asm, player_t, "set_MaxEnergy")?;
+        let get_combat_state = rt.method(asm, player_t, "get_PlayerCombatState")?;
+        let get_creature = rt.method(asm, player_t, "get_Creature")?;
+
+        log::info("resolving PlayerCombatState methods...");
+        let get_energy = rt.method(asm, pcs_t, "get_Energy")?;
+        let set_energy = rt.method(asm, pcs_t, "set_Energy")?;
+        let get_max_energy_combat = rt.method(asm, pcs_t, "get_MaxEnergy")?;
+        let gain_energy = rt.method(asm, pcs_t, "GainEnergy")?;
+        let get_stars = rt.method(asm, pcs_t, "get_Stars")?;
+        let gain_stars = rt.method(asm, pcs_t, "GainStars")?;
+
+        log::info("resolving Creature methods...");
+        let get_current_hp = rt.method(asm, creature_t, "get_CurrentHp")?;
+        let get_max_hp = rt.method(asm, creature_t, "get_MaxHp")?;
+        let get_block = rt.method(asm, creature_t, "get_Block")?;
+        let heal_internal = rt.method(asm, creature_t, "HealInternal")?;
+        let set_max_hp_internal = rt.method(asm, creature_t, "SetMaxHpInternal")?;
+        let gain_block_internal = rt.method(asm, creature_t, "GainBlockInternal")?;
+
+        // Godmode — hook LoseHpInternal and DamageBlockInternal on
+        // Creature. When godmode is on, returns Some(0) to skip the
+        // method for the player creature only.
+        let godmode = cell::new(false);
+        let player_creature_addr = cell::new(0);
+        let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
+        let damage_block_raw = rt.method(asm, creature_t, "DamageBlockInternal")?;
+        let lose_hp_ptr = lose_hp_raw.resolve_jit();
+        let damage_block_ptr = damage_block_raw.resolve_jit();
+        log::info(fmt::format("LoseHpInternal: precode={} jit={}", lose_hp_raw.address(), lose_hp_ptr.address()));
+        log::info(fmt::format("  jit bytes: {}", lose_hp_ptr.peek_bytes(32)));
+        log::info(fmt::format("DamageBlockInternal: precode={} jit={}", damage_block_raw.address(), damage_block_ptr.address()));
+        log::info(fmt::format("  jit bytes: {}", damage_block_ptr.peek_bytes(32)));
+        lose_hp_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
+        });
+        damage_block_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
+        });
+        log::info("godmode hooks installed");
+
+        Ok(GameMethods {
+            rt,
+            get_rm_instance,
+            get_state,
+            get_debug_state,
+            get_in_progress,
+            get_players,
+            get_gold,
+            set_gold,
+            get_max_energy,
+            set_max_energy,
+            get_combat_state,
+            get_creature,
+            get_energy,
+            set_energy,
+            get_max_energy_combat,
+            gain_energy,
+            get_stars,
+            gain_stars,
+            get_current_hp,
+            get_max_hp,
+            get_block,
+            heal_internal,
+            set_max_hp_internal,
+            gain_block_internal,
+            godmode,
+            player_creature_addr,
+        })
+    }
+
+    fn player_inner(self) -> coreclr::ManagedObject {
+        let rm = self.get_rm_instance.call_ptr();
+        if rm.is_null() { return coreclr::null(); }
+        let state = self.get_state.call_ptr(rm);
+        if state.is_null() { return coreclr::null(); }
+        let players_list = self.get_players.call_ptr(state);
+        if players_list.is_null() { return coreclr::null(); }
+        let count = players_list.read_i64(16);
+        if count <= 0 { return coreclr::null(); }
+        let items_array = players_list.deref(8);
+        if items_array.is_null() { return coreclr::null(); }
+        items_array.deref(16)
+    }
+
+    pub fn player(self) -> coreclr::ManagedObject {
+        self.player_inner()
+    }
+
+    pub fn in_game(self) -> bool {
+        !self.player().is_null()
+    }
+
+    pub fn creature(self) -> coreclr::ManagedObject {
+        let p = self.player();
+        if p.is_null() { return coreclr::null(); }
+        self.get_creature.call_ptr(p)
+    }
+
+    pub fn combat_state(self) -> coreclr::ManagedObject {
+        let p = self.player();
+        if p.is_null() { return coreclr::null(); }
+        self.get_combat_state.call_ptr(p)
+    }
+
+    // --- Gold ---
+
+    pub fn gold(self) -> i32 {
+        let p = self.player();
+        if p.is_null() { return -1; }
+        self.get_gold.call(p)
+    }
+
+    pub fn set_gold_to(self, amount: i32) {
+        let p = self.player();
+        if p.is_null() { return; }
+        self.set_gold.call(p, amount);
+    }
+
+    // --- Energy ---
+
+    pub fn max_energy(self) -> i32 {
+        let p = self.player();
+        if p.is_null() { return -1; }
+        self.get_max_energy.call(p)
+    }
+
+    pub fn set_max_energy_to(self, amount: i32) {
+        let p = self.player();
+        if p.is_null() { return; }
+        self.set_max_energy.call(p, amount);
+    }
+
+    pub fn combat_energy(self) -> i32 {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return -1; }
+        self.get_energy.call(pcs)
+    }
+
+    pub fn set_combat_energy(self, amount: i32) {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return; }
+        self.set_energy.call(pcs, amount);
+    }
+
+    pub fn combat_max_energy(self) -> i32 {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return -1; }
+        self.get_max_energy_combat.call(pcs)
+    }
+
+    pub fn add_energy(self, amount: i32) {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return; }
+        self.gain_energy.call(pcs, amount);
+    }
+
+    // --- Stars ---
+
+    pub fn stars(self) -> i32 {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return -1; }
+        self.get_stars.call(pcs)
+    }
+
+    pub fn add_stars(self, amount: i32) {
+        let pcs = self.combat_state();
+        if pcs.is_null() { return; }
+        self.gain_stars.call(pcs, amount);
+    }
+
+    // --- HP ---
+
+    pub fn hp(self) -> i32 {
+        let c = self.creature();
+        if c.is_null() { return -1; }
+        self.get_current_hp.call(c)
+    }
+
+    pub fn max_hp(self) -> i32 {
+        let c = self.creature();
+        if c.is_null() { return -1; }
+        self.get_max_hp.call(c)
+    }
+
+    pub fn block(self) -> i32 {
+        let c = self.creature();
+        if c.is_null() { return -1; }
+        self.get_block.call(c)
+    }
+
+    pub fn full_heal(self) {
+        let c = self.creature();
+        if c.is_null() { return; }
+        let max = self.get_max_hp.call(c);
+        self.heal_internal.call(c, max);
+    }
+
+    pub fn add_block(self, amount: i32) {
+        let c = self.creature();
+        if c.is_null() { return; }
+        self.gain_block_internal.call(c, amount);
+    }
+
+    // --- Godmode ---
+
+    pub fn set_godmode(self, enabled: bool) {
+        self.godmode.set(enabled);
+    }
+
+    pub fn is_godmode(self) -> bool {
+        self.godmode.get()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// UiState
+// ---------------------------------------------------------------------------
+
+impl UiState {
+    pub fn new() -> UiState {
+        UiState {
+            gold_amount: cell::new(9999),
+            energy_amount: cell::new(10),
+        }
+    }
+}

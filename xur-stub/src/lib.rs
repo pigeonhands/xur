@@ -264,8 +264,8 @@ mod tests {
         compile("hooking.xur", include_str!("../example/hooking.xur"));
         compile("game_inspector.xur", include_str!("../example/game_inspector.xur"));
         compile("godot.xur", include_str!("../example/godot.xur"));
-        compile("sts2.xur", include_str!("../example/sts2.xur"));
         compile("megabonk_discover.xur", include_str!("../example/megabonk_discover.xur"));
+        compile("sts2.xur", include_str!("../example/sts2.xur"));
     }
 
     #[test]
@@ -276,6 +276,16 @@ mod tests {
             ("megabonk/main.xur", include_str!("../example/megabonk/main.xur")),
             ("megabonk/proxies.xur", include_str!("../example/megabonk/proxies.xur")),
             ("megabonk/ui.xur", include_str!("../example/megabonk/ui.xur")),
+        ]);
+    }
+
+    #[test]
+    #[cfg(feature = "overlay")]
+    fn overlay_examples_compile() {
+        compile_files(&[
+            ("sts2/main.xur", include_str!("../example/sts2/main.xur")),
+            ("sts2/proxies.xur", include_str!("../example/sts2/proxies.xur")),
+            ("sts2/ui.xur", include_str!("../example/sts2/ui.xur")),
         ]);
     }
 

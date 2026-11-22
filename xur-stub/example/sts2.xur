@@ -14,6 +14,7 @@ use std::cell;
 use std::fmt;
 use std::gui;
 use std::log;
+use std::stub::coreclr;
 use std::stub::godot;
 
 // ---------------------------------------------------------------------------
@@ -21,34 +22,34 @@ use std::stub::godot;
 // ---------------------------------------------------------------------------
 
 struct GameMethods {
-    rt: godot::Runtime
+    rt: coreclr::Runtime
     // RunManager → RunState → Player
-    get_rm_instance: godot::MethodPtr
-    get_state: godot::MethodPtr
-    get_debug_state: godot::MethodPtr
-    get_in_progress: godot::MethodPtr
-    get_players: godot::MethodPtr
+    get_rm_instance: coreclr::MethodPtr
+    get_state: coreclr::MethodPtr
+    get_debug_state: coreclr::MethodPtr
+    get_in_progress: coreclr::MethodPtr
+    get_players: coreclr::MethodPtr
     // Player properties
-    get_gold: godot::MethodPtr
-    set_gold: godot::MethodPtr
-    get_max_energy: godot::MethodPtr
-    set_max_energy: godot::MethodPtr
-    get_combat_state: godot::MethodPtr
-    get_creature: godot::MethodPtr
+    get_gold: coreclr::MethodPtr
+    set_gold: coreclr::MethodPtr
+    get_max_energy: coreclr::MethodPtr
+    set_max_energy: coreclr::MethodPtr
+    get_combat_state: coreclr::MethodPtr
+    get_creature: coreclr::MethodPtr
     // PlayerCombatState
-    get_energy: godot::MethodPtr
-    set_energy: godot::MethodPtr
-    get_max_energy_combat: godot::MethodPtr
-    gain_energy: godot::MethodPtr
-    get_stars: godot::MethodPtr
-    gain_stars: godot::MethodPtr
+    get_energy: coreclr::MethodPtr
+    set_energy: coreclr::MethodPtr
+    get_max_energy_combat: coreclr::MethodPtr
+    gain_energy: coreclr::MethodPtr
+    get_stars: coreclr::MethodPtr
+    gain_stars: coreclr::MethodPtr
     // Creature (HP/Block)
-    get_current_hp: godot::MethodPtr
-    get_max_hp: godot::MethodPtr
-    get_block: godot::MethodPtr
-    heal_internal: godot::MethodPtr
-    set_max_hp_internal: godot::MethodPtr
-    gain_block_internal: godot::MethodPtr
+    get_current_hp: coreclr::MethodPtr
+    get_max_hp: coreclr::MethodPtr
+    get_block: coreclr::MethodPtr
+    heal_internal: coreclr::MethodPtr
+    set_max_hp_internal: coreclr::MethodPtr
+    gain_block_internal: coreclr::MethodPtr
     // Godmode toggle
     godmode: cell::Cell<bool>
     player_creature_addr: cell::Cell<i64>
@@ -71,7 +72,7 @@ fn new_ui_state() -> UiState {
 // ---------------------------------------------------------------------------
 
 impl GameMethods {
-    fn init(rt: godot::Runtime) -> Result<GameMethods> {
+    fn init(rt: coreclr::Runtime) -> Result<GameMethods> {
         let asm = "sts2";
         let player_t = "MegaCrit.Sts2.Core.Entities.Players.Player";
         let pcs_t = "MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState";
@@ -167,23 +168,23 @@ impl GameMethods {
         })
     }
 
-    fn player_inner(self) -> godot::ManagedObject {
+    fn player_inner(self) -> coreclr::ManagedObject {
         let rm = self.get_rm_instance.call_ptr();
-        if rm.is_null() { return godot::null(); }
+        if rm.is_null() { return coreclr::null(); }
         let state = self.get_state.call_ptr(rm);
-        if state.is_null() { return godot::null(); }
+        if state.is_null() { return coreclr::null(); }
         // get_Players returns List<Player>: _items at +8, _size at +16
         // Array element 0 at +16 in the array object
         let players_list = self.get_players.call_ptr(state);
-        if players_list.is_null() { return godot::null(); }
+        if players_list.is_null() { return coreclr::null(); }
         let count = players_list.read_i64(16);
-        if count <= 0 { return godot::null(); }
+        if count <= 0 { return coreclr::null(); }
         let items_array = players_list.deref(8);
-        if items_array.is_null() { return godot::null(); }
+        if items_array.is_null() { return coreclr::null(); }
         items_array.deref(16)
     }
 
-    fn player(self) -> godot::ManagedObject {
+    fn player(self) -> coreclr::ManagedObject {
         self.player_inner()
     }
 
@@ -191,15 +192,15 @@ impl GameMethods {
         !self.player().is_null()
     }
 
-    fn creature(self) -> godot::ManagedObject {
+    fn creature(self) -> coreclr::ManagedObject {
         let p = self.player();
-        if p.is_null() { return godot::null(); }
+        if p.is_null() { return coreclr::null(); }
         self.get_creature.call_ptr(p)
     }
 
-    fn combat_state(self) -> godot::ManagedObject {
+    fn combat_state(self) -> coreclr::ManagedObject {
         let p = self.player();
-        if p.is_null() { return godot::null(); }
+        if p.is_null() { return coreclr::null(); }
         self.get_combat_state.call_ptr(p)
     }
 

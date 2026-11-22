@@ -1,0 +1,97 @@
+// Slay the Spire 2 trainer — Godot + CoreCLR (.NET 9) game mod with
+// in-game egui overlay.
+//
+// Loads into the game via LD_PRELOAD, captures the CoreCLR runtime,
+// resolves game methods, and provides an overlay for modifying gold,
+// energy, HP, and other stats. Press F1 to toggle the overlay.
+//
+//     cargo build --release -p xur-stub --features godot,overlay
+//     # Steam > Slay the Spire 2 > Properties > Launch options:
+//     XUR_STUB_PATH=xur-stub/example/sts2/main.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::stub::overlay::egui;
+use std::stub::godot;
+use std::log;
+use std::fmt;
+
+const proxies = std::import("./proxies.xur");
+const draw = std::import("./ui.xur");
+
+fn ctor() {
+    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Info).init();
+    egui::init();
+    egui::set_scale(0.75);
+}
+
+fn stub_main() {
+    log::info("STS2 trainer starting — waiting for CoreCLR...");
+
+    let rt = match godot::init(9) {
+        Ok(r) => r,
+        Err(e) => {
+            log::info(fmt::format("CLR init failed: {}", e));
+            return;
+        }
+    };
+    log::info("CoreCLR attached (.NET 9)");
+
+    let visible = true;
+    let f1_down = false;
+    let game: Option<proxies::GameMethods> = None;
+    let game_error: Option<str> = None;
+    let state = proxies::UiState::new();
+
+    egui::run(|ctx| {
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down {
+            visible = !visible;
+        }
+        f1_down = f1;
+
+        if !visible { return; }
+
+        // Lazy init — resolve methods after CLR is ready.
+        if game.is_none() && game_error.is_none() {
+            match proxies::GameMethods::init(rt) {
+                Ok(g) => { game = Some(g); }
+                Err(e) => {
+                    log::info(fmt::format("init error: {}", e));
+                    game_error = Some(e);
+                }
+            }
+        }
+
+        ctx.window_sized("STS2 Trainer", 380.0, |win| {
+            match game_error {
+                Some(msg) => {
+                    win.colored_label(255, 80, 80, "init error:");
+                    win.small(msg);
+                    return;
+                }
+                None => {}
+            }
+
+            let g = match game {
+                Some(g) => g,
+                None => {
+                    win.small("waiting for CoreCLR runtime...");
+                    return;
+                }
+            };
+
+            if !g.in_game() {
+                win.small("not in game (start a run)");
+                return;
+            }
+
+            draw::draw_status(win, g);
+            win.separator();
+            draw::draw_combat(win, g);
+            win.separator();
+            draw::draw_gold(win, g, state);
+            win.separator();
+            draw::draw_player(win, g);
+        });
+    });
+}

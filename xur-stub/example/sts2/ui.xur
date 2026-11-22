@@ -1,0 +1,101 @@
+// STS2 trainer — UI drawing functions.
+
+use std::fmt;
+use std::stub::overlay::egui;
+
+const proxies = std::import("./proxies.xur");
+
+// ---------------------------------------------------------------------------
+// Status bar — HP, energy, stars, gold
+// ---------------------------------------------------------------------------
+
+pub fn draw_status(ui: egui::Ui, game: proxies::GameMethods) {
+    let c = game.creature();
+    if !c.is_null() {
+        game.player_creature_addr.set(c.address());
+    }
+    let hp = game.hp();
+    let max = game.max_hp();
+    let blk = game.block();
+    if hp >= 0 {
+        ui.label(fmt::format("HP: {}/{} | Block: {}", hp, max, blk));
+    }
+
+    let energy = game.combat_energy();
+    let max_e = game.combat_max_energy();
+    if energy >= 0 {
+        ui.label(fmt::format("Energy: {}/{}", energy, max_e));
+    }
+
+    let stars = game.stars();
+    if stars >= 0 {
+        ui.label(fmt::format("Stars: {}", stars));
+    }
+
+    ui.label(fmt::format("Gold: {}", game.gold()));
+}
+
+// ---------------------------------------------------------------------------
+// Combat — godmode, heal, block, energy, stars
+// ---------------------------------------------------------------------------
+
+pub fn draw_combat(ui: egui::Ui, game: proxies::GameMethods) {
+    ui.heading("Combat");
+
+    let godmode = game.is_godmode();
+    let new_godmode = ui.checkbox(godmode, "Godmode");
+    if new_godmode != godmode {
+        game.set_godmode(new_godmode);
+    }
+
+    ui.horizontal(|row| {
+        if row.button("Full heal") { game.full_heal(); }
+        if row.button("+50 Block") { game.add_block(50); }
+        if row.button("+999 Block") { game.add_block(999); }
+    });
+
+    ui.horizontal(|row| {
+        if row.button("Max energy") {
+            let max = game.combat_max_energy();
+            if max > 0 { game.set_combat_energy(max); }
+        }
+        if row.button("+5 Energy") { game.add_energy(5); }
+        if row.button("+99 Energy") { game.add_energy(99); }
+    });
+
+    ui.horizontal(|row| {
+        if row.button("+10 Stars") { game.add_stars(10); }
+        if row.button("+100 Stars") { game.add_stars(100); }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Gold
+// ---------------------------------------------------------------------------
+
+pub fn draw_gold(ui: egui::Ui, game: proxies::GameMethods, state: proxies::UiState) {
+    ui.heading(fmt::format("Gold: {}", game.gold()));
+    let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
+    state.gold_amount.set(new_amount);
+    ui.horizontal(|row| {
+        if row.button("Set") { game.set_gold_to(state.gold_amount.get()); }
+        if row.button("+1k") { game.set_gold_to(game.gold() + 1000); }
+        if row.button("+10k") { game.set_gold_to(game.gold() + 10000); }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Player stats — max energy
+// ---------------------------------------------------------------------------
+
+pub fn draw_player(ui: egui::Ui, game: proxies::GameMethods) {
+    ui.heading("Player Stats");
+
+    let me = game.max_energy();
+    ui.label(fmt::format("Max Energy: {}", me));
+    ui.horizontal(|row| {
+        if row.button("Set 5") { game.set_max_energy_to(5); }
+        if row.button("Set 10") { game.set_max_energy_to(10); }
+        if row.button("Set 99") { game.set_max_energy_to(99); }
+    });
+}
