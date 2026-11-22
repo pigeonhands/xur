@@ -283,9 +283,10 @@ fn handle_result(
 /// The fields of an opaque [`Region`], as a record.
 fn region_record(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value> {
     let region: &Region = peek.get().map_err(reflect_error)?;
+    let lang = cx.lang();
     let path = match &region.path {
-        Some(path) => Value::str(&path.display().to_string()),
-        None => Value::Unit,
+        Some(path) => Value::adt(lang.some, vec![Value::str(&path.display().to_string())]),
+        None => Value::adt(lang.none, Vec::new()),
     };
     let fields = [
         ("base", Value::Ptr(region.base.get() as u64)),

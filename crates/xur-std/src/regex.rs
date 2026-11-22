@@ -54,11 +54,15 @@ fn regex_captures(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let Value::Native(obj) = this else {
         return Err(RuntimeError::new("expected a Regex"));
     };
+    let lang = cx.lang();
     let caps = obj
         .with(|r: &Regex| {
             r.0.captures(text).map(|caps| {
                 caps.iter()
-                    .map(|m| m.map(|m| Value::str(m.as_str())).unwrap_or(Value::Unit))
+                    .map(|m| match m {
+                        Some(m) => Value::adt(lang.some, vec![Value::str(m.as_str())]),
+                        None => Value::adt(lang.none, Vec::new()),
+                    })
                     .collect::<Vec<_>>()
             })
         })

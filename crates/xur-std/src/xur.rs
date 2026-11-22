@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use xur_runtime::{Registry, RuntimeError, Value};
 
 static INVOKED_BY: OnceLock<String> = OnceLock::new();
-pub(crate) static ARGV: OnceLock<Vec<Value>> = OnceLock::new();
+pub(crate) static ARGV: OnceLock<(Option<Value>, Vec<String>)> = OnceLock::new();
 
 /// Sets how xur was invoked (e.g. "cli", "stub"). Must be called once
 /// before any script runs; later calls are ignored.
@@ -15,14 +15,13 @@ pub fn set_invoked_by(name: &str) {
 
 /// Sets the program's argument list. `script` is the path to the script
 /// (`None` for stdin); `args` are the trailing arguments.
+///
+/// The script path is stored as `None` internally and wrapped in
+/// `Option` when `std::argv()` is called (which has access to the
+/// runtime's lang items).
 pub fn set_argv(script: Option<String>, args: Vec<String>) {
-    let mut values: Vec<Value> = Vec::with_capacity(1 + args.len());
-    match script {
-        Some(path) => values.push(Value::str(&path)),
-        None => values.push(Value::Unit),
-    }
-    values.extend(args.into_iter().map(|a| Value::str(&a)));
-    let _ = ARGV.set(values);
+    let script_value = script.map(|p| Value::str(&p));
+    let _ = ARGV.set((script_value, args));
 }
 
 pub(crate) fn register(registry: &Registry) {

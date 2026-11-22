@@ -4,16 +4,11 @@ use xur_runtime::{Registry, RuntimeError, Value, lock};
 pub(crate) fn register(registry: &Registry) {
     registry
         .module("std::random")
-        .raw_function("int", |_cx, args| {
-            let [Value::Int(min), Value::Int(max)] = args else {
-                return Err(RuntimeError::new("`int` takes (min: int, max: int)"));
-            };
+        .named_function("int", &["min", "max"], |min: i64, max: i64| -> Result<i64, String> {
             if min > max {
-                return Err(RuntimeError::new(format!(
-                    "`int`: min ({min}) must be <= max ({max})"
-                )));
+                return Err(format!("`int`: min ({min}) must be <= max ({max})"));
             }
-            Ok(Value::Int(rand::rng().random_range(*min..=*max)))
+            Ok(rand::rng().random_range(min..=max))
         })
         .function("float", || rand::rng().random::<f64>())
         .function("bool", || rand::rng().random::<bool>())

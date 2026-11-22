@@ -1,6 +1,6 @@
 //! `std::math`: plain Rust functions, registered with their facet types.
 
-use xur_runtime::{Registry, RuntimeError, Value};
+use xur_runtime::Registry;
 
 pub(crate) fn register(registry: &Registry) {
     registry
@@ -34,19 +34,14 @@ pub(crate) fn register(registry: &Registry) {
         .named_function("INFINITY", &[], || f64::INFINITY)
         .named_function("NAN", &[], || f64::NAN)
         // Utility
-        .named_raw_function("clamp", &["val", "min", "max"], |_cx, args| {
-            let [Value::Float(x), Value::Float(min), Value::Float(max)] = args else {
-                return Err(RuntimeError::new("`clamp` takes (val: float, min: float, max: float)"));
-            };
+        .named_function("clamp", &["val", "min", "max"], |x: f64, min: f64, max: f64| -> Result<f64, String> {
             if min.is_nan() || max.is_nan() {
-                return Err(RuntimeError::new("`clamp`: bounds must not be NaN"));
+                return Err("`clamp`: bounds must not be NaN".into());
             }
             if min > max {
-                return Err(RuntimeError::new(format!(
-                    "`clamp`: min ({min}) must be <= max ({max})"
-                )));
+                return Err(format!("`clamp`: min ({min}) must be <= max ({max})"));
             }
-            Ok(Value::Float(x.clamp(*min, *max)))
+            Ok(x.clamp(min, max))
         })
         .named_function("lerp", &["a", "b", "t"], |a: f64, b: f64, t: f64| a + (b - a) * t)
         .named_function("fmin", &["a", "b"], |a: f64, b: f64| a.min(b))
@@ -159,10 +154,9 @@ mod tests {
 
     #[test]
     fn utility_functions() {
-        assert_eq!(
-            call("clamp", &[Value::Float(5.0), Value::Float(0.0), Value::Float(3.0)]),
-            Value::Float(3.0)
-        );
+        let clamped = call("clamp", &[Value::Float(5.0), Value::Float(0.0), Value::Float(3.0)]);
+        let Value::Adt(adt) = &clamped else { panic!("expected Ok(float), got {clamped:?}") };
+        assert_eq!(adt.fields, vec![Value::Float(3.0)]);
 
         let Value::Float(lerp_val) = call("lerp", &[Value::Float(0.0), Value::Float(10.0), Value::Float(0.5)]) else {
             panic!("expected float");

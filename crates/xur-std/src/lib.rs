@@ -183,11 +183,16 @@ fn format(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 }
 
 /// `std::argv()`: the program's argument list as set by `set_argv`.
-fn argv(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+fn argv(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     if !args.is_empty() {
         return Err(RuntimeError::new("`std::argv` takes no arguments"));
     }
-    let items = xur::ARGV.get().cloned().unwrap_or_default();
+    let Some((script, rest)) = xur::ARGV.get() else {
+        return Ok(Value::list(Vec::new()));
+    };
+    let mut items: Vec<Value> = Vec::with_capacity(1 + rest.len());
+    items.push(option(cx, script.clone()));
+    items.extend(rest.iter().map(|a| Value::str(a)));
     Ok(Value::list(items))
 }
 

@@ -39,12 +39,13 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         let info = cx
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::param_types` expects a function"))?;
+        let lang = cx.lang();
         let types: Vec<Value> = info
             .param_types
             .iter()
             .map(|t| match t {
-                Some(ty) => Value::Type(Box::new(ty.clone())),
-                None => Value::Unit,
+                Some(ty) => Value::adt(lang.some, vec![Value::Type(Box::new(ty.clone()))]),
+                None => Value::adt(lang.none, Vec::new()),
             })
             .collect();
         Ok(Value::list(types))
@@ -54,9 +55,10 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         let info = cx
             .fn_info(value)
             .ok_or_else(|| RuntimeError::new("`reflect::func::return_type` expects a function"))?;
+        let lang = cx.lang();
         match info.return_type {
-            Some(ty) => Ok(Value::Type(Box::new(ty))),
-            None => Ok(Value::Unit),
+            Some(ty) => Ok(Value::adt(lang.some, vec![Value::Type(Box::new(ty))])),
+            None => Ok(Value::adt(lang.none, Vec::new())),
         }
     });
 }

@@ -163,16 +163,7 @@ fn parse_spec(cx: &dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value>
 
     let argv: Vec<OsString> = crate::xur::ARGV
         .get()
-        .map(|values| {
-            values
-                .iter()
-                .skip(1)
-                .filter_map(|v| match v {
-                    Value::Str(s) => Some(OsString::from(&**s)),
-                    _ => None,
-                })
-                .collect()
-        })
+        .map(|(_, args)| args.iter().map(|a| OsString::from(a)).collect())
         .unwrap_or_default();
     let mut pargs = pico_args::Arguments::from_vec(argv);
 
@@ -289,16 +280,7 @@ pub(crate) fn register(registry: &Registry) {
                 }
                 let argv: Vec<OsString> = crate::xur::ARGV
                     .get()
-                    .map(|values| {
-                        values
-                            .iter()
-                            .skip(1)
-                            .filter_map(|v| match v {
-                                Value::Str(s) => Some(OsString::from(&**s)),
-                                _ => None,
-                            })
-                            .collect()
-                    })
+                    .map(|(_, args)| args.iter().map(|a| OsString::from(a)).collect())
                     .unwrap_or_default();
                 let inner = pico_args::Arguments::from_vec(argv);
                 into_value(cx, Args(Mutex::new(inner)))

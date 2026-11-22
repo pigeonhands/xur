@@ -194,27 +194,24 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))??;
             Ok(Value::list(list))
         })
-        .raw_function_returns::<Il2CppTypeView>("find_type", |cx, args| {
+        .raw_function_returns_xur("find_type", XurType::Named("Option", &[ElemHint::Name("TypeView")]), |cx, args| {
             let [this, Value::Str(name)] = args else {
                 return Err(RuntimeError::new("`find_type` takes a type name string"));
             };
             let Value::Native(obj) = this else {
                 return Err(RuntimeError::new("expected a `Game`"));
             };
-            let res = obj
+            let found = obj
                 .with(
-                    |g: &Il2CppGame| -> std::result::Result<Value, RuntimeError> {
+                    |g: &Il2CppGame| -> std::result::Result<Option<Value>, RuntimeError> {
                         match g.0.find_type(name.as_ref()) {
-                            Some(tv) => {
-                                let v = into_value(cx, snapshot_type(&g.0, tv))?;
-                                Ok(result(cx, Ok(v)))
-                            }
-                            None => Ok(result(cx, Err(format!("type `{}` not found", name)))),
+                            Some(tv) => Ok(Some(into_value(cx, snapshot_type(&g.0, tv))?)),
+                            None => Ok(None),
                         }
                     },
                 )
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))??;
-            Ok(res)
+            Ok(option(cx, found))
         })
         .method("image_names", |g: &Il2CppGame| -> Vec<String> {
             g.0.image_names().map(|s| s.to_owned()).collect()
