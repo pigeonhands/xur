@@ -5,9 +5,9 @@
 // resolves game methods, and provides an overlay for modifying gold,
 // energy, HP, and other stats. Press F1 to toggle the overlay.
 //
-// Uses hao-godot's lifecycle pump (IL rewrite) to get a per-frame
-// callback on the game's main thread, and dispatch to safely call
-// property setters from the overlay's render thread.
+// Hooks SceneTree._Process from GodotSharp for a per-frame callback
+// on the game's main thread, and dispatch to safely call property
+// setters from the overlay's render thread.
 //
 //     cargo build --release -p xur-stub --features godot,overlay
 //     # Steam > Slay the Spire 2 > Properties > Launch options:
@@ -27,10 +27,6 @@ fn ctor() {
     log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Info).init();
     egui::init();
     egui::set_scale(0.75);
-
-    // Set up lifecycle pump BEFORE the CLR loads the game assembly.
-    // NRun._Process runs every frame on the main thread.
-    godot::intercept_process("sts2.dll", "MegaCrit.Sts2.Core.Nodes.NRun", "_Process");
 }
 
 fn stub_main() {
@@ -43,7 +39,14 @@ fn stub_main() {
             return;
         }
     };
-    log::info("CoreCLR attached (.NET 9), lifecycle pump active");
+
+    match godot::hook_scene_tree() {
+        Ok(_) => log::info("lifecycle pump active (SceneTree._Process)"),
+        Err(e) => {
+            log::info(fmt::format("hook_scene_tree failed: {}", e));
+            return;
+        }
+    }
 
     let visible = true;
     let f1_down = false;

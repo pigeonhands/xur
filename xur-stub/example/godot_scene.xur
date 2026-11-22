@@ -1,8 +1,8 @@
 // Godot scene tree viewer — LD_PRELOAD overlay that shows the game's
 // live node hierarchy in an egui window.
 //
-// Uses hao-godot lifecycle (IL rewrite) for the per-frame pump and
-// dispatches scene tree reads to the game thread.
+// Hooks SceneTree._Process from GodotSharp for the per-frame pump —
+// works for any Godot game, no game-specific types needed.
 //
 //     cargo build --release -p xur-stub --features godot,overlay
 //     # Steam > Game > Properties > Launch options:
@@ -74,13 +74,6 @@ fn ctor() {
     log::subscriber().to_file("/tmp/godot-scene.log").truncate().with_max_level(log::Level::Info).init();
     egui::init();
     egui::set_scale(0.75);
-
-    // Patch a common Godot node's _Process for the lifecycle pump.
-    // Override with env vars if the game doesn't have this type.
-    let asm = std::env::get("HAO_REWRITE_ASSEMBLY").unwrap_or("sts2.dll");
-    let ty = std::env::get("HAO_REWRITE_TYPE").unwrap_or("MegaCrit.Sts2.Core.Nodes.NRun");
-    let method = std::env::get("HAO_REWRITE_METHOD").unwrap_or("_Process");
-    godot::intercept_process(asm, ty, method);
 }
 
 fn stub_main() {
@@ -93,7 +86,14 @@ fn stub_main() {
             return;
         }
     };
-    log::info("CoreCLR attached, lifecycle pump active");
+
+    match godot::hook_scene_tree() {
+        Ok(_) => log::info("lifecycle pump active (SceneTree._Process)"),
+        Err(e) => {
+            log::info(fmt::format("hook_scene_tree failed: {}", e));
+            return;
+        }
+    }
 
     // Resolve the methods we need for tree traversal
     let to_string = match rt.method("GodotSharp", "Godot.GodotObject", "ToString") {

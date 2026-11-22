@@ -6,10 +6,9 @@
 //!
 //! ```text
 //! use std::stub::godot;
-//! use std::stub::coreclr;
 //!
-//! godot::intercept_process("game.dll", "Game.MainNode", "_Process");
 //! let rt = godot::init(9)?;
+//! godot::hook_scene_tree();  // hooks SceneTree._Process — works for any game
 //! godot::dispatch(|| { /* runs on game thread */ });
 //! ```
 
@@ -55,6 +54,15 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // -- lifecycle ------------------------------------------------------
+
+        #[cfg(target_arch = "x86_64")]
+        m.function("hook_scene_tree", || -> Result<(), String> {
+            let rt = RUNTIME
+                .get()
+                .ok_or("runtime not initialized — call init() first")?;
+            hao_godot::lifecycle::hook_scene_tree(rt)
+                .map_err(|e| e.to_string())
+        });
 
         #[cfg(all(unix, target_arch = "x86_64"))]
         m.named_function(
