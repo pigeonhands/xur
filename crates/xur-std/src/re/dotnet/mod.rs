@@ -91,7 +91,12 @@ struct DotnetMethodSig(MethodSig);
 
 impl std::fmt::Display for DotnetMethodSig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MethodSig")
+        write!(f, "(")?;
+        for (i, p) in self.0.params.iter().enumerate() {
+            if i > 0 { write!(f, ", ")?; }
+            write!(f, "{}", DotnetTypeSig(p.clone()))?;
+        }
+        write!(f, ") -> {}", DotnetTypeSig(self.0.ret.clone()))
     }
 }
 

@@ -153,18 +153,18 @@ extern "C" fn coreclr_hook_dispatch(
 fn interpret_hook_result(
     result: Value,
     lang: &xur_resolve::LangItems,
-    int_regs: *mut u64,
+    _int_regs: *mut u64,
 ) -> hooking::DispatchResult {
     if let Value::Adt(ref adt) = result {
         if adt.ctor == lang.none {
             return hooking::DispatchResult::passthrough();
         }
         if adt.ctor == lang.some {
-            unsafe {
-                *int_regs.add(1) = 0; // rsi
-                *int_regs.add(2) = 0; // rdx
-            }
-            return hooking::DispatchResult::passthrough();
+            let val = match adt.fields.first() {
+                Some(Value::Int(v)) => *v as u64,
+                _ => 0,
+            };
+            return hooking::DispatchResult::override_int(val);
         }
     }
     hooking::DispatchResult::passthrough()
@@ -175,18 +175,25 @@ fn interpret_hook_result(
 // ---------------------------------------------------------------------------
 
 fn marshal_int_args(args: &[Value]) -> Result<Vec<u64>, RuntimeError> {
-    args.iter()
-        .map(|v| match v {
-            Value::Int(i) => Ok(*i as u64),
-            Value::Bool(b) => Ok(*b as u64),
-            Value::Float(f) => Ok(*f as u64),
-            Value::Native(n) => Ok(n
-                .with(|o: &ManagedObject| o.0 as u64)
-                .unwrap_or(0)),
-            Value::Unit => Ok(0),
-            _ => Err(RuntimeError::new("unsupported argument type for call")),
-        })
-        .collect()
+    let mut out = Vec::with_capacity(args.len());
+    for v in args {
+        match v {
+            Value::Int(i) => out.push(*i as u64),
+            Value::Bool(b) => out.push(*b as u64),
+            Value::Float(f) => out.push(*f as u64),
+            Value::Native(n) => {
+                #[cfg(feature = "xur-decimal")]
+                if let Some(regs) = n.with(|d: &xur_std::decimal::XurDecimal| d.to_dotnet_regs()) {
+                    out.extend_from_slice(&regs);
+                    continue;
+                }
+                out.push(n.with(|o: &ManagedObject| o.0 as u64).unwrap_or(0));
+            }
+            Value::Unit => out.push(0),
+            _ => return Err(RuntimeError::new("unsupported argument type for call")),
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -395,14 +402,13 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("patch_precode_target only supported on x86_64"))
         })
-        .raw_function("peek_bytes", |_cx, args| {
-            let [this, Value::Int(count)] = args else {
-                return Err(RuntimeError::new("`peek_bytes` takes (count: int)"));
-            };
-            let ptr = extract_ptr(this)?;
-            let n = (*count).max(0) as usize;
-            let hex = unsafe { hao_runtime::jit::peek_bytes(ptr.0, n) };
-            Ok(Value::str(&hex))
+        .method("peek_bytes", |p: &MethodPtr, count: i64| -> String {
+            let n = count.max(0) as usize;
+            unsafe { hao_runtime::jit::peek_bytes(p.0, n) }
+        })
+        .method("read_bytes", |p: &MethodPtr, count: i64| -> Vec<u8> {
+            let n = count.max(0) as usize;
+            unsafe { std::slice::from_raw_parts(p.0 as *const u8, n).to_vec() }
         });
 }
 
@@ -410,22 +416,10 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
     m.ty::<ManagedObject>("ManagedObject")
         .method("address", |o: &ManagedObject| -> i64 { o.0 as i64 })
         .method("is_null", |o: &ManagedObject| -> bool { o.0 == 0 })
-        .raw_function("read_i64", |_cx, args| {
-            let [this, Value::Int(offset)] = args else {
-                return Err(RuntimeError::new("`read_i64` takes (offset: int)"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a ManagedObject"));
-            };
-            let addr = obj
-                .with(|o: &ManagedObject| o.0)
-                .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
-            if addr == 0 {
-                return Err(RuntimeError::new("null pointer"));
-            }
-            let ptr = (addr as isize + *offset as isize) as *const i64;
-            let val = unsafe { std::ptr::read_unaligned(ptr) };
-            Ok(Value::Int(val))
+        .method("read_i64", |o: &ManagedObject, offset: i64| -> i64 {
+            assert!(o.0 != 0, "null pointer");
+            let ptr = (o.0 as isize + offset as isize) as *const i64;
+            unsafe { std::ptr::read_unaligned(ptr) }
         })
         .raw_function("deref", |cx, args| {
             let [this, Value::Int(offset)] = args else {
@@ -444,22 +438,20 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
             let val = unsafe { std::ptr::read_unaligned(ptr) };
             into_value(cx, ManagedObject(val))
         })
-        .raw_function("read_u8", |_cx, args| {
-            let [this, Value::Int(offset)] = args else {
-                return Err(RuntimeError::new("`read_u8` takes (offset: int)"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a ManagedObject"));
-            };
-            let addr = obj
-                .with(|o: &ManagedObject| o.0)
-                .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
-            if addr == 0 {
-                return Err(RuntimeError::new("null pointer"));
-            }
-            let ptr = (addr as isize + *offset as isize) as *const u8;
-            let val = unsafe { std::ptr::read(ptr) };
-            Ok(Value::Int(val as i64))
+        .method("read_u8", |o: &ManagedObject, offset: i64| -> i64 {
+            assert!(o.0 != 0, "null pointer");
+            let ptr = (o.0 as isize + offset as isize) as *const u8;
+            (unsafe { std::ptr::read(ptr) }) as i64
+        })
+        .method("read_i32", |o: &ManagedObject, offset: i64| -> i64 {
+            assert!(o.0 != 0, "null pointer");
+            let ptr = (o.0 as isize + offset as isize) as *const i32;
+            (unsafe { std::ptr::read_unaligned(ptr) }) as i64
+        })
+        .method("write_i32", |o: &ManagedObject, offset: i64, value: i64| {
+            assert!(o.0 != 0, "null pointer");
+            let ptr = (o.0 as isize + offset as isize) as *mut i32;
+            unsafe { std::ptr::write(ptr, value as i32) };
         });
 }
 
