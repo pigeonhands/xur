@@ -42,6 +42,7 @@ fn get_or_init_bridge() -> Arc<Bridge> {
 }
 
 fn init_early() {
+    tracing::info!("overlay::egui: init_early called");
     let bridge = get_or_init_bridge();
     let render_bridge = Arc::clone(&bridge);
 
@@ -49,6 +50,9 @@ fn init_early() {
         let n = render_bridge.frames.fetch_add(1, Ordering::Relaxed);
         if n == 0 {
             tracing::info!("overlay: first frame from render thread");
+        }
+        if n < 3 {
+            tracing::debug!("overlay: frame {n}, ready={}", render_bridge.ready.load(Ordering::Relaxed));
         }
 
         if !render_bridge.ready.load(Ordering::Relaxed) {
@@ -69,7 +73,9 @@ fn init_early() {
         }
     });
 
+    tracing::info!("overlay::egui: calling hao_egui_overlay::init()");
     hao_egui_overlay::init();
+    tracing::info!("overlay::egui: init complete");
 }
 
 pub(crate) fn register(registry: &Registry) {
@@ -114,8 +120,10 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             RuntimeError::new("egui not initialised (call egui::init() in ctor)")
         })?;
 
+        tracing::info!("overlay::egui: run() called, marking ready");
         bridge.ready.store(true, Ordering::Relaxed);
 
+        let mut frame_n = 0u64;
         loop {
             let ctx = {
                 let mut state = bridge.mu.lock().unwrap();
@@ -123,10 +131,16 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                     state = bridge.cv.wait(state).unwrap();
                 }
                 if state.shutdown {
+                    tracing::info!("overlay::egui: shutdown received");
                     return Ok(Value::Unit);
                 }
                 state.ctx.take().unwrap()
             };
+
+            if frame_n == 0 {
+                tracing::info!("overlay::egui: first draw dispatch to script");
+            }
+            frame_n += 1;
 
             let ctx_val = into_value(cx, EguiCtx::from_ctx(&ctx)).expect("EguiCtx registered");
             if let Err(e) = cx.call(&draw, &[ctx_val]) {

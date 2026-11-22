@@ -28,8 +28,14 @@ pub(crate) fn register(registry: &Registry) {
             let major = *major as u16;
 
             hao_godot::on_clr_init(move |host| {
+                tracing::info!("godot: CLR init callback fired, sleeping 5s before attach");
                 std::thread::sleep(std::time::Duration::from_secs(5));
+                tracing::info!("godot: attaching to CoreCLR (major={major})");
                 let result = host.attach(major);
+                match &result {
+                    Ok(_) => tracing::info!("godot: CoreCLR attach succeeded"),
+                    Err(e) => tracing::error!("godot: CoreCLR attach failed: {e}"),
+                }
                 tx.send(result).ok();
             });
 
