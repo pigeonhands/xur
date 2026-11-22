@@ -137,5 +137,27 @@ pub(crate) fn register(registry: &Registry) {
 
             result.map_err(|e| RuntimeError::new(e.message))
         });
+
+        // -- scene ----------------------------------------------------------
+
+        m.raw_function("scene_tree", |cx, _args| {
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
+            let main_loop = hao_godot::engine::engine::get_main_loop(rt)
+                .map_err(|e| RuntimeError::new(e.to_string()))?;
+            super::coreclr::managed_object_value(cx, main_loop as usize)
+        });
+
+        m.raw_function("root", |cx, _args| {
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
+            let main_loop = hao_godot::engine::engine::get_main_loop(rt)
+                .map_err(|e| RuntimeError::new(e.to_string()))?;
+            let root = hao_godot::engine::scene_tree::get_root(rt, main_loop as usize)
+                .map_err(|e| RuntimeError::new(e.to_string()))?;
+            super::coreclr::managed_object_value(cx, root as usize)
+        });
     });
 }

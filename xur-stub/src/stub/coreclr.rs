@@ -402,6 +402,20 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("patch_precode_target only supported on x86_64"))
         })
+        .raw_function("call_string", |_cx, args| {
+            if args.is_empty() {
+                return Err(RuntimeError::new("`call_string` takes at least self"));
+            }
+            let ptr = extract_ptr(&args[0])?;
+            let call_args = marshal_int_args(&args[1..])?;
+            #[cfg(target_arch = "x86_64")]
+            {
+                let result = unsafe { call_native(ptr.0, &call_args) };
+                Ok(Value::str(&read_clr_string(result as usize)))
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            Err(RuntimeError::new("call_string only supported on x86_64"))
+        })
         .method("peek_bytes", |p: &MethodPtr, count: i64| -> String {
             let n = count.max(0) as usize;
             unsafe { hao_runtime::jit::peek_bytes(p.0, n) }
@@ -452,6 +466,9 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
             assert!(o.0 != 0, "null pointer");
             let ptr = (o.0 as isize + offset as isize) as *mut i32;
             unsafe { std::ptr::write(ptr, value as i32) };
+        })
+        .method("read_string", |o: &ManagedObject| -> String {
+            read_clr_string(o.0)
         });
 }
 
@@ -474,6 +491,24 @@ fn register_captured_ref(m: &mut ModuleBuilder<'_>) {
 // ---------------------------------------------------------------------------
 // Extractors
 // ---------------------------------------------------------------------------
+
+/// Reads a CoreCLR System.String object: `[MethodTable:8][length:i32][UTF-16 chars...]`
+fn read_clr_string(addr: usize) -> String {
+    if addr == 0 {
+        return String::new();
+    }
+    let len = unsafe { std::ptr::read_unaligned((addr + 8) as *const i32) };
+    if len <= 0 {
+        return String::new();
+    }
+    let chars_ptr = (addr + 12) as *const u16;
+    let slice = unsafe { std::slice::from_raw_parts(chars_ptr, len as usize) };
+    String::from_utf16_lossy(slice)
+}
+
+pub(crate) fn managed_object_value(cx: &mut dyn xur_runtime::Context, addr: usize) -> xur_runtime::RunResult<Value> {
+    into_value(cx, ManagedObject(addr))
+}
 
 fn extract_ptr(val: &Value) -> Result<MethodPtr, RuntimeError> {
     let Value::Native(obj) = val else {

@@ -1,0 +1,146 @@
+// Godot scene tree viewer — LD_PRELOAD overlay that shows the game's
+// live node hierarchy in an egui window.
+//
+// Uses hao-godot lifecycle (IL rewrite) for the per-frame pump and
+// dispatches scene tree reads to the game thread.
+//
+//     cargo build --release -p xur-stub --features godot,overlay
+//     # Steam > Game > Properties > Launch options:
+//     XUR_STUB_PATH=xur-stub/example/godot_scene.xur \
+//         LD_PRELOAD=target/release/libxur_stub.so %command%
+
+use std::cell;
+use std::fmt;
+use std::gui;
+use std::log;
+use std::stub::coreclr;
+use std::stub::godot;
+use std::stub::overlay::egui;
+
+// ---------------------------------------------------------------------------
+// Scene tree snapshot — captured on the game thread, drawn on the render thread
+// ---------------------------------------------------------------------------
+
+pub struct TreeNode {
+    name: str
+    child_count: i32
+    children: [TreeNode]
+}
+
+fn capture_node(to_string: coreclr::MethodPtr, get_child_count: coreclr::MethodPtr, get_child: coreclr::MethodPtr, node: coreclr::ManagedObject, depth: i32) -> TreeNode {
+    let name = to_string.call_string(node);
+    let count = get_child_count.call(node);
+
+    let children = [];
+    if depth < 6 {
+        let i = 0;
+        while i < count {
+            let child = get_child.call_ptr(node, i);
+            if !child.is_null() {
+                children.push(capture_node(to_string, get_child_count, get_child, child, depth + 1));
+            }
+            i = i + 1;
+        }
+    }
+
+    TreeNode { name: name, child_count: count, children: children }
+}
+
+fn draw_node(ui: gui::Ui, node: TreeNode, depth: i32) {
+    let indent = "";
+    let d = 0;
+    while d < depth {
+        indent = indent + "  ";
+        d = d + 1;
+    }
+
+    let label = if node.child_count > 0 {
+        fmt::format("{}▸ {} ({})", indent, node.name, node.child_count)
+    } else {
+        fmt::format("{}  {}", indent, node.name)
+    };
+    ui.small(label);
+
+    for child in node.children {
+        draw_node(ui, child, depth + 1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Entry points
+// ---------------------------------------------------------------------------
+
+fn ctor() {
+    log::subscriber().to_file("/tmp/godot-scene.log").truncate().with_max_level(log::Level::Info).init();
+    egui::init();
+    egui::set_scale(0.75);
+
+    // Patch a common Godot node's _Process for the lifecycle pump.
+    // Override with env vars if the game doesn't have this type.
+    let asm = std::env::get("HAO_REWRITE_ASSEMBLY").unwrap_or("sts2.dll");
+    let ty = std::env::get("HAO_REWRITE_TYPE").unwrap_or("MegaCrit.Sts2.Core.Nodes.NRun");
+    let method = std::env::get("HAO_REWRITE_METHOD").unwrap_or("_Process");
+    godot::intercept_process(asm, ty, method);
+}
+
+fn stub_main() {
+    log::info("Scene tree viewer starting — waiting for CoreCLR...");
+
+    let rt = match godot::init(9) {
+        Ok(r) => r,
+        Err(e) => {
+            log::info(fmt::format("CLR init failed: {}", e));
+            return;
+        }
+    };
+    log::info("CoreCLR attached, lifecycle pump active");
+
+    // Resolve the methods we need for tree traversal
+    let to_string = match rt.method("GodotSharp", "Godot.GodotObject", "ToString") {
+        Ok(m) => m,
+        Err(e) => {
+            log::info(fmt::format("failed to resolve ToString: {}", e));
+            return;
+        }
+    };
+    let get_child_count = rt.method("GodotSharp", "Godot.Node", "GetChildCount").unwrap();
+    let get_child = rt.method("GodotSharp", "Godot.Node", "GetChild").unwrap();
+    log::info("methods resolved, starting overlay");
+
+    let visible = true;
+    let f1_down = false;
+    let snapshot: Option<TreeNode> = None;
+    let frame_count = cell::new(0);
+
+    egui::run(|ctx| {
+        let f1 = ctx.key("f1");
+        if f1 && !f1_down {
+            visible = !visible;
+        }
+        f1_down = f1;
+
+        if !visible { return; }
+
+        // Refresh snapshot every 60 frames
+        let fc = frame_count.get() + 1;
+        frame_count.set(fc);
+
+        if snapshot.is_none() || fc % 60 == 0 {
+            let root = godot::root();
+            if !root.is_null() {
+                snapshot = Some(capture_node(to_string, get_child_count, get_child, root, 0));
+            }
+        }
+
+        ctx.window_sized("Scene Tree", 450.0, |win| {
+            match snapshot {
+                Some(tree) => {
+                    draw_node(win, tree, 0);
+                }
+                None => {
+                    win.small("waiting for scene tree...");
+                }
+            }
+        });
+    });
+}
