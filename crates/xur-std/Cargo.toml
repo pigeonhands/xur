@@ -11,7 +11,7 @@ name = "xur_std"
 path = "src/lib.rs"
 
 [features]
-default = ["cli", "http", "regex", "datetime", "json", "re", "gui", "random", "hash"]
+default = ["cli", "http", "regex", "datetime", "json", "re", "gui", "random", "hash", "rust_decimal"]
 random            = ["dep:rand"]
 hash              = ["dep:sha2", "dep:md-5", "dep:crc32fast"]
 cli               = ["dep:pico-args", "dep:inquire", "dep:comfy-table"]
@@ -30,6 +30,7 @@ re-unreal         = ["dep:unrealkit"]
 re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime", "re-demangle", "re-unreal"]
 egui-widgets      = ["dep:egui"]
 gui               = ["dep:eframe", "dep:winit", "egui-widgets"]
+rust_decimal = ["dep:rust_decimal"]
 
 [dependencies]
 xur-ast.workspace = true
@@ -56,6 +57,7 @@ crc32fast = { version = "1", optional = true }
 rekit = { workspace = true, features = ["demangle", "pattern"], optional = true }
 unrealkit = { workspace = true, optional = true }
 egui = { version = "0.37", optional = true }
+rust_decimal = { version = "1.43.0", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

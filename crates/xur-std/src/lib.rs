@@ -10,6 +10,8 @@ mod bytes;
 mod cell;
 #[cfg(feature = "cli")]
 mod cli;
+#[cfg(feature = "rust_decimal")]
+pub mod decimal;
 mod env;
 #[cfg(feature = "random")]
 mod random;
@@ -118,6 +120,8 @@ pub fn register(registry: &Registry) {
     xur::register(registry);
     #[cfg(feature = "cli")]
     cli::register(registry);
+    #[cfg(feature = "rust_decimal")]
+    decimal::register(registry);
 }
 
 /// `std::import(path)`: loads a module, which may be computed at runtime.

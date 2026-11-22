@@ -1,0 +1,89 @@
+.TH XUR.STD.DECIMAL 7 "2026-11-22" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.decimal \- arbitrary-precision decimal numbers
+.SH SYNOPSIS
+.nf
+use std::decimal;
+
+let d = decimal::from_int(100);
+let e = decimal::from_str("3.14")?;
+io::println("{}", d);
+.fi
+.SH DESCRIPTION
+.B std::decimal
+provides a
+.B Decimal
+type backed by the
+.B rust_decimal
+crate, giving 96 bits of significand with a scale of 0\(en28.
+.PP
+Decimals avoid the rounding issues of floating-point arithmetic and are
+the native representation of .NET
+.B System.Decimal
+values, making them essential for interacting with CoreCLR methods that
+take or return decimals.
+.SH FUNCTIONS
+.TP
+.B from_int(value) -> Decimal
+Create a decimal from an integer.
+.TP
+.B from_float(value) -> Result<Decimal, str>
+Create a decimal from a float. Returns an error if the float
+cannot be represented exactly (e.g. NaN, infinity).
+.TP
+.B from_str(value) -> Result<Decimal, str>
+Parse a decimal from a string such as
+.BR \(dq3.14\(dq " or " \(dq\-100.5\(dq .
+.SH METHODS
+.TP
+.B scale() -> int
+The number of decimal places (0\(en28).
+.TP
+.B is_sign_negative() -> bool
+True if the value is negative.
+.TP
+.B is_sign_positive() -> bool
+True if the value is positive or zero.
+.TP
+.B abs() -> Decimal
+Absolute value.
+.TP
+.B floor() -> Decimal
+Round towards negative infinity.
+.TP
+.B ceil() -> Decimal
+Round towards positive infinity.
+.TP
+.B round() -> Decimal
+Round to the nearest integer (half away from zero).
+.TP
+.B round_dp(dp) -> Decimal
+Round to
+.I dp
+decimal places.
+.TP
+.B to_int() -> int
+Convert to an integer, truncating towards zero. Returns 0 if the
+value is out of range.
+.TP
+.B to_float() -> float
+Convert to a 64-bit float. Returns 0.0 if the value is out of range.
+.SH EXAMPLES
+.nf
+use std::decimal;
+use std::io;
+
+fn main() -> Result<()> {
+    let price = decimal::from_str("19.99")?;
+    let qty = decimal::from_int(3);
+
+    io::println("price = {}", price);
+    io::println("rounded = {}", price.round());
+    io::println("scale = {}", price.scale());
+
+    Ok(())
+}
+.fi
+.SH SEE ALSO
+.BR xur.std (7),
+.BR xur.std.num (7)

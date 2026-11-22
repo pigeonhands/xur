@@ -1,0 +1,42 @@
+// Working with arbitrary-precision decimals.
+//
+// Run it:
+//
+//     xur run example/decimal/decimal.xur
+//
+// Demonstrates construction from integers, floats, and strings,
+// rounding, arithmetic, and conversion back to int/float.
+
+use std::decimal;
+use std::io;
+
+fn main() -> Result<()> {
+    // Construction
+    let a = decimal::from_int(100);
+    let b = decimal::from_float(3.14)?;
+    let c = decimal::from_str("99.95")?;
+
+    io::println("a = {}", a);
+    io::println("b = {}", b);
+    io::println("c = {}", c);
+
+    // Properties
+    io::println("b scale = {}", b.scale());
+    io::println("b negative? {}", b.is_sign_negative());
+
+    // Rounding
+    io::println("b floor = {}", b.floor());
+    io::println("b ceil  = {}", b.ceil());
+    io::println("b round = {}", b.round());
+    io::println("b round_dp(1) = {}", b.round_dp(1));
+
+    // Conversion
+    io::println("c as int   = {}", c.to_int());
+    io::println("c as float = {}", c.to_float());
+
+    // Absolute value
+    let neg = decimal::from_int(-42);
+    io::println("{}.abs() = {}", neg, neg.abs());
+
+    Ok(())
+}

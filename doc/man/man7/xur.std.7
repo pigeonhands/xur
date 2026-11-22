@@ -315,6 +315,24 @@ with
 See
 .BR xur.std.regex (7).
 .TP
+.B std::decimal
+Arbitrary-precision decimal numbers.
+.BR from_int ,
+.BR from_float ,
+.BR from_str .
+.B Decimal
+type with
+.BR scale() ,
+.BR abs() ,
+.BR floor() ,
+.BR ceil() ,
+.BR round() ,
+.BR round_dp() ,
+.BR to_int() ,
+.BR to_float() .
+See
+.BR xur.std.decimal (7).
+.TP
 .B std::xur
 Runtime metadata.
 .B invoked_by()
@@ -689,4 +707,5 @@ fn main() -> Result<(), str> {
 .BR xur.std.datetime (7),
 .BR xur.std.env (7),
 .BR xur.std.random (7),
-.BR xur.std.hash (7)
+.BR xur.std.hash (7),
+.BR xur.std.decimal (7)
