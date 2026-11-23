@@ -16,6 +16,7 @@ use std::log;
 
 const proxies = std::import("./proxies.xur");
 const draw = std::import("./ui.xur");
+use proxies::{Tab, InvTab};
 
 // ---------------------------------------------------------------------------
 // Tab bar
@@ -24,30 +25,24 @@ const draw = std::import("./ui.xur");
 fn tab_bar(ui: gui::Ui, state: proxies::UiState) {
     let tab = state.tab.get();
     ui.horizontal(|row| {
-        if row.selectable(tab == 0, "Combat")    { state.tab.set(0); }
-        if row.selectable(tab == 1, "Camera")    { state.tab.set(1); }
-        if row.selectable(tab == 2, "Economy")   { state.tab.set(2); }
-        if row.selectable(tab == 3, "Inventory") { state.tab.set(3); }
+        if row.selectable(tab == Tab::Combat,    "Combat")    { state.tab.set(Tab::Combat); }
+        if row.selectable(tab == Tab::Camera,    "Camera")    { state.tab.set(Tab::Camera); }
+        if row.selectable(tab == Tab::Economy,   "Economy")   { state.tab.set(Tab::Economy); }
+        if row.selectable(tab == Tab::Inventory, "Inventory") { state.tab.set(Tab::Inventory); }
     });
 }
 
-// ---------------------------------------------------------------------------
-// Inventory sub-tabs
-// ---------------------------------------------------------------------------
-
 fn draw_inventory(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
+    let inv = state.inv_tab.get();
     ui.horizontal(|row| {
-        if row.selectable(state.tab.get() == 3, "Weapons") { state.tab.set(3); }
-        if row.selectable(state.tab.get() == 4, "Tomes")   { state.tab.set(4); }
-        if row.selectable(state.tab.get() == 5, "Items")   { state.tab.set(5); }
+        if row.selectable(inv == InvTab::Weapons, "Weapons") { state.inv_tab.set(InvTab::Weapons); }
+        if row.selectable(inv == InvTab::Tomes,   "Tomes")   { state.inv_tab.set(InvTab::Tomes); }
+        if row.selectable(inv == InvTab::Items,   "Items")   { state.inv_tab.set(InvTab::Items); }
     });
-    let inv_tab = state.tab.get();
-    if inv_tab == 3 {
-        draw::draw_weapons(ui, game, state);
-    } else if inv_tab == 4 {
-        draw::draw_tomes(ui, game, state);
-    } else if inv_tab == 5 {
-        draw::draw_items(ui, game, state);
+    match state.inv_tab.get() {
+        InvTab::Weapons => { draw::draw_weapons(ui, game, state); }
+        InvTab::Tomes   => { draw::draw_tomes(ui, game, state); }
+        InvTab::Items   => { draw::draw_items(ui, game, state); }
     }
 }
 
@@ -121,15 +116,11 @@ fn stub_main() {
             tab_bar(win, state);
             win.separator();
 
-            let tab = state.tab.get();
-            if tab == 0 {
-                draw::draw_combat(win, game, state);
-            } else if tab == 1 {
-                draw::draw_camera(win, game);
-            } else if tab == 2 {
-                draw::draw_economy(win, game, state);
-            } else {
-                draw_inventory(win, game, state);
+            match state.tab.get() {
+                Tab::Combat    => { draw::draw_combat(win, game, state); }
+                Tab::Camera    => { draw::draw_camera(win, game); }
+                Tab::Economy   => { draw::draw_economy(win, game, state); }
+                Tab::Inventory => { draw_inventory(win, game, state); }
             }
         });
     });

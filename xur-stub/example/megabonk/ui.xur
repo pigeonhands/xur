@@ -8,6 +8,7 @@ use std::stub::unity::egui;
 use std::stub::re::unity::time;
 
 const proxies = std::import("./proxies.xur");
+use proxies::OwnedOrAdd;
 
 pub fn draw_combat(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiState) {
     let godmode = game.is_godmode();
@@ -231,11 +232,11 @@ pub fn draw_weapons(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiS
 
     let wt = state.weapon_tab.get();
     ui.horizontal(|row| {
-        if row.selectable(wt == 0, fmt::format("Owned ({})", owned.len())) { state.weapon_tab.set(0); }
-        if row.selectable(wt == 1, "Add") { state.weapon_tab.set(1); }
+        if row.selectable(wt == OwnedOrAdd::Owned, fmt::format("Owned ({})", owned.len())) { state.weapon_tab.set(OwnedOrAdd::Owned); }
+        if row.selectable(wt == OwnedOrAdd::Add, "Add") { state.weapon_tab.set(OwnedOrAdd::Add); }
     });
 
-    if state.weapon_tab.get() == 0 {
+    if state.weapon_tab.get() == OwnedOrAdd::Owned {
         if owned.len() > 0 {
             ui.scroll(200.0, |scroll| {
                 scroll.grid("weapons_owned", 5, |g| {
@@ -331,11 +332,11 @@ pub fn draw_tomes(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiSta
 
     let tt = state.tome_tab.get();
     ui.horizontal(|row| {
-        if row.selectable(tt == 0, fmt::format("Owned ({})", owned.len())) { state.tome_tab.set(0); }
-        if row.selectable(tt == 1, "Add") { state.tome_tab.set(1); }
+        if row.selectable(tt == OwnedOrAdd::Owned, fmt::format("Owned ({})", owned.len())) { state.tome_tab.set(OwnedOrAdd::Owned); }
+        if row.selectable(tt == OwnedOrAdd::Add, "Add") { state.tome_tab.set(OwnedOrAdd::Add); }
     });
 
-    if state.tome_tab.get() == 0 {
+    if state.tome_tab.get() == OwnedOrAdd::Owned {
         if owned.len() > 0 {
             ui.scroll(200.0, |scroll| {
                 scroll.grid("tomes_owned", 3, |g| {
@@ -413,11 +414,11 @@ pub fn draw_items(ui: gui::Ui, game: proxies::GameRuntime, state: proxies::UiSta
 
     let it = state.item_tab.get();
     ui.horizontal(|row| {
-        if row.selectable(it == 0, fmt::format("Owned ({})", owned.len())) { state.item_tab.set(0); }
-        if row.selectable(it == 1, "Add") { state.item_tab.set(1); }
+        if row.selectable(it == OwnedOrAdd::Owned, fmt::format("Owned ({})", owned.len())) { state.item_tab.set(OwnedOrAdd::Owned); }
+        if row.selectable(it == OwnedOrAdd::Add, "Add") { state.item_tab.set(OwnedOrAdd::Add); }
     });
 
-    if state.item_tab.get() == 0 {
+    if state.item_tab.get() == OwnedOrAdd::Owned {
         if owned.len() > 0 {
             ui.scroll(200.0, |scroll| {
                 scroll.grid("items_owned", 6, |g| {
