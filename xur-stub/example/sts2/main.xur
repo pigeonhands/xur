@@ -1,7 +1,7 @@
 // Slay the Spire 2 trainer — Godot + CoreCLR (.NET 9) game mod with
 // in-game egui overlay.
 //
-//     cargo build --release -p xur-stub --features godot,overlay
+//     cargo build --release -p xur-stub
 //     # Steam > Slay the Spire 2 > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/sts2/main.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
@@ -38,6 +38,7 @@ fn stub_main() {
     let f1_down = false;
     let game: Option<proxies::GameState> = None;
     let combat: Option<proxies::Combat> = None;
+    let cards: Option<proxies::CardHelper> = None;
     let init_error: Option<str> = None;
     let state = proxies::UiState::new();
 
@@ -50,6 +51,10 @@ fn stub_main() {
 
         if !visible { return; }
 
+        // Process pending portrait uploads outside window_sized to avoid
+        // re-entrant native object Mutex deadlock.
+        draw::process_pending_portraits(ctx, state);
+
         if game.is_none() && init_error.is_none() {
             match proxies::GameState::init(rt) {
                 Ok(g) => {
@@ -57,6 +62,12 @@ fn stub_main() {
                         Ok(c) => {
                             game = Some(g);
                             combat = Some(c);
+                            match proxies::CardHelper::init(rt) {
+                                Ok(ch) => { cards = Some(ch); }
+                                Err(e) => {
+                                    log::info(fmt::format("CardHelper init error: {}", e));
+                                }
+                            }
                         }
                         Err(e) => {
                             log::info(fmt::format("Combat init error: {}", e));
@@ -112,7 +123,12 @@ fn stub_main() {
 
             match state.tab.get() {
                 Tab::Combat => { draw::draw_combat(win, g, c); }
-                Tab::Cards  => { draw::draw_cards(win, g, c); }
+                Tab::Cards  => {
+                    match cards {
+                        Some(ch) => { draw::draw_cards(win, g, c, ch, state); }
+                        None => { win.small("card helper not available (check log)"); }
+                    }
+                }
                 Tab::Gold   => { draw::draw_gold(win, g, state); }
                 Tab::Player => { draw::draw_player(win, g); }
             }

@@ -37,6 +37,23 @@ pub struct Combat {
     player_creature_addr: cell::Cell<i64>
 }
 
+pub struct CardHelper {
+    get_title: coreclr::MethodPtr
+    get_portrait: coreclr::MethodPtr
+    remove_card: coreclr::MethodPtr
+}
+
+pub struct CardInfo {
+    pub obj: coreclr::ManagedObject
+    pub title: str
+}
+
+pub struct PortraitData {
+    pub width: i32
+    pub height: i32
+    pub data: bytes
+}
+
 pub enum Tab {
     Combat
     Cards
@@ -44,10 +61,27 @@ pub enum Tab {
     Player
 }
 
+struct CachedPortrait {
+    addr: i64
+    tex_id: i64
+    width: i32
+    height: i32
+}
+
+pub struct PendingPortrait {
+    pub addr: i64
+    pub width: i32
+    pub height: i32
+    pub data: bytes
+}
+
 pub struct UiState {
     tab: cell::Cell<Tab>
     gold_amount: cell::Cell<i32>
     energy_amount: cell::Cell<i32>
+    portraits: cell::Cell<[CachedPortrait]>
+    pending: cell::Cell<[PendingPortrait]>
+    requested: cell::Cell<[i64]>
 }
 
 impl GameState {
@@ -274,6 +308,26 @@ impl Combat {
         Combat::pile_count(self.get_exhaust_pile.call_ptr(pcs))
     }
 
+    pub fn hand_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
+        if pcs.is_null() { return coreclr::null(); }
+        self.get_hand.call_ptr(pcs)
+    }
+
+    pub fn draw_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
+        if pcs.is_null() { return coreclr::null(); }
+        self.get_draw_pile.call_ptr(pcs)
+    }
+
+    pub fn discard_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
+        if pcs.is_null() { return coreclr::null(); }
+        self.get_discard_pile.call_ptr(pcs)
+    }
+
+    pub fn exhaust_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
+        if pcs.is_null() { return coreclr::null(); }
+        self.get_exhaust_pile.call_ptr(pcs)
+    }
+
     pub fn draw_cards(self, player: coreclr::ManagedObject, n: i32) {
         if player.is_null() { return; }
         let cmd = self.draw_card_cmd;
@@ -293,12 +347,124 @@ impl Combat {
     }
 }
 
+impl CardHelper {
+    pub fn init(rt: coreclr::Runtime) -> Result<CardHelper> {
+        let asm = "sts2";
+        let gs = "GodotSharp";
+        let card_t = "MegaCrit.Sts2.Core.Models.CardModel";
+        let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+
+        log::info("resolving CardHelper...");
+        let get_title = rt.method(asm, card_t, "get_Title")?;
+        let get_portrait = rt.method(asm, card_t, "get_Portrait")?;
+        let remove_card = rt.find_method(asm, rs_t, "RemoveCard", 1)?;
+
+        godot::resolve_image_bindings()?;
+
+        Ok(CardHelper { get_title, get_portrait, remove_card })
+    }
+
+    pub fn card_title(self, card: coreclr::ManagedObject) -> str {
+        if card.is_null() { return "?"; }
+        let s = self.get_title.call_ptr(card);
+        if s.is_null() { return "?"; }
+        s.read_string()
+    }
+
+    pub fn pile_cards(self, pile: coreclr::ManagedObject) -> [CardInfo] {
+        let result = [];
+        if pile.is_null() { return result; }
+        let list = pile.deref(8);
+        if list.is_null() { return result; }
+        let count = list.read_i32(16);
+        if count <= 0 { return result; }
+        let items = list.deref(8);
+        if items.is_null() { return result; }
+        let i = 0;
+        while i < count {
+            let card = items.deref(16 + i * 8);
+            if !card.is_null() {
+                let title = self.card_title(card);
+                result.push(CardInfo { obj: card, title: title });
+            }
+            i += 1;
+        }
+        result
+    }
+
+    pub fn card_portrait_rgba(self, card: coreclr::ManagedObject) -> Option<PortraitData> {
+        if card.is_null() { return None; }
+        let tex = self.get_portrait.call_ptr(card);
+        if tex.is_null() { return None; }
+        match godot::texture_to_rgba(tex) {
+            Ok(result) => {
+                Some(PortraitData { width: result.0, height: result.1, data: result.2 })
+            }
+            Err(e) => {
+                log::info(fmt::format("portrait error: {}", e));
+                None
+            }
+        }
+    }
+
+    pub fn remove_from_deck(self, game: GameState, card: coreclr::ManagedObject) {
+        if card.is_null() { return; }
+        let rm = game.get_rm_instance.call_ptr();
+        if rm.is_null() { return; }
+        let state = game.get_state.call_ptr(rm);
+        if state.is_null() { return; }
+        let remover = self.remove_card;
+        godot::dispatch(|| { remover.call(state, card); });
+    }
+}
+
 impl UiState {
     pub fn new() -> UiState {
         UiState {
             tab: cell::new(Tab::Combat),
             gold_amount: cell::new(9999),
             energy_amount: cell::new(10),
+            portraits: cell::new([]),
+            pending: cell::new([]),
+            requested: cell::new([]),
         }
+    }
+
+    pub fn find_portrait(self, addr: i64) -> Option<CachedPortrait> {
+        for entry in self.portraits.get() {
+            if entry.addr == addr { return Some(entry); }
+        }
+        None
+    }
+
+    pub fn cache_portrait(self, addr: i64, tex_id: i64, width: i32, height: i32) {
+        let cache = self.portraits.get();
+        cache.push(CachedPortrait { addr: addr, tex_id: tex_id, width: width, height: height });
+        self.portraits.set(cache);
+    }
+
+    pub fn is_portrait_requested(self, addr: i64) -> bool {
+        for a in self.requested.get() {
+            if a == addr { return true; }
+        }
+        false
+    }
+
+    pub fn mark_portrait_requested(self, addr: i64) {
+        let r = self.requested.get();
+        r.push(addr);
+        self.requested.set(r);
+    }
+
+    pub fn push_pending_portrait(self, p: PendingPortrait) {
+        let cur = self.pending.get();
+        cur.push(p);
+        self.pending.set(cur);
+    }
+
+    pub fn take_pending_portraits(self) -> [PendingPortrait] {
+        let cur = self.pending.get();
+        self.pending.set([]);
+        cur
     }
 }

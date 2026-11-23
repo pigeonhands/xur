@@ -14,6 +14,7 @@
 //! ```
 
 mod dispatch;
+mod image;
 mod init;
 mod lifecycle;
 mod scene;
@@ -26,6 +27,7 @@ pub(crate) fn register(registry: &Registry) {
         lifecycle::register(m);
         dispatch::register(m);
         scene::register(m);
+        image::register(m);
     });
 }
 

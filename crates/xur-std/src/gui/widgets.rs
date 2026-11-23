@@ -1,9 +1,16 @@
-use egui::{Color32, Frame, Grid, ScrollArea, Slider, Window};
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use std::sync::Arc;
+
+use egui::{Color32, ColorImage, Frame, Grid, Image, ImageData, ScrollArea, Slider, TextureHandle, TextureId, TextureOptions, Vec2, Window};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
 
 use super::types::{EguiCtx, EguiUi, with_ctx, with_ui};
+
+static TEXTURES: Mutex<Option<HashMap<u64, TextureHandle>>> = Mutex::new(None);
 
 pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'_>) {
     let mut ty = m.ty::<EguiCtx>("Ctx");
@@ -74,6 +81,42 @@ pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'
                 });
             Ok(ret)
         })
+    });
+
+    ty.method(
+        "load_texture_rgba",
+        |wrapper: &EguiCtx, name: String, width: i64, height: i64, rgba: Vec<u8>| -> Result<i64, String> {
+            let w = width as usize;
+            let h = height as usize;
+            if rgba.len() != w * h * 4 {
+                return Err(format!(
+                    "expected {} bytes ({}x{}x4), got {}",
+                    w * h * 4, w, h, rgba.len()
+                ));
+            }
+            let image = ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+            let ctx = wrapper.ctx();
+            let tex_mngr = ctx.tex_manager();
+            let tex_id = tex_mngr.write().alloc(
+                name,
+                ImageData::Color(Arc::new(image)),
+                TextureOptions::LINEAR,
+            );
+            let TextureId::Managed(id) = tex_id else {
+                return Err("unexpected texture id type".into());
+            };
+            let handle = TextureHandle::new(tex_mngr, tex_id);
+            let mut map = TEXTURES.lock().unwrap();
+            map.get_or_insert_with(HashMap::new).insert(id, handle);
+            Ok(id as i64)
+        },
+    );
+
+    ty.method("free_texture", |_wrapper: &EguiCtx, id: i64| {
+        let mut map = TEXTURES.lock().unwrap();
+        if let Some(m) = map.as_mut() {
+            m.remove(&(id as u64));
+        }
     });
 }
 
@@ -207,7 +250,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                 match cx.call(&body, &[inner]) {
                     Ok(val) => ret = val,
-                    Err(e) => { let _ = e; }
+                    Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                 }
             });
             Ok(ret)
@@ -230,7 +273,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                 match cx.call(&body, &[inner]) {
                     Ok(val) => ret = val,
-                    Err(e) => { let _ = e; }
+                    Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                 }
             });
             Ok(ret)
@@ -256,7 +299,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                 match cx.call(&body, &[inner]) {
                     Ok(val) => ret = val,
-                    Err(e) => { let _ = e; }
+                    Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                 }
             });
             Ok(ret)
@@ -278,7 +321,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                         let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                         match cx.call(&body_fn, &[inner]) {
                             Ok(val) => ret = val,
-                            Err(e) => { let _ = e; }
+                            Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                         }
                     });
                     Ok(ret)
@@ -294,7 +337,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                         let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
                         match cx.call(&body_fn, &[inner]) {
                             Ok(val) => ret = val,
-                            Err(e) => { let _ = e; }
+                            Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                         }
                     });
                     Ok(ret)
@@ -329,7 +372,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                         into_value(cx, EguiUi::from_ui(grid_ui)).expect("EguiUi registered");
                     match cx.call(&body, &[inner]) {
                         Ok(val) => ret = val,
-                        Err(e) => { let _ = e; }
+                        Err(e) => { tracing::error!("gui callback error: {}", e.message); }
                     }
                 });
             Ok(ret)
@@ -383,5 +426,14 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
             ui.add_space(*amount as f32);
             Ok(Value::Unit)
         })
+    });
+
+    ty.method("image", |wrapper: &EguiUi, tex_id: i64, width: f64, height: f64| {
+        let ui = wrapper.ui();
+        let sized = egui::load::SizedTexture::new(
+            TextureId::Managed(tex_id as u64),
+            Vec2::new(width as f32, height as f32),
+        );
+        ui.add(Image::new(sized));
     });
 }

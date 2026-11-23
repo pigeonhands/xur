@@ -488,6 +488,12 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
         })
         .method("read_string", |o: &ManagedObject| -> String {
             read_clr_string(o.0)
+        })
+        .method("read_bytes", |o: &ManagedObject, offset: i64, count: i64| -> Vec<u8> {
+            assert!(o.0 != 0, "null pointer");
+            let n = count.max(0) as usize;
+            let ptr = (o.0 as isize + offset as isize) as *const u8;
+            unsafe { std::slice::from_raw_parts(ptr, n).to_vec() }
         });
 }
 

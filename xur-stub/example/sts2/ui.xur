@@ -1,6 +1,9 @@
 use std::fmt;
 use std::gui;
+use std::log;
+use std::stub::coreclr;
 use std::stub::overlay::egui;
+use std::stub::godot;
 
 const proxies = std::import("./proxies.xur");
 
@@ -63,21 +66,105 @@ pub fn draw_combat(ui: gui::Ui, game: proxies::GameState, combat: proxies::Comba
     });
 }
 
-pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat) {
+fn request_card_portrait(ch: proxies::CardHelper, card_obj: coreclr::ManagedObject, addr: i64, state: proxies::UiState) {
+    if state.is_portrait_requested(addr) { return; }
+    state.mark_portrait_requested(addr);
+    godot::dispatch(|| {
+        match ch.card_portrait_rgba(card_obj) {
+            Some(rgba) => {
+                state.push_pending_portrait(proxies::PendingPortrait {
+                    addr: addr, width: rgba.width, height: rgba.height, data: rgba.data,
+                });
+            }
+            None => {}
+        }
+    });
+}
+
+pub fn process_pending_portraits(ctx: gui::Ctx, state: proxies::UiState) {
+    let pending = state.take_pending_portraits();
+    let max = 3;
+    let i = 0;
+    let deferred = [];
+    for p in pending {
+        if i >= max {
+            deferred.push(p);
+        } else {
+            let name = fmt::format("card_{}", p.addr);
+            match ctx.load_texture_rgba(name, p.width, p.height, p.data) {
+                Ok(id) => {
+                    state.cache_portrait(p.addr, id, p.width, p.height);
+                }
+                Err(e) => {
+                    log::info(fmt::format("portrait upload err: {}", e));
+                }
+            }
+            i += 1;
+        }
+    }
+    if deferred.len() > 0 {
+        for d in deferred {
+            state.push_pending_portrait(d);
+        }
+    }
+}
+
+fn draw_pile_cards(ui: gui::Ui, game: proxies::GameState, ch: proxies::CardHelper, state: proxies::UiState, cards: [proxies::CardInfo], label: str) {
+    if cards.len() == 0 {
+        ui.small(fmt::format("{}: empty", label));
+        return;
+    }
+    ui.label(fmt::format("{} ({})", label, cards.len()));
+    ui.scroll(200.0, |scroll| {
+        scroll.grid(fmt::format("{}_grid", label), 3, |g| {
+            for card in cards {
+                let addr = card.obj.address();
+                match state.find_portrait(addr) {
+                    Some(cached) => {
+                        g.image(cached.tex_id, 63.0, 48.0);
+                    }
+                    None => {
+                        request_card_portrait(ch, card.obj, addr, state);
+                        g.label("...");
+                    }
+                }
+                g.label(card.title);
+                if g.button("Remove") {
+                    ch.remove_from_deck(game, card.obj);
+                }
+                g.end_row();
+            }
+        });
+    });
+}
+
+pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat, ch: proxies::CardHelper, state: proxies::UiState) {
+
     let pcs = game.combat_state();
-    let hand = combat.hand_count(pcs);
-    let draw = combat.draw_pile_count(pcs);
-    let disc = combat.discard_count(pcs);
-    let exh = combat.exhaust_count(pcs);
-
-    ui.label(fmt::format("Hand: {}  Draw: {}  Discard: {}  Exhaust: {}", hand, draw, disc, exh));
-
+    if pcs.is_null() {
+        ui.small("not in combat");
+        return;
+    }
     let p = game.player();
+
     ui.horizontal(|row| {
         if row.button("Draw 1") { combat.draw_cards(p, 1); }
         if row.button("Draw 3") { combat.draw_cards(p, 3); }
         if row.button("Draw 5") { combat.draw_cards(p, 5); }
     });
+
+    let hand_cards = ch.pile_cards(combat.hand_pile(pcs));
+    draw_pile_cards(ui, game, ch, state, hand_cards, "Hand");
+
+    ui.separator();
+
+    let draw_cards = ch.pile_cards(combat.draw_pile(pcs));
+    draw_pile_cards(ui, game, ch, state, draw_cards, "Draw Pile");
+
+    ui.separator();
+
+    let disc_cards = ch.pile_cards(combat.discard_pile(pcs));
+    draw_pile_cards(ui, game, ch, state, disc_cards, "Discard");
 }
 
 pub fn draw_gold(ui: gui::Ui, game: proxies::GameState, state: proxies::UiState) {
