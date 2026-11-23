@@ -5,7 +5,7 @@
 // resolves game methods, and provides an overlay for modifying gold,
 // energy, HP, and other stats. Press F1 to toggle the overlay.
 //
-// Hooks SceneTree._Process from GodotSharp for a per-frame callback
+// Hooks NRun._Process from sts2.dll for a per-frame callback
 // on the game's main thread, and dispatch to safely call property
 // setters from the overlay's render thread.
 //
@@ -27,7 +27,7 @@ fn ctor() {
     log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Debug).init();
     egui::init();
     egui::set_scale(0.75);
-    godot::hook_scene_tree();
+    godot::intercept_process("sts2.dll", "MegaCrit.Sts2.Core.Nodes.NRun", "_Process");
 }
 
 fn stub_main() {
