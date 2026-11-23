@@ -213,6 +213,12 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
         .method("module_at", |h: &Handle, address: u64| {
             h.0.module_at(addr(address)).map_err(error_text)
         })
+        .method("mapped_images", |h: &Handle| {
+            h.0.mapped_images().map_err(error_text)
+        })
+        .method("mapped_image", |h: &Handle, name: String| {
+            h.0.mapped_image(&name).map_err(error_text)
+        })
         // `method` is a `LoadMethod` value: `LoadMethod::Loader` (the OS
         // loader) or `LoadMethod::ManualMap` (mapped directly, without the
         // OS loader's involvement or module-list entry).

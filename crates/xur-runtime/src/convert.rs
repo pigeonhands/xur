@@ -339,8 +339,10 @@ fn set_scalar(partial: Builder, scalar: ScalarType, value: &Value) -> RunResult<
     let shape = partial.shape();
     macro_rules! int {
         ($ty:ty) => {{
-            let Value::Int(int) = *value else {
-                return Err(mismatch(shape, value));
+            let int = match *value {
+                Value::Int(i) => i,
+                Value::Ptr(p) => p as i64,
+                _ => return Err(mismatch(shape, value)),
             };
             let int = <$ty>::try_from(int).map_err(|_| {
                 RuntimeError::new(format!("{int} does not fit in `{}`", stringify!($ty)))
