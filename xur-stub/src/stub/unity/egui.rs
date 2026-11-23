@@ -1,14 +1,14 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
-use hao_il2cpp_unity::egui as hao_egui;
 use hao_egui::Context;
+use hao_il2cpp_unity::egui as hao_egui;
 use hao_il2cpp_unity::egui::{Image, TextureId, Vec2};
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use xur_std::gui::{EguiCtx, EguiUi, with_ctx, with_ui};
+use xur_std::gui::{with_ctx, with_ui, EguiCtx, EguiUi};
 
 use crate::stub::il2cpp::XurObject;
 
@@ -57,15 +57,17 @@ fn init_early() {
             .class("UnityEngine.CoreModule", "UnityEngine", "Application")
             .and_then(|app| app.method("Quit", 1));
         if let Ok(quit) = quit_result {
-            let _ = quit.hook(move |exit_code: i32, original: hao_il2cpp_runtime::Original<_, ()>| {
-                hao_il2cpp_unity::shutdown();
-                {
-                    let mut state = quit_bridge.mu.lock().unwrap();
-                    state.shutdown = true;
-                    quit_bridge.cv.notify_all();
-                }
-                original.call((exit_code,));
-            });
+            let _ = quit.hook(
+                move |exit_code: i32, original: hao_il2cpp_runtime::Original<_, ()>| {
+                    hao_il2cpp_unity::shutdown();
+                    {
+                        let mut state = quit_bridge.mu.lock().unwrap();
+                        state.shutdown = true;
+                        quit_bridge.cv.notify_all();
+                    }
+                    original.call((exit_code,));
+                },
+            );
         }
 
         let wake_bridge = Arc::clone(&render_bridge);
@@ -140,7 +142,8 @@ pub(crate) fn register(registry: &Registry) {
             let Value::Native(n) = obj_val else {
                 return Err(RuntimeError::new("`register_texture` takes a Unity Object"));
             };
-            let obj = n.with(|o: &XurObject| o.obj())
+            let obj = n
+                .with(|o: &XurObject| o.obj())
                 .ok_or_else(|| RuntimeError::new("expected an il2cpp Object"))?;
             let tex_id = hao_egui::register_user_texture(obj)
                 .map_err(|e| RuntimeError::new(format!("register_texture: {e}")))?;
@@ -152,7 +155,9 @@ pub(crate) fn register(registry: &Registry) {
 
         m.raw_function("unregister_texture", |_cx, args| {
             let [Value::Int(id)] = args else {
-                return Err(RuntimeError::new("`unregister_texture` takes a texture id (int)"));
+                return Err(RuntimeError::new(
+                    "`unregister_texture` takes a texture id (int)",
+                ));
             };
             hao_egui::unregister_user_texture(TextureId::User(*id as u64));
             Ok(Value::Unit)
@@ -175,9 +180,9 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         }
 
         let draw = draw.clone();
-        let bridge = BRIDGE.get().ok_or_else(|| {
-            RuntimeError::new("egui not initialised (call egui::init() in ctor)")
-        })?;
+        let bridge = BRIDGE
+            .get()
+            .ok_or_else(|| RuntimeError::new("egui not initialised (call egui::init() in ctor)"))?;
 
         bridge.ready.store(true, Ordering::Relaxed);
 
@@ -215,9 +220,7 @@ fn register_frame_count(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         if !args.is_empty() {
             return Err(RuntimeError::new("`frame_count` takes no arguments"));
         }
-        let count = BRIDGE
-            .get()
-            .map_or(0, |b| b.frames.load(Ordering::Relaxed));
+        let count = BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed));
         Ok(Value::Int(count as i64))
     });
 }
@@ -229,8 +232,8 @@ fn register_key(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             return Err(RuntimeError::new("`key` takes a key name string"));
         };
         let _ = with_ctx(this, |_ctx| Ok(Value::Unit))?;
-        let code = parse_keycode(name)
-            .ok_or_else(|| RuntimeError::new(format!("unknown key: {name}")))?;
+        let code =
+            parse_keycode(name).ok_or_else(|| RuntimeError::new(format!("unknown key: {name}")))?;
         Ok(Value::Bool(input::key(code).unwrap_or(false)))
     });
 }

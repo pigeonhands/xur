@@ -1,16 +1,14 @@
 //! `#[il2cpp_proxy]` macro expander — generates constructors and hook wiring
 //! for structs that map to IL2CPP classes.
 
-use xur_resolve::macros::{MacroExpander, MacroError, MacroField, MacroTrigger, TriggerKind};
+use xur_resolve::macros::{MacroError, MacroExpander, MacroField, MacroTrigger, TriggerKind};
 
 pub(crate) struct Il2CppProxyExpander;
 
 impl MacroExpander for Il2CppProxyExpander {
     fn expand(&self, trigger: &MacroTrigger) -> Result<String, MacroError> {
         match &trigger.kind {
-            TriggerKind::Struct { name, fields } => {
-                expand_struct(name, fields, &trigger.attr_args)
-            }
+            TriggerKind::Struct { name, fields } => expand_struct(name, fields, &trigger.attr_args),
             TriggerKind::Impl { self_ty, functions } => {
                 expand_impl(self_ty, functions, &trigger.attr_args)
             }
@@ -35,20 +33,29 @@ fn expand_struct(
 
     for field in fields {
         match classify_field(field) {
-            FieldKind::Il2CppField { il2cpp_name, _is_static: _ } => {
+            FieldKind::Il2CppField {
+                il2cpp_name,
+                _is_static: _,
+            } => {
                 field_inits.push(format!(
                     "            {}: _cls.field(\"{il2cpp_name}\")?,",
                     field.name
                 ));
             }
-            FieldKind::Il2CppMethod { il2cpp_name, params } => {
+            FieldKind::Il2CppMethod {
+                il2cpp_name,
+                params,
+            } => {
                 let temp = format!("_m_{}", field.name);
                 method_temps.push(format!(
                     "        let {temp} = _cls.method(\"{il2cpp_name}\", {params})?;"
                 ));
                 field_inits.push(format!("            {}: {temp},", field.name));
             }
-            FieldKind::Il2CppHook { il2cpp_name, params } => {
+            FieldKind::Il2CppHook {
+                il2cpp_name,
+                params,
+            } => {
                 let temp = format!("_m_{}", field.name);
                 method_temps.push(format!(
                     "        let {temp} = _cls.method(\"{il2cpp_name}\", {params})?;"
@@ -262,9 +269,18 @@ fn expand_impl(
 }
 
 enum FieldKind<'a> {
-    Il2CppField { il2cpp_name: &'a str, _is_static: bool },
-    Il2CppMethod { il2cpp_name: &'a str, params: &'a str },
-    Il2CppHook { il2cpp_name: &'a str, params: &'a str },
+    Il2CppField {
+        il2cpp_name: &'a str,
+        _is_static: bool,
+    },
+    Il2CppMethod {
+        il2cpp_name: &'a str,
+        params: &'a str,
+    },
+    Il2CppHook {
+        il2cpp_name: &'a str,
+        params: &'a str,
+    },
     Plain,
 }
 
@@ -272,27 +288,27 @@ fn classify_field<'a>(field: &'a MacroField) -> FieldKind<'a> {
     for attr in &field.attrs {
         match attr.name.as_str() {
             "il2cpp_field" => {
-                let il2cpp_name = attr
-                    .value_or_name_arg()
-                    .unwrap_or(field.name.as_str());
+                let il2cpp_name = attr.value_or_name_arg().unwrap_or(field.name.as_str());
                 return FieldKind::Il2CppField {
                     il2cpp_name,
                     _is_static: attr.has_flag("static"),
                 };
             }
             "il2cpp_method" => {
-                let il2cpp_name = attr
-                    .value_or_name_arg()
-                    .unwrap_or(field.name.as_str());
+                let il2cpp_name = attr.value_or_name_arg().unwrap_or(field.name.as_str());
                 let params = attr.arg_or("params", "0");
-                return FieldKind::Il2CppMethod { il2cpp_name, params };
+                return FieldKind::Il2CppMethod {
+                    il2cpp_name,
+                    params,
+                };
             }
             "il2cpp_hook" => {
-                let il2cpp_name = attr
-                    .value_or_name_arg()
-                    .unwrap_or(field.name.as_str());
+                let il2cpp_name = attr.value_or_name_arg().unwrap_or(field.name.as_str());
                 let params = attr.arg_or("params", "0");
-                return FieldKind::Il2CppHook { il2cpp_name, params };
+                return FieldKind::Il2CppHook {
+                    il2cpp_name,
+                    params,
+                };
             }
             _ => {}
         }
@@ -301,7 +317,5 @@ fn classify_field<'a>(field: &'a MacroField) -> FieldKind<'a> {
 }
 
 fn find_arg<'a>(args: &'a [(String, String)], key: &str) -> Option<&'a str> {
-    args.iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| v.as_str())
+    args.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }

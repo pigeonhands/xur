@@ -5,7 +5,7 @@ use hao_egui_overlay::egui;
 use xur_runtime::convert::into_value;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use xur_std::gui::{EguiCtx, with_ctx};
+use xur_std::gui::{with_ctx, EguiCtx};
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -52,7 +52,10 @@ fn init_early() {
             tracing::info!("overlay: first frame from render thread");
         }
         if n < 3 {
-            tracing::debug!("overlay: frame {n}, ready={}", render_bridge.ready.load(Ordering::Relaxed));
+            tracing::debug!(
+                "overlay: frame {n}, ready={}",
+                render_bridge.ready.load(Ordering::Relaxed)
+            );
         }
 
         if !render_bridge.ready.load(Ordering::Relaxed) {
@@ -116,9 +119,9 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         }
 
         let draw = draw.clone();
-        let bridge = BRIDGE.get().ok_or_else(|| {
-            RuntimeError::new("egui not initialised (call egui::init() in ctor)")
-        })?;
+        let bridge = BRIDGE
+            .get()
+            .ok_or_else(|| RuntimeError::new("egui not initialised (call egui::init() in ctor)"))?;
 
         tracing::info!("overlay::egui: run() called, marking ready");
         bridge.ready.store(true, Ordering::Relaxed);
@@ -164,9 +167,7 @@ fn register_frame_count(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         if !args.is_empty() {
             return Err(RuntimeError::new("`frame_count` takes no arguments"));
         }
-        let count = BRIDGE
-            .get()
-            .map_or(0, |b| b.frames.load(Ordering::Relaxed));
+        let count = BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed));
         Ok(Value::Int(count as i64))
     });
 }
@@ -178,19 +179,17 @@ fn register_key(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             return Err(RuntimeError::new("`key` takes a key name string"));
         };
         with_ctx(this, |ctx| {
-            let pressed = ctx.input(|i| {
-                match name.to_ascii_lowercase().as_str() {
-                    "f1" => i.key_down(egui::Key::F1),
-                    "f2" => i.key_down(egui::Key::F2),
-                    "f3" => i.key_down(egui::Key::F3),
-                    "f4" => i.key_down(egui::Key::F4),
-                    "f5" => i.key_down(egui::Key::F5),
-                    "escape" | "esc" => i.key_down(egui::Key::Escape),
-                    "space" => i.key_down(egui::Key::Space),
-                    "tab" => i.key_down(egui::Key::Tab),
-                    "return" | "enter" => i.key_down(egui::Key::Enter),
-                    _ => false,
-                }
+            let pressed = ctx.input(|i| match name.to_ascii_lowercase().as_str() {
+                "f1" => i.key_down(egui::Key::F1),
+                "f2" => i.key_down(egui::Key::F2),
+                "f3" => i.key_down(egui::Key::F3),
+                "f4" => i.key_down(egui::Key::F4),
+                "f5" => i.key_down(egui::Key::F5),
+                "escape" | "esc" => i.key_down(egui::Key::Escape),
+                "space" => i.key_down(egui::Key::Space),
+                "tab" => i.key_down(egui::Key::Tab),
+                "return" | "enter" => i.key_down(egui::Key::Enter),
+                _ => false,
             });
             Ok(Value::Bool(pressed))
         })

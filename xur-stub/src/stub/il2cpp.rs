@@ -15,7 +15,7 @@ use std::sync::{Mutex, OnceLock};
 
 use facet::Facet;
 use hao_il2cpp_runtime::{self as rt, Il2Cpp};
-use xur_runtime::convert::{ConvertCx, into_value};
+use xur_runtime::convert::{into_value, ConvertCx};
 use xur_runtime::{Registry, RuntimeError, Value};
 
 // ---------------------------------------------------------------------------
@@ -43,7 +43,10 @@ fn static_api() -> Option<&'static StaticApi> {
                 unsafe { lib.get(b"il2cpp_field_static_get_value") }.ok()?;
             let set: libloading::Symbol<StaticSetFn> =
                 unsafe { lib.get(b"il2cpp_field_static_set_value") }.ok()?;
-            let api = StaticApi { get: *get, set: *set };
+            let api = StaticApi {
+                get: *get,
+                set: *set,
+            };
             // The game assembly stays loaded for the process lifetime.
             std::mem::forget(lib);
             Some(api)
@@ -304,8 +307,11 @@ fn read_instance_field(
             let v: f64 = unsafe { field.read(object) };
             Ok(Value::Float(v))
         }
-        ElementType::String | ElementType::Class | ElementType::Object
-        | ElementType::GenericInst | ElementType::SzArray => {
+        ElementType::String
+        | ElementType::Class
+        | ElementType::Object
+        | ElementType::GenericInst
+        | ElementType::SzArray => {
             let v: rt::Object = unsafe { field.read(object) };
             Ok(into_value(cx, XurObject::from_obj(v))?)
         }
@@ -367,8 +373,14 @@ fn write_instance_field(
         (ElementType::R8, Value::Float(v)) => unsafe { field.write(object, *v) },
         (ElementType::R8, Value::Int(v)) => unsafe { field.write(object, *v as f64) },
         (ElementType::Boolean, Value::Int(v)) => unsafe { field.write(object, *v != 0) },
-        (ElementType::String | ElementType::Class | ElementType::Object
-        | ElementType::GenericInst | ElementType::SzArray, Value::Native(n)) => {
+        (
+            ElementType::String
+            | ElementType::Class
+            | ElementType::Object
+            | ElementType::GenericInst
+            | ElementType::SzArray,
+            Value::Native(n),
+        ) => {
             if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
                 unsafe { field.write(object, obj) };
             } else {
@@ -389,9 +401,8 @@ fn read_static_field(
     cx: &mut dyn xur_runtime::registry::Context,
     field: &rt::Field,
 ) -> Result<Value, RuntimeError> {
-    let api = static_api().ok_or_else(|| {
-        RuntimeError::new("il2cpp_field_static_get_value not available")
-    })?;
+    let api = static_api()
+        .ok_or_else(|| RuntimeError::new("il2cpp_field_static_get_value not available"))?;
 
     let elem = field.element_type();
     match elem {
@@ -425,8 +436,11 @@ fn read_static_field(
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut f64 as *mut c_void) };
             Ok(Value::Float(v))
         }
-        ElementType::String | ElementType::Class | ElementType::Object
-        | ElementType::GenericInst | ElementType::SzArray => {
+        ElementType::String
+        | ElementType::Class
+        | ElementType::Object
+        | ElementType::GenericInst
+        | ElementType::SzArray => {
             let mut v: *mut c_void = std::ptr::null_mut();
             unsafe {
                 (api.get)(field.as_ptr(), &mut v as *mut *mut c_void as *mut c_void);
@@ -440,9 +454,8 @@ fn read_static_field(
 }
 
 fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeError> {
-    let api = static_api().ok_or_else(|| {
-        RuntimeError::new("il2cpp_field_static_set_value not available")
-    })?;
+    let api = static_api()
+        .ok_or_else(|| RuntimeError::new("il2cpp_field_static_set_value not available"))?;
 
     let elem = field.element_type();
     match (elem, value) {
@@ -460,8 +473,14 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
         (ElementType::R8, Value::Float(v)) => unsafe {
             (api.set)(field.as_ptr(), v as *const f64 as *const c_void);
         },
-        (ElementType::String | ElementType::Class | ElementType::Object
-        | ElementType::GenericInst | ElementType::SzArray, Value::Native(n)) => {
+        (
+            ElementType::String
+            | ElementType::Class
+            | ElementType::Object
+            | ElementType::GenericInst
+            | ElementType::SzArray,
+            Value::Native(n),
+        ) => {
             if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
                 let ptr = obj.as_ptr();
                 unsafe { (api.set)(field.as_ptr(), &ptr as *const *mut c_void as *const c_void) };
@@ -528,18 +547,15 @@ fn do_invoke(
         match arg {
             Value::Int(v) => {
                 arg_storage.push(*v);
-                invoke_args
-                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+                invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Float(v) => {
                 arg_storage.push(v.to_bits() as i64);
-                invoke_args
-                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+                invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Bool(v) => {
                 arg_storage.push(*v as i64);
-                invoke_args
-                    .push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
+                invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Native(n) => {
                 if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
@@ -559,9 +575,8 @@ fn do_invoke(
     };
 
     let mut exception: *mut c_void = std::ptr::null_mut();
-    let result = unsafe {
-        (api.il2cpp_runtime_invoke)(method_raw, this_raw, args_ptr, &mut exception)
-    };
+    let result =
+        unsafe { (api.il2cpp_runtime_invoke)(method_raw, this_raw, args_ptr, &mut exception) };
 
     if !exception.is_null() {
         let msg = unsafe { il2cpp.exception_message(exception) };
@@ -660,60 +675,52 @@ fn marshal_arg(
                 element::U8 => Ok(Value::Int(raw as u64 as i64)),
                 element::R4 => Ok(Value::Float(f32::from_bits(raw as u32) as f64)),
                 element::R8 => Ok(Value::Float(f64::from_bits(raw))),
-                element::STRING | element::CLASS | element::OBJECT
-                | element::GENERICINST | element::SZARRAY | element::ARRAY => {
-                    into_value(cx, XurObject(raw as usize))
-                }
+                element::STRING
+                | element::CLASS
+                | element::OBJECT
+                | element::GENERICINST
+                | element::SZARRAY
+                | element::ARRAY => into_value(cx, XurObject(raw as usize)),
                 _ => Ok(Value::Int(raw as i64)),
             }
         }
-        rt::ParamSlot::FloatReg(i) => {
-            match param.type_info.element {
-                element::R4 => Ok(Value::Float(regs.read_f32(i) as f64)),
-                _ => Ok(Value::Float(regs.read_f64(i))),
-            }
-        }
+        rt::ParamSlot::FloatReg(i) => match param.type_info.element {
+            element::R4 => Ok(Value::Float(regs.read_f32(i) as f64)),
+            _ => Ok(Value::Float(regs.read_f64(i))),
+        },
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-fn write_arg_to_regs(
-    regs: &mut hooking::SavedRegs,
-    param: &rt::GenericParam,
-    val: &Value,
-) {
+fn write_arg_to_regs(regs: &mut hooking::SavedRegs, param: &rt::GenericParam, val: &Value) {
     match param.slot {
         rt::ParamSlot::IntReg(i) => {
             let raw: u64 = match val {
                 Value::Bool(b) => *b as u64,
                 Value::Int(n) => *n as u64,
                 Value::Float(f) => *f as u64,
-                Value::Native(n) => {
-                    n.with(|o: &XurObject| o.0 as u64).unwrap_or(0)
-                }
+                Value::Native(n) => n.with(|o: &XurObject| o.0 as u64).unwrap_or(0),
                 _ => return,
             };
             regs.write_int(i, raw);
         }
-        rt::ParamSlot::FloatReg(i) => {
-            match val {
-                Value::Float(f) => {
-                    if param.type_info.element == rt::element::R4 {
-                        regs.write_f32(i, *f as f32);
-                    } else {
-                        regs.write_f64(i, *f);
-                    }
+        rt::ParamSlot::FloatReg(i) => match val {
+            Value::Float(f) => {
+                if param.type_info.element == rt::element::R4 {
+                    regs.write_f32(i, *f as f32);
+                } else {
+                    regs.write_f64(i, *f);
                 }
-                Value::Int(n) => {
-                    if param.type_info.element == rt::element::R4 {
-                        regs.write_f32(i, *n as f32);
-                    } else {
-                        regs.write_f64(i, *n as f64);
-                    }
-                }
-                _ => {}
             }
-        }
+            Value::Int(n) => {
+                if param.type_info.element == rt::element::R4 {
+                    regs.write_f32(i, *n as f32);
+                } else {
+                    regs.write_f64(i, *n as f64);
+                }
+            }
+            _ => {}
+        },
     }
 }
 
@@ -723,13 +730,11 @@ fn value_to_override(val: Value, return_element: i32) -> hooking::HookAction {
     match val {
         Value::Unit => hooking::HookAction::OverrideInt(0),
         Value::Bool(b) => hooking::HookAction::OverrideInt(b as u64),
-        Value::Int(i) => {
-            match return_element {
-                element::R4 => hooking::HookAction::OverrideFloat((i as f32) as f64),
-                element::R8 => hooking::HookAction::OverrideFloat(i as f64),
-                _ => hooking::HookAction::OverrideInt(i as u64),
-            }
-        }
+        Value::Int(i) => match return_element {
+            element::R4 => hooking::HookAction::OverrideFloat((i as f32) as f64),
+            element::R8 => hooking::HookAction::OverrideFloat(i as f64),
+            _ => hooking::HookAction::OverrideInt(i as u64),
+        },
         Value::Float(f) => hooking::HookAction::OverrideFloat(f),
         Value::Native(ref n) => {
             if n.with(|_: &XurSkip| ()).is_some() {
@@ -789,11 +794,13 @@ fn marshal_call_result(
         element::U8 => Value::Int(call_result.int_val as u64 as i64),
         element::R4 => Value::Float(call_result.float_val),
         element::R8 => Value::Float(call_result.float_val),
-        element::STRING | element::CLASS | element::OBJECT
-        | element::GENERICINST | element::SZARRAY | element::ARRAY => {
-            into_value(cx, XurObject(call_result.int_val as usize))
-                .unwrap_or_else(|_| Value::Int(call_result.int_val as i64))
-        }
+        element::STRING
+        | element::CLASS
+        | element::OBJECT
+        | element::GENERICINST
+        | element::SZARRAY
+        | element::ARRAY => into_value(cx, XurObject(call_result.int_val as usize))
+            .unwrap_or_else(|_| Value::Int(call_result.int_val as i64)),
         _ => Value::Int(call_result.int_val as i64),
     }
 }
@@ -804,247 +811,224 @@ fn marshal_call_result(
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::il2cpp", |m| {
-    m.register_macro("il2cpp_proxy", super::il2cpp_proxy::Il2CppProxyExpander);
+        m.register_macro("il2cpp_proxy", super::il2cpp_proxy::Il2CppProxyExpander);
 
-    // --- loaded() ---
-    m.raw_function_returns::<XurIl2Cpp>("loaded", |cx, args| {
-        if !args.is_empty() {
-            return Err(RuntimeError::new("`loaded` takes no arguments"));
-        }
-        match Il2Cpp::loaded() {
-            Ok(_il2cpp) => {
-                ensure_thread_attached();
-                let v = into_value(cx, XurIl2Cpp)?;
-                Ok(xur_result(cx, Ok(v)))
+        // --- loaded() ---
+        m.raw_function_returns::<XurIl2Cpp>("loaded", |cx, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new("`loaded` takes no arguments"));
             }
-            Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
-        }
-    });
-
-    // --- null() ---
-    m.raw_function_returns::<XurObject>("null", |cx, args| {
-        if !args.is_empty() {
-            return Err(RuntimeError::new("`null` takes no arguments"));
-        }
-        into_value(cx, XurObject(0))
-    });
-
-    // --- Il2Cpp methods ---
-    m.ty::<XurIl2Cpp>("Runtime")
-        .raw_function_returns::<XurClass>("class", |cx, args| {
-            let [_this, Value::Str(assembly), Value::Str(namespace), Value::Str(name)] = args
-            else {
-                return Err(RuntimeError::new(
-                    "`class` takes (assembly, namespace, name)",
-                ));
-            };
-            let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-            match il2cpp.class(assembly, namespace, name) {
-                Ok(cls) => {
-                    let v = into_value(cx, XurClass::new(&cls))?;
+            match Il2Cpp::loaded() {
+                Ok(_il2cpp) => {
+                    ensure_thread_attached();
+                    let v = into_value(cx, XurIl2Cpp)?;
                     Ok(xur_result(cx, Ok(v)))
                 }
                 Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
             }
-        })
-        .raw_function_returns::<XurObject>("string", |cx, args| {
-            let [_this, Value::Str(value)] = args else {
-                return Err(RuntimeError::new("`string` takes a string"));
-            };
-            let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-            match il2cpp.string(value) {
-                Ok(s) => into_value(cx, XurObject::from_obj(s.0)),
-                Err(e) => Err(rt_err(e)),
+        });
+
+        // --- null() ---
+        m.raw_function_returns::<XurObject>("null", |cx, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new("`null` takes no arguments"));
             }
-        })
-        .raw_function("assemblies", |cx, args| {
-            let [_this] = args else {
-                return Err(RuntimeError::new("`assemblies` takes no arguments"));
-            };
-            let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-            let images = il2cpp.assemblies();
-            let list: Result<Vec<Value>, _> = images
-                .iter()
-                .map(|img| into_value(cx, XurImage::new(img)))
-                .collect();
-            Ok(Value::list(list?))
+            into_value(cx, XurObject(0))
         });
 
-    // --- Class methods ---
-    m.ty::<XurClass>("Class")
-        .raw_function_returns::<XurField>("field", |cx, args| {
-            let [this, Value::Str(name)] = args else {
-                return Err(RuntimeError::new("`field` takes a field name"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Class`"));
-            };
-            let result = obj
-                .with(|c: &XurClass| -> Result<Value, RuntimeError> {
-                    let cls = c.class();
-                    match cls.field(name) {
-                        Ok(f) => {
-                            let v = into_value(cx, XurField::new(&f))?;
-                            Ok(xur_result(cx, Ok(v)))
-                        }
-                        Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
-                    }
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-            Ok(result)
-        })
-        .raw_function_returns::<XurMethod>("method", |cx, args| {
-            let [this, Value::Str(name), Value::Int(param_count)] = args else {
-                return Err(RuntimeError::new(
-                    "`method` takes (name, parameter_count)",
-                ));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Class`"));
-            };
-            let result = obj
-                .with(|c: &XurClass| -> Result<Value, RuntimeError> {
-                    let cls = c.class();
-                    match cls.method(name, *param_count as i32) {
-                        Ok(m) => {
-                            let v = into_value(cx, XurMethod::new(&m))?;
-                            Ok(xur_result(cx, Ok(v)))
-                        }
-                        Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
-                    }
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-            Ok(result)
-        })
-        .raw_function_returns::<XurObject>("new_object", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`new_object` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Class`"));
-            };
-            let result = obj
-                .with(|c: &XurClass| {
-                    let cls = c.class();
-                    into_value(cx, XurObject::from_obj(cls.new_object()))
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-            Ok(result)
-        })
-        .raw_function("fields", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`fields` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Class`"));
-            };
-            let list = obj
-                .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
-                    c.class()
-                        .fields()
-                        .map(|f| into_value(cx, XurField::new(&f)))
-                        .collect()
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-            Ok(Value::list(list))
-        })
-        .raw_function("methods", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`methods` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Class`"));
-            };
-            let list = obj
-                .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
-                    c.class()
-                        .methods()
-                        .map(|m| into_value(cx, XurMethod::new(&m)))
-                        .collect()
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-            Ok(Value::list(list))
-        })
-        .method("name", |c: &XurClass| -> String {
-            c.class().name().to_owned()
-        })
-        .method("namespace", |c: &XurClass| -> String {
-            c.class().namespace().to_owned()
-        });
-
-    // --- Field methods ---
-    m.ty::<XurField>("Field")
-        .raw_function("read", |cx, args| {
-            let [this, obj_val] = args else {
-                return Err(RuntimeError::new("`read` takes an object"));
-            };
-            let field = extract_field(this)?;
-            let object = extract_object(obj_val)?;
-            read_instance_field(cx, &field, object)
-        })
-        .raw_function("write", |_cx, args| {
-            let [this, obj_val, value] = args else {
-                return Err(RuntimeError::new("`write` takes (object, value)"));
-            };
-            let field = extract_field(this)?;
-            let object = extract_object(obj_val)?;
-            write_instance_field(&field, object, value)?;
-            Ok(Value::Unit)
-        })
-        .raw_function("read_static", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`read_static` takes no arguments"));
-            };
-            let field = extract_field(this)?;
-            read_static_field(cx, &field)
-        })
-        .raw_function("write_static", |_cx, args| {
-            let [this, value] = args else {
-                return Err(RuntimeError::new("`write_static` takes a value"));
-            };
-            let field = extract_field(this)?;
-            write_static_field(&field, value)?;
-            Ok(Value::Unit)
-        })
-        .method("name", |f: &XurField| -> String {
-            f.field().name().to_owned()
-        })
-        .method("type_name", |f: &XurField| -> String {
-            f.field().type_name()
-        })
-        .method("offset", |f: &XurField| -> i64 {
-            f.field().offset() as i64
-        })
-        .method("is_static", |f: &XurField| -> bool {
-            f.field().is_static()
-        });
-
-    // --- Method methods ---
-    m.ty::<XurMethod>("Method")
-        .raw_function("invoke", |cx, args| {
-            if args.is_empty() {
-                return Err(RuntimeError::new("`invoke` takes (object, ...args)"));
-            }
-            let method = extract_method(&args[0])?;
-            let this_obj = if args.len() > 1 {
-                extract_object(&args[1])?
-            } else {
-                rt::Object::NULL
-            };
-            do_invoke(cx, method.as_ptr() as usize, this_obj.as_ptr() as usize, &args[2..])
-        })
-        .raw_function("invoke_on_main", |cx, args| {
-            #[cfg(not(feature = "il2cpp-unity"))]
-            return Err(RuntimeError::new(
-                "invoke_on_main requires the il2cpp-unity feature",
-            ));
-
-            #[cfg(feature = "il2cpp-unity")]
-            {
-                if args.is_empty() {
+        // --- Il2Cpp methods ---
+        m.ty::<XurIl2Cpp>("Runtime")
+            .raw_function_returns::<XurClass>("class", |cx, args| {
+                let [_this, Value::Str(assembly), Value::Str(namespace), Value::Str(name)] = args
+                else {
                     return Err(RuntimeError::new(
-                        "`invoke_on_main` takes (object, ...args)",
+                        "`class` takes (assembly, namespace, name)",
                     ));
+                };
+                let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
+                match il2cpp.class(assembly, namespace, name) {
+                    Ok(cls) => {
+                        let v = into_value(cx, XurClass::new(&cls))?;
+                        Ok(xur_result(cx, Ok(v)))
+                    }
+                    Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
+                }
+            })
+            .raw_function_returns::<XurObject>("string", |cx, args| {
+                let [_this, Value::Str(value)] = args else {
+                    return Err(RuntimeError::new("`string` takes a string"));
+                };
+                let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
+                match il2cpp.string(value) {
+                    Ok(s) => into_value(cx, XurObject::from_obj(s.0)),
+                    Err(e) => Err(rt_err(e)),
+                }
+            })
+            .raw_function("assemblies", |cx, args| {
+                let [_this] = args else {
+                    return Err(RuntimeError::new("`assemblies` takes no arguments"));
+                };
+                let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
+                let images = il2cpp.assemblies();
+                let list: Result<Vec<Value>, _> = images
+                    .iter()
+                    .map(|img| into_value(cx, XurImage::new(img)))
+                    .collect();
+                Ok(Value::list(list?))
+            });
+
+        // --- Class methods ---
+        m.ty::<XurClass>("Class")
+            .raw_function_returns::<XurField>("field", |cx, args| {
+                let [this, Value::Str(name)] = args else {
+                    return Err(RuntimeError::new("`field` takes a field name"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `Class`"));
+                };
+                let result = obj
+                    .with(|c: &XurClass| -> Result<Value, RuntimeError> {
+                        let cls = c.class();
+                        match cls.field(name) {
+                            Ok(f) => {
+                                let v = into_value(cx, XurField::new(&f))?;
+                                Ok(xur_result(cx, Ok(v)))
+                            }
+                            Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
+                        }
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+                Ok(result)
+            })
+            .raw_function_returns::<XurMethod>("method", |cx, args| {
+                let [this, Value::Str(name), Value::Int(param_count)] = args else {
+                    return Err(RuntimeError::new("`method` takes (name, parameter_count)"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `Class`"));
+                };
+                let result = obj
+                    .with(|c: &XurClass| -> Result<Value, RuntimeError> {
+                        let cls = c.class();
+                        match cls.method(name, *param_count as i32) {
+                            Ok(m) => {
+                                let v = into_value(cx, XurMethod::new(&m))?;
+                                Ok(xur_result(cx, Ok(v)))
+                            }
+                            Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
+                        }
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+                Ok(result)
+            })
+            .raw_function_returns::<XurObject>("new_object", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`new_object` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `Class`"));
+                };
+                let result = obj
+                    .with(|c: &XurClass| {
+                        let cls = c.class();
+                        into_value(cx, XurObject::from_obj(cls.new_object()))
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+                Ok(result)
+            })
+            .raw_function("fields", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`fields` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `Class`"));
+                };
+                let list = obj
+                    .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                        c.class()
+                            .fields()
+                            .map(|f| into_value(cx, XurField::new(&f)))
+                            .collect()
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+                Ok(Value::list(list))
+            })
+            .raw_function("methods", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`methods` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `Class`"));
+                };
+                let list = obj
+                    .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                        c.class()
+                            .methods()
+                            .map(|m| into_value(cx, XurMethod::new(&m)))
+                            .collect()
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
+                Ok(Value::list(list))
+            })
+            .method("name", |c: &XurClass| -> String {
+                c.class().name().to_owned()
+            })
+            .method("namespace", |c: &XurClass| -> String {
+                c.class().namespace().to_owned()
+            });
+
+        // --- Field methods ---
+        m.ty::<XurField>("Field")
+            .raw_function("read", |cx, args| {
+                let [this, obj_val] = args else {
+                    return Err(RuntimeError::new("`read` takes an object"));
+                };
+                let field = extract_field(this)?;
+                let object = extract_object(obj_val)?;
+                read_instance_field(cx, &field, object)
+            })
+            .raw_function("write", |_cx, args| {
+                let [this, obj_val, value] = args else {
+                    return Err(RuntimeError::new("`write` takes (object, value)"));
+                };
+                let field = extract_field(this)?;
+                let object = extract_object(obj_val)?;
+                write_instance_field(&field, object, value)?;
+                Ok(Value::Unit)
+            })
+            .raw_function("read_static", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`read_static` takes no arguments"));
+                };
+                let field = extract_field(this)?;
+                read_static_field(cx, &field)
+            })
+            .raw_function("write_static", |_cx, args| {
+                let [this, value] = args else {
+                    return Err(RuntimeError::new("`write_static` takes a value"));
+                };
+                let field = extract_field(this)?;
+                write_static_field(&field, value)?;
+                Ok(Value::Unit)
+            })
+            .method("name", |f: &XurField| -> String {
+                f.field().name().to_owned()
+            })
+            .method("type_name", |f: &XurField| -> String {
+                f.field().type_name()
+            })
+            .method("offset", |f: &XurField| -> i64 {
+                f.field().offset() as i64
+            })
+            .method("is_static", |f: &XurField| -> bool {
+                f.field().is_static()
+            });
+
+        // --- Method methods ---
+        m.ty::<XurMethod>("Method")
+            .raw_function("invoke", |cx, args| {
+                if args.is_empty() {
+                    return Err(RuntimeError::new("`invoke` takes (object, ...args)"));
                 }
                 let method = extract_method(&args[0])?;
                 let this_obj = if args.len() > 1 {
@@ -1052,326 +1036,362 @@ pub(crate) fn register(registry: &Registry) {
                 } else {
                     rt::Object::NULL
                 };
+                do_invoke(
+                    cx,
+                    method.as_ptr() as usize,
+                    this_obj.as_ptr() as usize,
+                    &args[2..],
+                )
+            })
+            .raw_function("invoke_on_main", |cx, args| {
+                #[cfg(not(feature = "il2cpp-unity"))]
+                return Err(RuntimeError::new(
+                    "invoke_on_main requires the il2cpp-unity feature",
+                ));
+
+                #[cfg(feature = "il2cpp-unity")]
+                {
+                    if args.is_empty() {
+                        return Err(RuntimeError::new(
+                            "`invoke_on_main` takes (object, ...args)",
+                        ));
+                    }
+                    let method = extract_method(&args[0])?;
+                    let this_obj = if args.len() > 1 {
+                        extract_object(&args[1])?
+                    } else {
+                        rt::Object::NULL
+                    };
+
+                    let handle: Box<xur_vm::SharedHandle> = cx
+                        .shared_handle()
+                        .and_then(|h| h.downcast().ok())
+                        .ok_or_else(|| RuntimeError::new("invoke_on_main requires VM support"))?;
+
+                    let method_ptr = method.as_ptr() as usize;
+                    let this_ptr = this_obj.as_ptr() as usize;
+                    let call_args: Vec<Value> = args[2..].to_vec();
+
+                    hao_il2cpp_unity::dispatch::call(move || {
+                        do_invoke(&*handle, method_ptr, this_ptr, &call_args)
+                    })
+                    .map_err(rt_err)?
+                }
+            })
+            .method("name", |m: &XurMethod| -> String {
+                m.method().name().to_owned()
+            })
+            .method("signature", |m: &XurMethod| -> String {
+                m.method().signature()
+            })
+            .raw_function("code_address", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`code_address` takes no arguments"));
+                };
+                let method = extract_method(this)?;
+                Ok(Value::Int(method.code() as usize as i64))
+            })
+            .raw_function("hook_void_block", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`hook_void_block` takes no arguments"));
+                };
+                let method = extract_method(this)?;
+                let hook = method.hook_void_block().map_err(rt_err)?;
+                let state = hook.state;
+                std::mem::forget(hook);
+                into_value(cx, XurVoidBlockHook(state))
+            })
+            .raw_function("hook", |cx, args| {
+                let [this, callback] = args else {
+                    return Err(RuntimeError::new("`hook` takes a callback closure"));
+                };
+                let method = extract_method(this)?;
+                let callback = callback.clone();
 
                 let handle: Box<xur_vm::SharedHandle> = cx
                     .shared_handle()
                     .and_then(|h| h.downcast().ok())
-                    .ok_or_else(|| {
-                        RuntimeError::new("invoke_on_main requires VM support")
-                    })?;
+                    .ok_or_else(|| RuntimeError::new("hook requires VM support"))?;
+                let handle = *handle;
 
-                let method_ptr = method.as_ptr() as usize;
-                let this_ptr = this_obj.as_ptr() as usize;
-                let call_args: Vec<Value> = args[2..].to_vec();
-
-                hao_il2cpp_unity::dispatch::call(move || {
-                    do_invoke(&*handle, method_ptr, this_ptr, &call_args)
-                })
-                .map_err(rt_err)?
-            }
-        })
-        .method("name", |m: &XurMethod| -> String {
-            m.method().name().to_owned()
-        })
-        .method("signature", |m: &XurMethod| -> String {
-            m.method().signature()
-        })
-        .raw_function("code_address", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`code_address` takes no arguments"));
-            };
-            let method = extract_method(this)?;
-            Ok(Value::Int(method.code() as usize as i64))
-        })
-        .raw_function("hook_void_block", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`hook_void_block` takes no arguments"));
-            };
-            let method = extract_method(this)?;
-            let hook = method.hook_void_block().map_err(rt_err)?;
-            let state = hook.state;
-            std::mem::forget(hook);
-            into_value(cx, XurVoidBlockHook(state))
-        })
-        .raw_function("hook", |cx, args| {
-            let [this, callback] = args else {
-                return Err(RuntimeError::new("`hook` takes a callback closure"));
-            };
-            let method = extract_method(this)?;
-            let callback = callback.clone();
-
-            let handle: Box<xur_vm::SharedHandle> = cx
-                .shared_handle()
-                .and_then(|h| h.downcast().ok())
-                .ok_or_else(|| RuntimeError::new("hook requires VM support"))?;
-            let handle = *handle;
-
-            let signature = method.signature();
-            let return_element = {
-                let il2cpp = Il2Cpp::get().ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
-                let ret_ty = unsafe {
-                    (il2cpp.api().il2cpp_method_get_return_type)(method.as_ptr())
-                };
-                unsafe { (il2cpp.api().il2cpp_type_get_type)(ret_ty) }
-            };
-
-            let hook = method.hook_generic(move |original, meta, regs| {
-                let mut arg_pairs = Vec::with_capacity(meta.params.len());
-                for param in &meta.params {
-                    let val = match marshal_arg(&handle, regs, param) {
-                        Ok(v) => v,
-                        Err(_) => return hooking::HookAction::Passthrough,
-                    };
-                    arg_pairs.push((param.name.clone(), val));
-                }
-
-                let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                let ctx = XurHookContext {
-                    args: arg_pairs,
-                    modified: std::sync::Arc::new(Mutex::new(Vec::new())),
-                    signature: signature.clone(),
-                    original,
-                    int_regs: regs.int_regs,
-                    sse_regs: regs.sse_regs,
-                    params: meta.params.clone(),
-                    return_element,
-                    handle: handle.clone(),
-                    called: called.clone(),
-                };
-                let ctx_val = match into_value(&handle, ctx) {
-                    Ok(v) => v,
-                    Err(_) => return hooking::HookAction::Passthrough,
+                let signature = method.signature();
+                let return_element = {
+                    let il2cpp =
+                        Il2Cpp::get().ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
+                    let ret_ty =
+                        unsafe { (il2cpp.api().il2cpp_method_get_return_type)(method.as_ptr()) };
+                    unsafe { (il2cpp.api().il2cpp_type_get_type)(ret_ty) }
                 };
 
-                let result = match handle.call_closure(&callback, &[ctx_val.clone()]) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        tracing::error!("hook error: {}", e.message);
-                        return hooking::HookAction::Passthrough;
-                    }
-                };
+                let hook = method
+                    .hook_generic(move |original, meta, regs| {
+                        let mut arg_pairs = Vec::with_capacity(meta.params.len());
+                        for param in &meta.params {
+                            let val = match marshal_arg(&handle, regs, param) {
+                                Ok(v) => v,
+                                Err(_) => return hooking::HookAction::Passthrough,
+                            };
+                            arg_pairs.push((param.name.clone(), val));
+                        }
 
-                // Write back modified args (unless ctx.call() already did).
-                if !called.load(std::sync::atomic::Ordering::Relaxed) {
-                    if let Value::Native(ref n) = ctx_val {
-                        if let Some(mods) = n.with(|c: &XurHookContext| {
-                            xur_runtime::lock(&c.modified).clone()
-                        }) {
-                            for (idx, val) in mods {
-                                if idx < meta.params.len() {
-                                    write_arg_to_regs(regs, &meta.params[idx], &val);
+                        let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                        let ctx = XurHookContext {
+                            args: arg_pairs,
+                            modified: std::sync::Arc::new(Mutex::new(Vec::new())),
+                            signature: signature.clone(),
+                            original,
+                            int_regs: regs.int_regs,
+                            sse_regs: regs.sse_regs,
+                            params: meta.params.clone(),
+                            return_element,
+                            handle: handle.clone(),
+                            called: called.clone(),
+                        };
+                        let ctx_val = match into_value(&handle, ctx) {
+                            Ok(v) => v,
+                            Err(_) => return hooking::HookAction::Passthrough,
+                        };
+
+                        let result = match handle.call_closure(&callback, &[ctx_val.clone()]) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                tracing::error!("hook error: {}", e.message);
+                                return hooking::HookAction::Passthrough;
+                            }
+                        };
+
+                        // Write back modified args (unless ctx.call() already did).
+                        if !called.load(std::sync::atomic::Ordering::Relaxed) {
+                            if let Value::Native(ref n) = ctx_val {
+                                if let Some(mods) = n.with(|c: &XurHookContext| {
+                                    xur_runtime::lock(&c.modified).clone()
+                                }) {
+                                    for (idx, val) in mods {
+                                        if idx < meta.params.len() {
+                                            write_arg_to_regs(regs, &meta.params[idx], &val);
+                                        }
+                                    }
                                 }
                             }
+                        }
+
+                        let lang = handle.lang();
+                        interpret_hook_result(result, return_element, lang)
+                    })
+                    .map_err(rt_err)?;
+
+                std::mem::forget(hook);
+                Ok(Value::Unit)
+            });
+
+        m.ty::<XurHookContext>("HookContext")
+            .raw_function("arg", |_cx, args| {
+                let [this, key] = args else {
+                    return Err(RuntimeError::new(
+                        "`arg` takes one argument (index or name)",
+                    ));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `HookContext`"));
+                };
+                obj.with(|ctx: &XurHookContext| -> Result<Value, RuntimeError> {
+                    match key {
+                        Value::Int(i) => {
+                            let idx = *i as usize;
+                            ctx.args.get(idx).map(|(_, v)| v.clone()).ok_or_else(|| {
+                                RuntimeError::new(format!("arg index {} out of range", idx))
+                            })
+                        }
+                        Value::Str(name) => ctx
+                            .args
+                            .iter()
+                            .find(|(n, _)| n.as_str() == name.as_ref())
+                            .map(|(_, v)| v.clone())
+                            .ok_or_else(|| RuntimeError::new(format!("no arg named \"{}\"", name))),
+                        _ => Err(RuntimeError::new("`arg` takes an int index or string name")),
+                    }
+                })
+                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?
+            })
+            .raw_function("args", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`args` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `HookContext`"));
+                };
+                obj.with(|ctx: &XurHookContext| {
+                    Value::list(ctx.args.iter().map(|(_, v)| v.clone()).collect())
+                })
+                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
+            })
+            .raw_function("set_arg", |_cx, args| {
+                let [this, key, val] = args else {
+                    return Err(RuntimeError::new("`set_arg` takes a key and a value"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `HookContext`"));
+                };
+                obj.with(|ctx: &XurHookContext| -> Result<(), RuntimeError> {
+                    let idx = match key {
+                        Value::Int(i) => *i as usize,
+                        Value::Str(name) => ctx
+                            .args
+                            .iter()
+                            .position(|(n, _)| n.as_str() == name.as_ref())
+                            .ok_or_else(|| {
+                                RuntimeError::new(format!("no arg named \"{}\"", name))
+                            })?,
+                        _ => return Err(RuntimeError::new("`set_arg` key must be int or string")),
+                    };
+                    if idx >= ctx.args.len() {
+                        return Err(RuntimeError::new(format!("arg index {} out of range", idx)));
+                    }
+                    xur_runtime::lock(&ctx.modified).push((idx, val.clone()));
+                    Ok(())
+                })
+                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))??;
+                Ok(Value::Unit)
+            })
+            .raw_function("signature", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`signature` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `HookContext`"));
+                };
+                obj.with(|ctx: &XurHookContext| Value::str(&ctx.signature))
+                    .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
+            })
+            .raw_function("call", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`call` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `HookContext`"));
+                };
+                let (
+                    original,
+                    int_regs,
+                    sse_regs,
+                    params,
+                    modified,
+                    return_element,
+                    handle,
+                    called,
+                ) = obj
+                    .with(|ctx: &XurHookContext| {
+                        (
+                            ctx.original,
+                            ctx.int_regs,
+                            ctx.sse_regs,
+                            ctx.params.clone(),
+                            ctx.modified.clone(),
+                            ctx.return_element,
+                            ctx.handle.clone(),
+                            ctx.called.clone(),
+                        )
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?;
+
+                if called.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    return Err(RuntimeError::new("ctx.call() can only be called once"));
+                }
+
+                // Write back any modified args before calling the original.
+                {
+                    let mods = xur_runtime::lock(&modified);
+                    let mut regs = hooking::SavedRegs { int_regs, sse_regs };
+                    for (idx, val) in mods.iter() {
+                        if *idx < params.len() {
+                            write_arg_to_regs(&mut regs, &params[*idx], val);
                         }
                     }
                 }
 
-                let lang = handle.lang();
-                interpret_hook_result(result, return_element, lang)
-            }).map_err(rt_err)?;
+                let result = unsafe { hooking::call_with_saved_regs(original, int_regs, sse_regs) };
+                Ok(marshal_call_result(&handle, &result, return_element))
+            });
 
-            std::mem::forget(hook);
-            Ok(Value::Unit)
-        });
-
-    m.ty::<XurHookContext>("HookContext")
-        .raw_function("arg", |_cx, args| {
-            let [this, key] = args else {
-                return Err(RuntimeError::new("`arg` takes one argument (index or name)"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `HookContext`"));
-            };
-            obj.with(|ctx: &XurHookContext| -> Result<Value, RuntimeError> {
-                match key {
-                    Value::Int(i) => {
-                        let idx = *i as usize;
-                        ctx.args.get(idx)
-                            .map(|(_, v)| v.clone())
-                            .ok_or_else(|| RuntimeError::new(format!("arg index {} out of range", idx)))
-                    }
-                    Value::Str(name) => {
-                        ctx.args.iter()
-                            .find(|(n, _)| n.as_str() == name.as_ref())
-                            .map(|(_, v)| v.clone())
-                            .ok_or_else(|| RuntimeError::new(format!("no arg named \"{}\"", name)))
-                    }
-                    _ => Err(RuntimeError::new("`arg` takes an int index or string name")),
-                }
-            })
-            .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?
-        })
-        .raw_function("args", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`args` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `HookContext`"));
-            };
-            obj.with(|ctx: &XurHookContext| {
-                Value::list(ctx.args.iter().map(|(_, v)| v.clone()).collect())
-            })
-            .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
-        })
-        .raw_function("set_arg", |_cx, args| {
-            let [this, key, val] = args else {
-                return Err(RuntimeError::new("`set_arg` takes a key and a value"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `HookContext`"));
-            };
-            obj.with(|ctx: &XurHookContext| -> Result<(), RuntimeError> {
-                let idx = match key {
-                    Value::Int(i) => *i as usize,
-                    Value::Str(name) => {
-                        ctx.args.iter()
-                            .position(|(n, _)| n.as_str() == name.as_ref())
-                            .ok_or_else(|| RuntimeError::new(format!("no arg named \"{}\"", name)))?
-                    }
-                    _ => return Err(RuntimeError::new("`set_arg` key must be int or string")),
+        m.ty::<XurVoidBlockHook>("VoidBlockHook")
+            .raw_function("set_blocked", |_cx, args| {
+                let [this, Value::Bool(blocked)] = args else {
+                    return Err(RuntimeError::new("`set_blocked` takes a bool"));
                 };
-                if idx >= ctx.args.len() {
-                    return Err(RuntimeError::new(format!("arg index {} out of range", idx)));
-                }
-                xur_runtime::lock(&ctx.modified).push((idx, val.clone()));
-                Ok(())
-            })
-            .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))??;
-            Ok(Value::Unit)
-        })
-        .raw_function("signature", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`signature` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `HookContext`"));
-            };
-            obj.with(|ctx: &XurHookContext| Value::str(&ctx.signature))
-                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
-        })
-        .raw_function("call", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`call` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `HookContext`"));
-            };
-            let (original, int_regs, sse_regs, params, modified, return_element, handle, called) =
-                obj.with(|ctx: &XurHookContext| {
-                    (
-                        ctx.original,
-                        ctx.int_regs,
-                        ctx.sse_regs,
-                        ctx.params.clone(),
-                        ctx.modified.clone(),
-                        ctx.return_element,
-                        ctx.handle.clone(),
-                        ctx.called.clone(),
-                    )
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `VoidBlockHook`"));
+                };
+                obj.with(|h: &XurVoidBlockHook| {
+                    h.0.store(*blocked, std::sync::atomic::Ordering::Relaxed);
                 })
-                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?;
-
-            if called.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                return Err(RuntimeError::new("ctx.call() can only be called once"));
-            }
-
-            // Write back any modified args before calling the original.
-            {
-                let mods = xur_runtime::lock(&modified);
-                let mut regs = hooking::SavedRegs { int_regs, sse_regs };
-                for (idx, val) in mods.iter() {
-                    if *idx < params.len() {
-                        write_arg_to_regs(&mut regs, &params[*idx], val);
-                    }
-                }
-            }
-
-            let result = unsafe {
-                hooking::call_with_saved_regs(original, int_regs, sse_regs)
-            };
-            Ok(marshal_call_result(&handle, &result, return_element))
-        });
-
-    m.ty::<XurVoidBlockHook>("VoidBlockHook")
-        .raw_function("set_blocked", |_cx, args| {
-            let [this, Value::Bool(blocked)] = args else {
-                return Err(RuntimeError::new("`set_blocked` takes a bool"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `VoidBlockHook`"));
-            };
-            obj.with(|h: &XurVoidBlockHook| {
-                h.0.store(*blocked, std::sync::atomic::Ordering::Relaxed);
+                .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))?;
+                Ok(Value::Unit)
             })
-            .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))?;
-            Ok(Value::Unit)
-        })
-        .raw_function("is_blocked", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`is_blocked` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `VoidBlockHook`"));
-            };
-            obj.with(|h: &XurVoidBlockHook| {
-                Value::Bool(h.0.load(std::sync::atomic::Ordering::Relaxed))
-            })
-            .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))
-        });
-
-    // --- Image methods ---
-    m.ty::<XurImage>("Image")
-        .method("name", |i: &XurImage| -> String {
-            i.image().name().to_owned()
-        })
-        .raw_function("classes", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`classes` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected an `Image`"));
-            };
-            let list = obj
-                .with(|i: &XurImage| -> Result<Vec<Value>, RuntimeError> {
-                    i.image()
-                        .classes()
-                        .map(|c| into_value(cx, XurClass::new(&c)))
-                        .collect()
+            .raw_function("is_blocked", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`is_blocked` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected a `VoidBlockHook`"));
+                };
+                obj.with(|h: &XurVoidBlockHook| {
+                    Value::Bool(h.0.load(std::sync::atomic::Ordering::Relaxed))
                 })
-                .ok_or_else(|| RuntimeError::new("expected an `Image`"))??;
-            Ok(Value::list(list))
-        })
-        .raw_function("class_count", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`class_count` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected an `Image`"));
-            };
-            let count = obj
-                .with(|i: &XurImage| i.image().class_count())
-                .ok_or_else(|| RuntimeError::new("expected an `Image`"))?;
-            Ok(Value::Int(count as i64))
-        });
+                .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))
+            });
 
-    // --- Object methods ---
-    m.ty::<XurObject>("Object")
-        .method("address", |o: &XurObject| -> i64 { o.0 as i64 })
-        .method("is_null", |o: &XurObject| -> bool { o.0 == 0 })
-        .raw_function_returns::<XurClass>("class", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`class` takes no arguments"));
-            };
-            let object = extract_object(this)?;
-            if object.is_null() {
-                return Err(RuntimeError::new("cannot get class of null object"));
-            }
-            let il2cpp = rt::Il2Cpp::get()
-                .ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
-            let cls = unsafe { il2cpp.class_of(object) };
-            into_value(cx, XurClass::new(&cls))
-        });
+        // --- Image methods ---
+        m.ty::<XurImage>("Image")
+            .method("name", |i: &XurImage| -> String {
+                i.image().name().to_owned()
+            })
+            .raw_function("classes", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`classes` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected an `Image`"));
+                };
+                let list = obj
+                    .with(|i: &XurImage| -> Result<Vec<Value>, RuntimeError> {
+                        i.image()
+                            .classes()
+                            .map(|c| into_value(cx, XurClass::new(&c)))
+                            .collect()
+                    })
+                    .ok_or_else(|| RuntimeError::new("expected an `Image`"))??;
+                Ok(Value::list(list))
+            })
+            .raw_function("class_count", |_cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`class_count` takes no arguments"));
+                };
+                let Value::Native(obj) = this else {
+                    return Err(RuntimeError::new("expected an `Image`"));
+                };
+                let count = obj
+                    .with(|i: &XurImage| i.image().class_count())
+                    .ok_or_else(|| RuntimeError::new("expected an `Image`"))?;
+                Ok(Value::Int(count as i64))
+            });
 
+        // --- Object methods ---
+        m.ty::<XurObject>("Object")
+            .method("address", |o: &XurObject| -> i64 { o.0 as i64 })
+            .method("is_null", |o: &XurObject| -> bool { o.0 == 0 })
+            .raw_function_returns::<XurClass>("class", |cx, args| {
+                let [this] = args else {
+                    return Err(RuntimeError::new("`class` takes no arguments"));
+                };
+                let object = extract_object(this)?;
+                if object.is_null() {
+                    return Err(RuntimeError::new("cannot get class of null object"));
+                }
+                let il2cpp =
+                    rt::Il2Cpp::get().ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
+                let cls = unsafe { il2cpp.class_of(object) };
+                into_value(cx, XurClass::new(&cls))
+            });
     });
 }
 
