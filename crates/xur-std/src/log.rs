@@ -17,8 +17,8 @@
 use std::sync::Arc;
 
 use facet::Facet;
-use xur_runtime::{Context, NativeObject, Registry, RunResult, RuntimeError, Value};
 use xur_runtime::registry::XurType;
+use xur_runtime::{Context, NativeObject, Registry, RunResult, RuntimeError, Value};
 
 use crate::fmt;
 
@@ -93,10 +93,7 @@ fn builder_arg(args: &[Value]) -> RunResult<SubscriberBuilder> {
 }
 
 /// Clone the config, apply a change, return a new builder value.
-fn with_config(
-    args: &[Value],
-    change: impl FnOnce(&mut SubscriberConfig),
-) -> RunResult<Value> {
+fn with_config(args: &[Value], change: impl FnOnce(&mut SubscriberConfig)) -> RunResult<Value> {
     let builder = builder_arg(args)?;
     let mut config = SubscriberConfig::clone(&builder.0);
     change(&mut config);
@@ -141,7 +138,8 @@ fn level_string(cx: &mut dyn Context, args: &[Value], pos: usize) -> RunResult<S
         }
         Some(Value::Int(v)) => Ok(parse_level_int(*v)?.to_string()),
         Some(Value::Adt(adt)) => {
-            let v = cx.repr_value(adt.ctor)
+            let v = cx
+                .repr_value(adt.ctor)
                 .ok_or_else(|| RuntimeError::new("expected a Level enum value"))?;
             Ok(parse_level_int(v)?.to_string())
         }
@@ -165,18 +163,143 @@ fn str_arg(args: &[Value], pos: usize, name: &str) -> RunResult<Arc<str>> {
 
 /// Install the subscriber described by `config`.
 fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
+    // EnvFilter returns Interest::sometimes() for all callsites, forcing
+    // the tracing dispatcher to re-check enabled() per event.  Under
+    // hook-heavy workloads (function detours, coreclr init, open/openat
+    // interception) the callsite Interest cache can go stale and silently
+    // drop events.  When the user only needs a simple max-level gate, we
+    // skip EnvFilter entirely and use the fmt subscriber's built-in
+    // with_max_level(), which yields Interest::always() — callsites below
+    // the level are permanently enabled and never re-checked.
+    if config.filter.is_some() || std::env::var_os("RUST_LOG").is_some() {
+        return init_subscriber_envfilter(config);
+    }
+
+    let level = parse_level(&config.max_level).unwrap_or(tracing::Level::INFO);
+
+    macro_rules! apply_common {
+        ($layer:expr, $config:expr) => {
+            $layer
+                .with_target($config.with_target)
+                .with_file($config.with_file)
+                .with_line_number($config.with_line_number)
+                .with_ansi($config.with_ansi)
+        };
+    }
+
+    match &config.output {
+        Output::Stderr => match config.format {
+            Format::Full => {
+                apply_common!(tracing_subscriber::fmt(), config)
+                    .with_max_level(level)
+                    .try_init()
+                    .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+            }
+            Format::Pretty => {
+                apply_common!(tracing_subscriber::fmt().pretty(), config)
+                    .with_max_level(level)
+                    .try_init()
+                    .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+            }
+            Format::Compact => {
+                apply_common!(tracing_subscriber::fmt().compact(), config)
+                    .with_max_level(level)
+                    .try_init()
+                    .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+            }
+            Format::Json => {
+                tracing_subscriber::fmt()
+                    .json()
+                    .with_target(config.with_target)
+                    .with_file(config.with_file)
+                    .with_line_number(config.with_line_number)
+                    .with_ansi(config.with_ansi)
+                    .with_max_level(level)
+                    .try_init()
+                    .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+            }
+        },
+        Output::File(path) => {
+            if config.truncate {
+                let _ = std::fs::write(path, b"");
+            }
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .map_err(|e| RuntimeError::new(format!("log init: {e}")))?;
+            let writer = std::sync::Mutex::new(file);
+            match config.format {
+                Format::Full => {
+                    tracing_subscriber::fmt()
+                        .with_writer(writer)
+                        .with_target(config.with_target)
+                        .with_file(config.with_file)
+                        .with_line_number(config.with_line_number)
+                        .with_ansi(false)
+                        .with_max_level(level)
+                        .try_init()
+                        .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+                }
+                Format::Pretty => {
+                    tracing_subscriber::fmt()
+                        .pretty()
+                        .with_writer(writer)
+                        .with_target(config.with_target)
+                        .with_file(config.with_file)
+                        .with_line_number(config.with_line_number)
+                        .with_ansi(false)
+                        .with_max_level(level)
+                        .try_init()
+                        .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+                }
+                Format::Compact => {
+                    tracing_subscriber::fmt()
+                        .compact()
+                        .with_writer(writer)
+                        .with_target(config.with_target)
+                        .with_file(config.with_file)
+                        .with_line_number(config.with_line_number)
+                        .with_ansi(false)
+                        .with_max_level(level)
+                        .try_init()
+                        .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+                }
+                Format::Json => {
+                    tracing_subscriber::fmt()
+                        .json()
+                        .with_writer(writer)
+                        .with_target(config.with_target)
+                        .with_file(config.with_file)
+                        .with_line_number(config.with_line_number)
+                        .with_ansi(false)
+                        .with_max_level(level)
+                        .try_init()
+                        .map_err(|e| RuntimeError::new(format!("log init failed: {e}")))?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// EnvFilter path — used only when RUST_LOG or a custom filter is set.
+fn init_subscriber_envfilter(config: &SubscriberConfig) -> RunResult<()> {
     use tracing_subscriber::prelude::*;
 
     let env_filter = match &config.filter {
-        Some(filter) => tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| filter.parse().unwrap_or_else(|_| config.max_level.clone().into())),
+        Some(filter) => {
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                filter
+                    .parse()
+                    .unwrap_or_else(|_| config.max_level.clone().into())
+            })
+        }
         None => tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| config.max_level.clone().into()),
     };
 
-    // We need to handle the different format+output combos. Because
-    // tracing-subscriber's types differ per format, we build a layer for
-    // each combo and install the right one.
     macro_rules! apply_common {
         ($layer:expr, $config:expr) => {
             $layer
@@ -228,11 +351,12 @@ fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
             }
         },
         Output::File(path) => {
+            if config.truncate {
+                let _ = std::fs::write(path, b"");
+            }
             let file = std::fs::OpenOptions::new()
                 .create(true)
-                .write(true)
-                .truncate(config.truncate)
-                .append(!config.truncate)
+                .append(true)
                 .open(path)
                 .map_err(|e| RuntimeError::new(format!("log init: {e}")))?;
             let writer = std::sync::Mutex::new(file);
@@ -302,15 +426,19 @@ fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::log", |module| {
         // subscriber() — returns a new SubscriberBuilder with defaults.
-        module.repr_enum("Level", &[
-            ("Trace", LEVEL_TRACE),
-            ("Debug", LEVEL_DEBUG),
-            ("Info", LEVEL_INFO),
-            ("Warn", LEVEL_WARN),
-            ("Error", LEVEL_ERROR),
-        ]);
+        module.repr_enum(
+            "Level",
+            &[
+                ("Trace", LEVEL_TRACE),
+                ("Debug", LEVEL_DEBUG),
+                ("Info", LEVEL_INFO),
+                ("Warn", LEVEL_WARN),
+                ("Error", LEVEL_ERROR),
+            ],
+        );
 
-        module.ty::<SubscriberBuilder>("SubscriberBuilder")
+        module
+            .ty::<SubscriberBuilder>("SubscriberBuilder")
             .raw_function_returns::<SubscriberBuilder>("with_max_level", |cx, args| {
                 let level = level_string(cx, args, 1)?;
                 with_config(args, |c| c.max_level = level)
