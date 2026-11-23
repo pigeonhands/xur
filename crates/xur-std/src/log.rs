@@ -281,6 +281,13 @@ fn init_subscriber(config: &SubscriberConfig) -> RunResult<()> {
         }
     }
 
+    // Callsites registered before the subscriber was set get stale Interest
+    // values (usually Interest::never). Rebuild the cache so every existing
+    // callsite re-evaluates against the new subscriber — this makes tracing
+    // work from threads that emitted callsites before this point (hook
+    // threads, spawned init threads, etc.).
+    tracing::callsite::rebuild_interest_cache();
+
     Ok(())
 }
 
@@ -419,6 +426,8 @@ fn init_subscriber_envfilter(config: &SubscriberConfig) -> RunResult<()> {
             }
         }
     }
+
+    tracing::callsite::rebuild_interest_cache();
 
     Ok(())
 }

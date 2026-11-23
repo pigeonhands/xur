@@ -91,6 +91,10 @@ pub(crate) fn register(registry: &Registry) {
         .function("parse_int", |s: String| {
             s.trim().parse::<i64>().map_err(|e| e.to_string())
         })
+        .function("parse_hex", |s: String| {
+            i64::from_str_radix(s.trim().trim_start_matches("0x").trim_start_matches("0X"), 16)
+                .map_err(|e| e.to_string())
+        })
         .function("parse_float", |s: String| {
             s.trim().parse::<f64>().map_err(|e| e.to_string())
         })
@@ -195,6 +199,28 @@ mod tests {
         );
         assert_eq!(
             call("parse_int", &[Value::str("x")]),
+            Value::adt(lang.err, vec![Value::str("invalid digit found in string")])
+        );
+    }
+
+    #[test]
+    fn parse_hex_returns_results() {
+        let registry = registry();
+        let lang = TestCx::new(&registry, crate::PRELUDE).lang;
+        assert_eq!(
+            call("parse_hex", &[Value::str("ff")]),
+            Value::adt(lang.ok, vec![Value::Int(255)])
+        );
+        assert_eq!(
+            call("parse_hex", &[Value::str("0xFF")]),
+            Value::adt(lang.ok, vec![Value::Int(255)])
+        );
+        assert_eq!(
+            call("parse_hex", &[Value::str(" 7ee45f400000 ")]),
+            Value::adt(lang.ok, vec![Value::Int(0x7ee45f400000)])
+        );
+        assert_eq!(
+            call("parse_hex", &[Value::str("zz")]),
             Value::adt(lang.err, vec![Value::str("invalid digit found in string")])
         );
     }
