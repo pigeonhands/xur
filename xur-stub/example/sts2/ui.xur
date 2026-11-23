@@ -1,80 +1,86 @@
-// STS2 trainer — UI drawing functions.
-
 use std::fmt;
 use std::gui;
 use std::stub::overlay::egui;
 
 const proxies = std::import("./proxies.xur");
 
-// ---------------------------------------------------------------------------
-// Status bar — HP, energy, stars, gold
-// ---------------------------------------------------------------------------
-
-pub fn draw_status(ui: gui::Ui, game: proxies::GameMethods) {
+pub fn draw_status(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat) {
     let c = game.creature();
     if !c.is_null() {
-        game.player_creature_addr.set(c.address());
+        combat.player_creature_addr.set(c.address());
     }
-    let hp = game.hp();
-    let max = game.max_hp();
-    let blk = game.block();
+    let hp = combat.hp(c);
+    let max = combat.max_hp(c);
+    let blk = combat.block(c);
     if hp >= 0 {
         ui.label(fmt::format("HP: {}/{} | Block: {}", hp, max, blk));
     }
 
-    let energy = game.combat_energy();
-    let max_e = game.combat_max_energy();
+    let pcs = game.combat_state();
+    let energy = combat.energy(pcs);
+    let max_e = combat.max_energy(pcs);
     if energy >= 0 {
-        ui.label(fmt::format("Energy: {}/{}", energy, max_e));
+        ui.label(fmt::format("Energy: {}/{} | Stars: {}", energy, max_e, combat.stars(pcs)));
     }
 
-    let stars = game.stars();
-    if stars >= 0 {
-        ui.label(fmt::format("Stars: {}", stars));
+    let hand = combat.hand_count(pcs);
+    let draw = combat.draw_pile_count(pcs);
+    let disc = combat.discard_count(pcs);
+    if hand >= 0 {
+        ui.label(fmt::format("Hand: {} | Draw: {} | Discard: {}", hand, draw, disc));
     }
 
     ui.label(fmt::format("Gold: {}", game.gold()));
 }
 
-// ---------------------------------------------------------------------------
-// Combat — godmode, heal, block, energy, stars
-// ---------------------------------------------------------------------------
-
-pub fn draw_combat(ui: gui::Ui, game: proxies::GameMethods) {
-    ui.heading("Combat");
-
-    let godmode = game.is_godmode();
+pub fn draw_combat(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat) {
+    let godmode = combat.is_godmode();
     let new_godmode = ui.checkbox(godmode, "Godmode");
     if new_godmode != godmode {
-        game.set_godmode(new_godmode);
+        combat.set_godmode(new_godmode);
     }
 
+    let c = game.creature();
     ui.horizontal(|row| {
-        if row.button("Full heal") { game.full_heal(); }
-        if row.button("+50 Block") { game.add_block(50); }
-        if row.button("+999 Block") { game.add_block(999); }
+        if row.button("Full heal") { combat.full_heal(c); }
+        if row.button("+50 Block") { combat.add_block(c, 50); }
+        if row.button("+999 Block") { combat.add_block(c, 999); }
     });
 
+    let pcs = game.combat_state();
     ui.horizontal(|row| {
         if row.button("Max energy") {
-            let max = game.combat_max_energy();
-            if max > 0 { game.set_combat_energy(max); }
+            let m = combat.max_energy(pcs);
+            if m > 0 { combat.set_energy(pcs, m); }
         }
-        if row.button("+5 Energy") { game.add_energy(5); }
-        if row.button("+99 Energy") { game.add_energy(99); }
+        if row.button("+5 Energy") { combat.add_energy(pcs, 5); }
+        if row.button("+99 Energy") { combat.add_energy(pcs, 99); }
     });
 
     ui.horizontal(|row| {
-        if row.button("+10 Stars") { game.add_stars(10); }
-        if row.button("+100 Stars") { game.add_stars(100); }
+        if row.button("+10 Stars") { combat.add_stars(pcs, 10); }
+        if row.button("+100 Stars") { combat.add_stars(pcs, 100); }
     });
 }
 
-// ---------------------------------------------------------------------------
-// Gold
-// ---------------------------------------------------------------------------
+pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat) {
+    let pcs = game.combat_state();
+    let hand = combat.hand_count(pcs);
+    let draw = combat.draw_pile_count(pcs);
+    let disc = combat.discard_count(pcs);
+    let exh = combat.exhaust_count(pcs);
 
-pub fn draw_gold(ui: gui::Ui, game: proxies::GameMethods, state: proxies::UiState) {
+    ui.label(fmt::format("Hand: {}  Draw: {}  Discard: {}  Exhaust: {}", hand, draw, disc, exh));
+
+    let p = game.player();
+    ui.horizontal(|row| {
+        if row.button("Draw 1") { combat.draw_cards(p, 1); }
+        if row.button("Draw 3") { combat.draw_cards(p, 3); }
+        if row.button("Draw 5") { combat.draw_cards(p, 5); }
+    });
+}
+
+pub fn draw_gold(ui: gui::Ui, game: proxies::GameState, state: proxies::UiState) {
     ui.heading(fmt::format("Gold: {}", game.gold()));
     let new_amount = ui.slider_int("Amount", state.gold_amount.get(), 0, 99999);
     state.gold_amount.set(new_amount);
@@ -85,13 +91,7 @@ pub fn draw_gold(ui: gui::Ui, game: proxies::GameMethods, state: proxies::UiStat
     });
 }
 
-// ---------------------------------------------------------------------------
-// Player stats — max energy
-// ---------------------------------------------------------------------------
-
-pub fn draw_player(ui: gui::Ui, game: proxies::GameMethods) {
-    ui.heading("Player Stats");
-
+pub fn draw_player(ui: gui::Ui, game: proxies::GameState) {
     let me = game.max_energy();
     ui.label(fmt::format("Max Energy: {}", me));
     ui.horizontal(|row| {

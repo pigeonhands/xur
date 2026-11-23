@@ -1,136 +1,82 @@
-// STS2 trainer — game method proxies and data types.
-//
-// Resolves all CoreCLR methods and provides high-level wrappers for
-// gold, energy, HP, block, stars, and godmode.
-//
-// Property setters run via godot::dispatch_call so they execute on the
-// game's main thread — avoiding deadlocks when called from the egui
-// overlay's render thread.
-
 use std::cell;
 use std::fmt;
 use std::log;
 use std::stub::coreclr;
 use std::stub::godot;
 
-// ---------------------------------------------------------------------------
-// Data types
-// ---------------------------------------------------------------------------
-
-pub struct GameMethods {
-    rt: coreclr::Runtime
-    // RunManager → RunState → Player (object graph traversal)
+pub struct GameState {
     get_rm_instance: coreclr::MethodPtr
     get_state: coreclr::MethodPtr
-    get_in_progress: coreclr::MethodPtr
     get_players: coreclr::MethodPtr
     get_combat_state: coreclr::MethodPtr
     get_creature: coreclr::MethodPtr
-    // Getters (read via method call — fast, no events)
     get_gold: coreclr::MethodPtr
+    set_gold: coreclr::MethodPtr
     get_max_energy: coreclr::MethodPtr
+    set_max_energy: coreclr::MethodPtr
+}
+
+pub struct Combat {
     get_energy: coreclr::MethodPtr
     get_pcs_max_energy: coreclr::MethodPtr
     get_stars: coreclr::MethodPtr
     get_block: coreclr::MethodPtr
     get_hp: coreclr::MethodPtr
     get_max_hp: coreclr::MethodPtr
-    // Setters (called via dispatch — fires events, needs main thread)
-    set_gold: coreclr::MethodPtr
-    set_max_energy: coreclr::MethodPtr
     set_energy: coreclr::MethodPtr
     set_stars: coreclr::MethodPtr
     set_block: coreclr::MethodPtr
     set_hp: coreclr::MethodPtr
     set_max_hp: coreclr::MethodPtr
-    // Godmode toggle
+    get_hand: coreclr::MethodPtr
+    get_draw_pile: coreclr::MethodPtr
+    get_discard_pile: coreclr::MethodPtr
+    get_exhaust_pile: coreclr::MethodPtr
+    draw_card_cmd: coreclr::MethodPtr
     godmode: cell::Cell<bool>
     player_creature_addr: cell::Cell<i64>
 }
 
+pub enum Tab {
+    Combat
+    Cards
+    Gold
+    Player
+}
+
 pub struct UiState {
+    tab: cell::Cell<Tab>
     gold_amount: cell::Cell<i32>
     energy_amount: cell::Cell<i32>
 }
 
-// ---------------------------------------------------------------------------
-// GameMethods — resolve all method pointers
-// ---------------------------------------------------------------------------
-
-impl GameMethods {
-    pub fn init(rt: coreclr::Runtime) -> Result<GameMethods> {
+impl GameState {
+    pub fn init(rt: coreclr::Runtime) -> Result<GameState> {
         let asm = "sts2";
-        let player_t = "MegaCrit.Sts2.Core.Entities.Players.Player";
-        let pcs_t = "MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState";
-        let creature_t = "MegaCrit.Sts2.Core.Entities.Creatures.Creature";
         let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
         let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+        let player_t = "MegaCrit.Sts2.Core.Entities.Players.Player";
 
-        log::info("resolving RunManager...");
+        log::info("resolving GameState...");
         let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
         log::info(fmt::format("  get_Instance @ {}", get_rm_instance.address()));
         let get_state = rt.method(asm, rm_t, "get_State")?;
-        let get_in_progress = rt.method(asm, rm_t, "get_IsInProgress")?;
         let get_players = rt.method(asm, rs_t, "get_Players")?;
-
-        log::info("resolving Player methods...");
         let get_combat_state = rt.method(asm, player_t, "get_PlayerCombatState")?;
         let get_creature = rt.method(asm, player_t, "get_Creature")?;
-
-        log::info("resolving getters...");
         let get_gold = rt.method(asm, player_t, "get_Gold")?;
-        let get_max_energy = rt.method(asm, player_t, "get_MaxEnergy")?;
-        let get_energy = rt.method(asm, pcs_t, "get_Energy")?;
-        let get_pcs_max_energy = rt.method(asm, pcs_t, "get_MaxEnergy")?;
-        let get_stars = rt.method(asm, pcs_t, "get_Stars")?;
-        let get_block = rt.method(asm, creature_t, "get_Block")?;
-        let get_hp = rt.method(asm, creature_t, "get_CurrentHp")?;
-        let get_max_hp = rt.method(asm, creature_t, "get_MaxHp")?;
-
-        log::info("resolving setters...");
         let set_gold = rt.method(asm, player_t, "set_Gold")?;
+        let get_max_energy = rt.method(asm, player_t, "get_MaxEnergy")?;
         let set_max_energy = rt.method(asm, player_t, "set_MaxEnergy")?;
-        let set_energy = rt.method(asm, pcs_t, "set_Energy")?;
-        let set_stars = rt.method(asm, pcs_t, "set_Stars")?;
-        let set_block = rt.method(asm, creature_t, "set_Block")?;
-        let set_hp = rt.method(asm, creature_t, "set_CurrentHp")?;
-        let set_max_hp = rt.method(asm, creature_t, "set_MaxHp")?;
 
-        log::info("installing godmode hooks...");
-        let godmode = cell::new(false);
-        let player_creature_addr = cell::new(0);
-        let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
-        let damage_block_raw = rt.method(asm, creature_t, "DamageBlockInternal")?;
-        let lose_hp_ptr = lose_hp_raw.resolve_jit();
-        let damage_block_ptr = damage_block_raw.resolve_jit();
-        log::info(fmt::format("LoseHpInternal: precode={} jit={}", lose_hp_raw.address(), lose_hp_ptr.address()));
-        log::info(fmt::format("DamageBlockInternal: precode={} jit={}", damage_block_raw.address(), damage_block_ptr.address()));
-        lose_hp_ptr.hook(|this_addr| {
-            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
-        });
-        damage_block_ptr.hook(|this_addr| {
-            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
-        });
-        log::info("godmode hooks installed");
-
-        Ok(GameMethods {
-            rt,
-            get_rm_instance,
-            get_state,
-            get_in_progress,
-            get_players,
-            get_combat_state,
-            get_creature,
-            get_gold, get_max_energy, get_energy, get_pcs_max_energy,
-            get_stars, get_block, get_hp, get_max_hp,
-            set_gold, set_max_energy, set_energy,
-            set_stars, set_block, set_hp, set_max_hp,
-            godmode,
-            player_creature_addr,
+        Ok(GameState {
+            get_rm_instance, get_state, get_players,
+            get_combat_state, get_creature,
+            get_gold, set_gold, get_max_energy, set_max_energy,
         })
     }
 
-    fn player_inner(self) -> coreclr::ManagedObject {
+    pub fn player(self) -> coreclr::ManagedObject {
         let rm = self.get_rm_instance.call_ptr();
         if rm.is_null() { return coreclr::null(); }
         let state = self.get_state.call_ptr(rm);
@@ -142,10 +88,6 @@ impl GameMethods {
         let items_array = players_list.deref(8);
         if items_array.is_null() { return coreclr::null(); }
         items_array.deref(16)
-    }
-
-    pub fn player(self) -> coreclr::ManagedObject {
-        self.player_inner()
     }
 
     pub fn in_game(self) -> bool {
@@ -164,8 +106,6 @@ impl GameMethods {
         self.get_combat_state.call_ptr(p)
     }
 
-    // --- Gold ---
-
     pub fn gold(self) -> i32 {
         let p = self.player();
         if p.is_null() { return -1; }
@@ -179,8 +119,6 @@ impl GameMethods {
         godot::dispatch(|| { setter.call(p, amount); });
     }
 
-    // --- Energy ---
-
     pub fn max_energy(self) -> i32 {
         let p = self.player();
         if p.is_null() { return -1; }
@@ -193,87 +131,158 @@ impl GameMethods {
         let setter = self.set_max_energy;
         godot::dispatch(|| { setter.call(p, amount); });
     }
+}
 
-    pub fn combat_energy(self) -> i32 {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return -1; }
-        self.get_energy.call(pcs)
+impl Combat {
+    pub fn init(rt: coreclr::Runtime) -> Result<Combat> {
+        let asm = "sts2";
+        let pcs_t = "MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState";
+        let creature_t = "MegaCrit.Sts2.Core.Entities.Creatures.Creature";
+
+        log::info("resolving Combat...");
+        let get_energy = rt.method(asm, pcs_t, "get_Energy")?;
+        let get_pcs_max_energy = rt.method(asm, pcs_t, "get_MaxEnergy")?;
+        let get_stars = rt.method(asm, pcs_t, "get_Stars")?;
+        let get_block = rt.method(asm, creature_t, "get_Block")?;
+        let get_hp = rt.method(asm, creature_t, "get_CurrentHp")?;
+        let get_max_hp = rt.method(asm, creature_t, "get_MaxHp")?;
+        let set_energy = rt.method(asm, pcs_t, "set_Energy")?;
+        let set_stars = rt.method(asm, pcs_t, "set_Stars")?;
+        let set_block = rt.method(asm, creature_t, "set_Block")?;
+        let set_hp = rt.method(asm, creature_t, "set_CurrentHp")?;
+        let set_max_hp = rt.method(asm, creature_t, "set_MaxHp")?;
+        let get_hand = rt.method(asm, pcs_t, "get_Hand")?;
+        let get_draw_pile = rt.method(asm, pcs_t, "get_DrawPile")?;
+        let get_discard_pile = rt.method(asm, pcs_t, "get_DiscardPile")?;
+        let get_exhaust_pile = rt.method(asm, pcs_t, "get_ExhaustPile")?;
+        let draw_card_cmd = rt.find_method(asm, "MegaCrit.Sts2.Core.Commands.CardPileCmd", "Draw", 2)?;
+
+        log::info("installing godmode hooks...");
+        let godmode = cell::new(false);
+        let player_creature_addr = cell::new(0);
+        let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
+        let damage_block_raw = rt.method(asm, creature_t, "DamageBlockInternal")?;
+        let lose_hp_ptr = lose_hp_raw.resolve_jit();
+        let damage_block_ptr = damage_block_raw.resolve_jit();
+        log::info(fmt::format("LoseHpInternal: precode={} jit={}", lose_hp_raw.address(), lose_hp_ptr.address()));
+        log::info(fmt::format("DamageBlockInternal: precode={} jit={}", damage_block_raw.address(), damage_block_ptr.address()));
+        lose_hp_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
+        });
+        damage_block_ptr.hook(|this_addr| {
+            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
+        });
+        log::info("godmode hooks installed");
+
+        Ok(Combat {
+            get_energy, get_pcs_max_energy, get_stars,
+            get_block, get_hp, get_max_hp,
+            set_energy, set_stars, set_block, set_hp, set_max_hp,
+            get_hand, get_draw_pile, get_discard_pile, get_exhaust_pile,
+            draw_card_cmd, godmode, player_creature_addr,
+        })
     }
 
-    pub fn set_combat_energy(self, amount: i32) {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return; }
-        let setter = self.set_energy;
-        godot::dispatch(|| { setter.call(pcs, amount); });
-    }
-
-    pub fn combat_max_energy(self) -> i32 {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return -1; }
-        self.get_pcs_max_energy.call(pcs)
-    }
-
-    pub fn add_energy(self, amount: i32) {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return; }
-        let cur = self.get_energy.call(pcs);
-        let setter = self.set_energy;
-        godot::dispatch(|| { setter.call(pcs, cur + amount); });
-    }
-
-    // --- Stars ---
-
-    pub fn stars(self) -> i32 {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return -1; }
-        self.get_stars.call(pcs)
-    }
-
-    pub fn add_stars(self, amount: i32) {
-        let pcs = self.combat_state();
-        if pcs.is_null() { return; }
-        let cur = self.get_stars.call(pcs);
-        let setter = self.set_stars;
-        godot::dispatch(|| { setter.call(pcs, cur + amount); });
-    }
-
-    // --- HP / Block ---
-
-    pub fn hp(self) -> i32 {
-        let c = self.creature();
+    pub fn hp(self, c: coreclr::ManagedObject) -> i32 {
         if c.is_null() { return -1; }
         self.get_hp.call(c)
     }
 
-    pub fn max_hp(self) -> i32 {
-        let c = self.creature();
+    pub fn max_hp(self, c: coreclr::ManagedObject) -> i32 {
         if c.is_null() { return -1; }
         self.get_max_hp.call(c)
     }
 
-    pub fn block(self) -> i32 {
-        let c = self.creature();
+    pub fn block(self, c: coreclr::ManagedObject) -> i32 {
         if c.is_null() { return -1; }
         self.get_block.call(c)
     }
 
-    pub fn full_heal(self) {
-        let c = self.creature();
+    pub fn full_heal(self, c: coreclr::ManagedObject) {
         if c.is_null() { return; }
         let max = self.get_max_hp.call(c);
         let setter = self.set_hp;
         godot::dispatch(|| { setter.call(c, max); });
     }
 
-    pub fn add_block(self, amount: i32) {
-        let c = self.creature();
+    pub fn add_block(self, c: coreclr::ManagedObject, amount: i32) {
         if c.is_null() { return; }
         let cur = self.get_block.call(c);
         let setter = self.set_block;
         godot::dispatch(|| { setter.call(c, cur + amount); });
     }
 
-    // --- Godmode ---
+    pub fn energy(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        self.get_energy.call(pcs)
+    }
+
+    pub fn max_energy(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        self.get_pcs_max_energy.call(pcs)
+    }
+
+    pub fn set_energy(self, pcs: coreclr::ManagedObject, amount: i32) {
+        if pcs.is_null() { return; }
+        let setter = self.set_energy;
+        godot::dispatch(|| { setter.call(pcs, amount); });
+    }
+
+    pub fn add_energy(self, pcs: coreclr::ManagedObject, amount: i32) {
+        if pcs.is_null() { return; }
+        let cur = self.get_energy.call(pcs);
+        let setter = self.set_energy;
+        godot::dispatch(|| { setter.call(pcs, cur + amount); });
+    }
+
+    pub fn stars(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        self.get_stars.call(pcs)
+    }
+
+    pub fn add_stars(self, pcs: coreclr::ManagedObject, amount: i32) {
+        if pcs.is_null() { return; }
+        let cur = self.get_stars.call(pcs);
+        let setter = self.set_stars;
+        godot::dispatch(|| { setter.call(pcs, cur + amount); });
+    }
+
+    fn pile_count(pile: coreclr::ManagedObject) -> i32 {
+        if pile.is_null() { return 0; }
+        let cards = pile.deref(8);
+        if cards.is_null() { return 0; }
+        cards.read_i32(16)
+    }
+
+    pub fn hand_count(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        Combat::pile_count(self.get_hand.call_ptr(pcs))
+    }
+
+    pub fn draw_pile_count(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        Combat::pile_count(self.get_draw_pile.call_ptr(pcs))
+    }
+
+    pub fn discard_count(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        Combat::pile_count(self.get_discard_pile.call_ptr(pcs))
+    }
+
+    pub fn exhaust_count(self, pcs: coreclr::ManagedObject) -> i32 {
+        if pcs.is_null() { return -1; }
+        Combat::pile_count(self.get_exhaust_pile.call_ptr(pcs))
+    }
+
+    pub fn draw_cards(self, player: coreclr::ManagedObject, n: i32) {
+        if player.is_null() { return; }
+        let cmd = self.draw_card_cmd;
+        let i = 0;
+        while i < n {
+            godot::dispatch(|| { cmd.call(coreclr::null(), player); });
+            i += 1;
+        }
+    }
 
     pub fn set_godmode(self, enabled: bool) {
         self.godmode.set(enabled);
@@ -284,13 +293,10 @@ impl GameMethods {
     }
 }
 
-// ---------------------------------------------------------------------------
-// UiState
-// ---------------------------------------------------------------------------
-
 impl UiState {
     pub fn new() -> UiState {
         UiState {
+            tab: cell::new(Tab::Combat),
             gold_amount: cell::new(9999),
             energy_amount: cell::new(10),
         }

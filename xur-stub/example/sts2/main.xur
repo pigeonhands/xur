@@ -1,14 +1,6 @@
 // Slay the Spire 2 trainer — Godot + CoreCLR (.NET 9) game mod with
 // in-game egui overlay.
 //
-// Loads into the game via LD_PRELOAD, captures the CoreCLR runtime,
-// resolves game methods, and provides an overlay for modifying gold,
-// energy, HP, and other stats. Press F1 to toggle the overlay.
-//
-// Hooks NRun._Process from sts2.dll for a per-frame callback
-// on the game's main thread, and dispatch to safely call property
-// setters from the overlay's render thread.
-//
 //     cargo build --release -p xur-stub --features godot,overlay
 //     # Steam > Slay the Spire 2 > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/sts2/main.xur \
@@ -22,6 +14,7 @@ use std::fmt;
 
 const proxies = std::import("./proxies.xur");
 const draw = std::import("./ui.xur");
+use proxies::Tab;
 
 fn ctor() {
     log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Debug).init();
@@ -43,8 +36,9 @@ fn stub_main() {
 
     let visible = true;
     let f1_down = false;
-    let game: Option<proxies::GameMethods> = None;
-    let game_error: Option<str> = None;
+    let game: Option<proxies::GameState> = None;
+    let combat: Option<proxies::Combat> = None;
+    let init_error: Option<str> = None;
     let state = proxies::UiState::new();
 
     egui::run(|ctx| {
@@ -56,19 +50,29 @@ fn stub_main() {
 
         if !visible { return; }
 
-        // Lazy init — resolve methods after CLR is ready.
-        if game.is_none() && game_error.is_none() {
-            match proxies::GameMethods::init(rt) {
-                Ok(g) => { game = Some(g); }
+        if game.is_none() && init_error.is_none() {
+            match proxies::GameState::init(rt) {
+                Ok(g) => {
+                    match proxies::Combat::init(rt) {
+                        Ok(c) => {
+                            game = Some(g);
+                            combat = Some(c);
+                        }
+                        Err(e) => {
+                            log::info(fmt::format("Combat init error: {}", e));
+                            init_error = Some(e);
+                        }
+                    }
+                }
                 Err(e) => {
-                    log::info(fmt::format("init error: {}", e));
-                    game_error = Some(e);
+                    log::info(fmt::format("GameState init error: {}", e));
+                    init_error = Some(e);
                 }
             }
         }
 
         ctx.window_sized("STS2 Trainer", 380.0, |win| {
-            match game_error {
+            match init_error {
                 Some(msg) => {
                     win.colored_label(255, 80, 80, "init error:");
                     win.small(msg);
@@ -84,19 +88,34 @@ fn stub_main() {
                     return;
                 }
             };
+            let c = match combat {
+                Some(c) => c,
+                None => { return; }
+            };
 
             if !g.in_game() {
                 win.small("not in game (start a run)");
                 return;
             }
 
-            draw::draw_status(win, g);
+            draw::draw_status(win, g, c);
             win.separator();
-            draw::draw_combat(win, g);
+
+            let tab = state.tab.get();
+            win.horizontal(|row| {
+                if row.selectable(tab == Tab::Combat, "Combat") { state.tab.set(Tab::Combat); }
+                if row.selectable(tab == Tab::Cards,  "Cards")  { state.tab.set(Tab::Cards); }
+                if row.selectable(tab == Tab::Gold,   "Gold")   { state.tab.set(Tab::Gold); }
+                if row.selectable(tab == Tab::Player, "Player") { state.tab.set(Tab::Player); }
+            });
             win.separator();
-            draw::draw_gold(win, g, state);
-            win.separator();
-            draw::draw_player(win, g);
+
+            match state.tab.get() {
+                Tab::Combat => { draw::draw_combat(win, g, c); }
+                Tab::Cards  => { draw::draw_cards(win, g, c); }
+                Tab::Gold   => { draw::draw_gold(win, g, state); }
+                Tab::Player => { draw::draw_player(win, g); }
+            }
         });
     });
 }
