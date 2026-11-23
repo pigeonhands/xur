@@ -24,9 +24,10 @@ const proxies = std::import("./proxies.xur");
 const draw = std::import("./ui.xur");
 
 fn ctor() {
-    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Info).init();
+    log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Debug).init();
     egui::init();
     egui::set_scale(0.75);
+    godot::hook_scene_tree();
 }
 
 fn stub_main() {
@@ -39,14 +40,6 @@ fn stub_main() {
             return;
         }
     };
-
-    match godot::hook_scene_tree() {
-        Ok(_) => log::info("lifecycle pump active (SceneTree._Process)"),
-        Err(e) => {
-            log::info(fmt::format("hook_scene_tree failed: {}", e));
-            return;
-        }
-    }
 
     let visible = true;
     let f1_down = false;

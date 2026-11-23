@@ -4,7 +4,7 @@
 // Hooks SceneTree._Process from GodotSharp for the per-frame pump —
 // works for any Godot game, no game-specific types needed.
 //
-//     cargo build --release -p xur-stub --features godot,overlay
+//     cargo build --release -p xur-stub
 //     # Steam > Game > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/godot_scene.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
@@ -27,17 +27,17 @@ pub struct TreeNode {
     children: [TreeNode]
 }
 
-fn capture_node(to_string: coreclr::MethodPtr, get_child_count: coreclr::MethodPtr, get_child: coreclr::MethodPtr, node: coreclr::ManagedObject, depth: i32) -> TreeNode {
-    let name = to_string.call_string(node);
-    let count = get_child_count.call(node);
+fn capture_node(node: coreclr::ManagedObject, depth: i32) -> TreeNode {
+    let name = godot::node_name(node).unwrap_or("?");
+    let count = godot::child_count(node).unwrap_or(0);
 
     let children = [];
     if depth < 6 {
         let i = 0;
         while i < count {
-            let child = get_child.call_ptr(node, i);
-            if !child.is_null() {
-                children.push(capture_node(to_string, get_child_count, get_child, child, depth + 1));
+            match godot::child(node, i) {
+                Ok(child) => children.push(capture_node(child, depth + 1)),
+                Err(_) => {}
             }
             i = i + 1;
         }
@@ -74,6 +74,7 @@ fn ctor() {
     log::subscriber().to_file("/tmp/godot-scene.log").truncate().with_max_level(log::Level::Info).init();
     egui::init();
     egui::set_scale(0.75);
+    godot::hook_scene_tree();
 }
 
 fn stub_main() {
@@ -87,31 +88,34 @@ fn stub_main() {
         }
     };
 
-    match godot::hook_scene_tree() {
-        Ok(_) => log::info("lifecycle pump active (SceneTree._Process)"),
-        Err(e) => {
-            log::info(fmt::format("hook_scene_tree failed: {}", e));
-            return;
-        }
-    }
+    log::info("starting overlay");
 
-    // Resolve the methods we need for tree traversal
-    let to_string = match rt.method("GodotSharp", "Godot.GodotObject", "ToString") {
-        Ok(m) => m,
-        Err(e) => {
-            log::info(fmt::format("failed to resolve ToString: {}", e));
-            return;
-        }
-    };
-    let get_child_count = rt.method("GodotSharp", "Godot.Node", "GetChildCount").unwrap();
-    let get_child = rt.method("GodotSharp", "Godot.Node", "GetChild").unwrap();
-    log::info("methods resolved, starting overlay");
-
-    let visible = true;
-    let f1_down = false;
     let snapshot: Option<TreeNode> = None;
     let frame_count = cell::new(0);
 
+    // Capture scene tree on the game thread every 60 frames.
+    // The bindings resolve lazily on first call (OnceLock) — this is
+    // safe because on_process runs on the game thread where the CLR lives.
+    godot::on_process(|| {
+        let fc = frame_count.get() + 1;
+        frame_count.set(fc);
+
+        if snapshot.is_none() || fc % 60 == 0 {
+            match godot::root() {
+                Ok(root) => snapshot = Some(capture_node(root, 0)),
+                Err(e) => {
+                    if fc % 300 == 0 {
+                        log::info(fmt::format("root() failed: {}", e));
+                    }
+                }
+            }
+        }
+    });
+
+    let visible = true;
+    let f1_down = false;
+
+    // Draw the last captured snapshot on the render thread.
     egui::run(|ctx| {
         let f1 = ctx.key("f1");
         if f1 && !f1_down {
@@ -120,17 +124,6 @@ fn stub_main() {
         f1_down = f1;
 
         if !visible { return; }
-
-        // Refresh snapshot every 60 frames
-        let fc = frame_count.get() + 1;
-        frame_count.set(fc);
-
-        if snapshot.is_none() || fc % 60 == 0 {
-            let root = godot::root();
-            if !root.is_null() {
-                snapshot = Some(capture_node(to_string, get_child_count, get_child, root, 0));
-            }
-        }
 
         ctx.window_sized("Scene Tree", 450.0, |win| {
             match snapshot {

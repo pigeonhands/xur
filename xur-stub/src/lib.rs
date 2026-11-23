@@ -10,7 +10,6 @@ use xur_vm::Vm;
 
 mod stub;
 
-
 const STACK_SIZE: usize = 256 << 20;
 const LOG_PATH: &str = "/tmp/xur-stub.log";
 
@@ -47,7 +46,11 @@ unsafe extern "C" fn crash_signal_handler(
     } else {
         unsafe { (*info).si_addr() as u64 }
     };
-    let sig_name = if sig == libc::SIGSEGV { "SIGSEGV" } else { "SIGBUS" };
+    let sig_name = if sig == libc::SIGSEGV {
+        "SIGSEGV"
+    } else {
+        "SIGBUS"
+    };
     let msg = format!(
         "\n[xur-stub] CRASH: {} at rip=0x{:x} fault_addr=0x{:x}\n",
         sig_name, rip, fault_addr,
@@ -69,7 +72,11 @@ fn install_crash_handler() {}
 
 fn log(msg: std::fmt::Arguments<'_>) {
     use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(LOG_PATH) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(LOG_PATH)
+    {
         let _ = writeln!(f, "[xur-stub] {msg}");
     }
     tracing::info!("{msg}");
@@ -112,7 +119,11 @@ fn init() {
 
             for script in &scripts {
                 if let Some(Err(e)) = script.vm.run_fn("ctor") {
-                    log(format_args!("{}: ctor: {}", script.path.display(), e.message));
+                    log(format_args!(
+                        "{}: ctor: {}",
+                        script.path.display(),
+                        e.message
+                    ));
                 }
             }
 
@@ -158,9 +169,13 @@ fn compile_scripts() -> Result<Vec<Script>, String> {
 fn compile_script(path: &Path) -> Result<Vm, String> {
     let registry = make_registry();
     let natives = Box::new(Arc::clone(&registry));
-    let (program, diags) =
-        Program::load(path, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
-            .map_err(|e| e.to_string())?;
+    let (program, diags) = Program::load(
+        path,
+        Box::new(RealFileLoader),
+        natives,
+        Some(xur_std::PRELUDE),
+    )
+    .map_err(|e| e.to_string())?;
 
     if !diags.is_empty() {
         for d in &diags {
@@ -173,12 +188,14 @@ fn compile_script(path: &Path) -> Result<Vm, String> {
 }
 
 fn run_main(script: &Script) -> Result<(), String> {
+    log(format_args!("run_main: entering stub_main"));
     // Prefer stub_main() so a script can serve as both a CLI
     // program and a stub payload.
     let result = match script.vm.run_fn("stub_main") {
         Some(r) => r,
         None => script.vm.run_main(),
     };
+    log(format_args!("run_main: stub_main returned"));
     result
         .map(|_| ())
         .map_err(|e| format!("runtime error: {}", e.message))
@@ -218,7 +235,6 @@ fn find_scripts(path: &Path) -> Result<Vec<PathBuf>, String> {
     scripts.sort();
     Ok(scripts)
 }
-
 
 fn make_registry() -> Arc<Registry> {
     Arc::new({
@@ -262,20 +278,38 @@ mod tests {
         compile("hello.xur", include_str!("../example/hello.xur"));
         compile("tracing.xur", include_str!("../example/tracing.xur"));
         compile("hooking.xur", include_str!("../example/hooking.xur"));
-        compile("game_inspector.xur", include_str!("../example/game_inspector.xur"));
+        compile(
+            "game_inspector.xur",
+            include_str!("../example/game_inspector.xur"),
+        );
         compile("godot.xur", include_str!("../example/godot.xur"));
-        compile("megabonk_discover.xur", include_str!("../example/megabonk_discover.xur"));
+        compile(
+            "megabonk_discover.xur",
+            include_str!("../example/megabonk_discover.xur"),
+        );
         compile("sts2.xur", include_str!("../example/sts2.xur"));
     }
 
     #[test]
     #[cfg(feature = "egui")]
     fn egui_examples_compile() {
-        compile("egui_overlay.xur", include_str!("../example/egui_overlay.xur"));
+        compile(
+            "egui_overlay.xur",
+            include_str!("../example/egui_overlay.xur"),
+        );
         compile_files(&[
-            ("megabonk/main.xur", include_str!("../example/megabonk/main.xur")),
-            ("megabonk/proxies.xur", include_str!("../example/megabonk/proxies.xur")),
-            ("megabonk/ui.xur", include_str!("../example/megabonk/ui.xur")),
+            (
+                "megabonk/main.xur",
+                include_str!("../example/megabonk/main.xur"),
+            ),
+            (
+                "megabonk/proxies.xur",
+                include_str!("../example/megabonk/proxies.xur"),
+            ),
+            (
+                "megabonk/ui.xur",
+                include_str!("../example/megabonk/ui.xur"),
+            ),
         ]);
     }
 
@@ -284,9 +318,11 @@ mod tests {
     fn overlay_examples_compile() {
         compile_files(&[
             ("sts2/main.xur", include_str!("../example/sts2/main.xur")),
-            ("sts2/proxies.xur", include_str!("../example/sts2/proxies.xur")),
+            (
+                "sts2/proxies.xur",
+                include_str!("../example/sts2/proxies.xur"),
+            ),
             ("sts2/ui.xur", include_str!("../example/sts2/ui.xur")),
         ]);
     }
-
 }
