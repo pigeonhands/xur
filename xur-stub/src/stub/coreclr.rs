@@ -54,7 +54,7 @@ impl std::fmt::Display for MethodPtr {
 
 #[derive(Facet, Clone, Copy)]
 #[facet(opaque)]
-struct ManagedObject(usize);
+pub(crate) struct ManagedObject(pub(crate) usize);
 
 unsafe impl Send for ManagedObject {}
 unsafe impl Sync for ManagedObject {}
@@ -126,7 +126,9 @@ extern "C" fn coreclr_hook_dispatch(
         map.get(&original).cloned()
     };
     let Some(entry) = entry else {
-        unsafe { *result = hooking::DispatchResult::passthrough(); }
+        unsafe {
+            *result = hooking::DispatchResult::passthrough();
+        }
         return;
     };
     let dr = match &entry {
@@ -146,7 +148,9 @@ extern "C" fn coreclr_hook_dispatch(
             }
         }
     };
-    unsafe { *result = dr; }
+    unsafe {
+        *result = dr;
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -243,6 +247,26 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
                 Err(e) => Ok(Value::adt(lang.err, vec![Value::str(&e.to_string())])),
             }
         })
+        .raw_function("find_method", |cx, args| {
+            let [_this, Value::Str(assembly), Value::Str(type_name), Value::Str(method), Value::Int(param_count)] =
+                args
+            else {
+                return Err(RuntimeError::new(
+                    "`find_method` takes (assembly, type, method, param_count)",
+                ));
+            };
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
+            let lang = cx.lang();
+            match rt.find_method_from_loaded(assembly, type_name, method, *param_count as i32) {
+                Ok(ptr) => {
+                    let v = into_value(cx, MethodPtr(ptr as usize))?;
+                    Ok(Value::adt(lang.ok, vec![v]))
+                }
+                Err(e) => Ok(Value::adt(lang.err, vec![Value::str(&e.to_string())])),
+            }
+        })
         .raw_function("load_assembly", |cx, args| {
             let [_this, Value::Str(path)] = args else {
                 return Err(RuntimeError::new("`load_assembly` takes a path"));
@@ -311,11 +335,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             {
                 let slot: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
                 let mut hook = unsafe {
-                    hook_writer()
-                        .create_save_registers(
-                            ptr.0 as *mut u8,
-                            coreclr_hook_dispatch,
-                        )
+                    hook_writer().create_save_registers(ptr.0 as *mut u8, coreclr_hook_dispatch)
                 }
                 .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
                 let orig = hook.original_function().as_ptr() as usize;
@@ -329,9 +349,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
                 into_value(cx, CapturedRef(slot))
             }
             #[cfg(not(target_arch = "x86_64"))]
-            Err(RuntimeError::new(
-                "capture_this only supported on x86_64",
-            ))
+            Err(RuntimeError::new("capture_this only supported on x86_64"))
         })
         .raw_function("hook", |cx, args| {
             let [this, callback] = args else {
@@ -349,18 +367,17 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(target_arch = "x86_64")]
             {
                 let mut hook = unsafe {
-                    hook_writer()
-                        .create_save_registers(
-                            ptr.0 as *mut u8,
-                            coreclr_hook_dispatch,
-                        )
+                    hook_writer().create_save_registers(ptr.0 as *mut u8, coreclr_hook_dispatch)
                 }
                 .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
                 let orig = hook.original_function().as_ptr() as usize;
-                hooks()
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(orig, HookEntry::Callback { closure: callback, handle });
+                hooks().lock().unwrap_or_else(|e| e.into_inner()).insert(
+                    orig,
+                    HookEntry::Callback {
+                        closure: callback,
+                        handle,
+                    },
+                );
                 unsafe { hook.apply_hook() }
                     .map_err(|e| RuntimeError::new(format!("apply hook failed: {e:?}")))?;
                 std::mem::forget(hook);
@@ -400,7 +417,9 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
                 Ok(Value::Unit)
             }
             #[cfg(not(target_arch = "x86_64"))]
-            Err(RuntimeError::new("patch_precode_target only supported on x86_64"))
+            Err(RuntimeError::new(
+                "patch_precode_target only supported on x86_64",
+            ))
         })
         .raw_function("call_string", |_cx, args| {
             if args.is_empty() {
@@ -493,7 +512,7 @@ fn register_captured_ref(m: &mut ModuleBuilder<'_>) {
 // ---------------------------------------------------------------------------
 
 /// Reads a CoreCLR System.String object: `[MethodTable:8][length:i32][UTF-16 chars...]`
-fn read_clr_string(addr: usize) -> String {
+pub(crate) fn read_clr_string(addr: usize) -> String {
     if addr == 0 {
         return String::new();
     }
@@ -506,7 +525,10 @@ fn read_clr_string(addr: usize) -> String {
     String::from_utf16_lossy(slice)
 }
 
-pub(crate) fn managed_object_value(cx: &mut dyn xur_runtime::Context, addr: usize) -> xur_runtime::RunResult<Value> {
+pub(crate) fn managed_object_value(
+    cx: &mut dyn xur_runtime::Context,
+    addr: usize,
+) -> xur_runtime::RunResult<Value> {
     into_value(cx, ManagedObject(addr))
 }
 
