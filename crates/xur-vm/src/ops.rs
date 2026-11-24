@@ -124,12 +124,13 @@ impl Interp<'_> {
                 let lhs_c = self.coerce_repr(lhs);
                 let rhs_c = self.coerce_repr(rhs);
                 match (&lhs_c, &rhs_c) {
-                    (Some(_), _) | (_, Some(_)) => {
-                        let lhs = lhs_c.as_ref().unwrap_or(lhs);
-                        let rhs = rhs_c.as_ref().unwrap_or(rhs);
-                        lhs == rhs
-                    }
-                    _ => lhs == rhs,
+                    // Two repr enums compare structurally (same variant) — they
+                    // must NOT match just because they share a discriminant.
+                    (Some(_), Some(_)) => lhs == rhs,
+                    // A repr enum vs a plain int coerces the enum to its value.
+                    (Some(l), None) => l == rhs,
+                    (None, Some(r)) => lhs == r,
+                    (None, None) => lhs == rhs,
                 }
             }
         }

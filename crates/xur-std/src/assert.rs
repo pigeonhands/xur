@@ -33,12 +33,12 @@ fn repr_eq(cx: &dyn Context, left: &Value, right: &Value) -> bool {
     let lc = coerce_repr(cx, left);
     let rc = coerce_repr(cx, right);
     match (&lc, &rc) {
-        (Some(_), _) | (_, Some(_)) => {
-            let left = lc.as_ref().unwrap_or(left);
-            let right = rc.as_ref().unwrap_or(right);
-            values_eq(cx, left, right)
-        }
-        _ => values_eq(cx, left, right),
+        // Two repr enums compare structurally — not by a shared discriminant.
+        (Some(_), Some(_)) => values_eq(cx, left, right),
+        // A repr enum vs a plain int coerces the enum to its value.
+        (Some(l), None) => values_eq(cx, l, right),
+        (None, Some(r)) => values_eq(cx, left, r),
+        (None, None) => values_eq(cx, left, right),
     }
 }
 

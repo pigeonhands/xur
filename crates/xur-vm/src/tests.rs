@@ -1139,3 +1139,29 @@ fn test_all_examples() {
     };
     assert!(passed > 10, "test_all only ran {passed} examples, expected >10");
 }
+
+#[test]
+fn repr_enum_equality_is_type_scoped() {
+    // A repr-enum variant coerces to its discriminant only against an int, not
+    // against a *different* enum that happens to share that discriminant.
+    let src = r#"
+        use std::assert;
+        use std::io;
+        #[repr(u32)] enum Color { Red = 1  Green = 2 }
+        #[repr(u32)] enum Protection { Read = 1  Write = 2 }
+        fn main() {
+            // enum vs int still coerces (the intended feature)
+            assert::is_eq(Color::Red, 1);
+            assert::is_eq(Protection::Read, 1);
+            // same enum: same variant equal, different variant not
+            assert::is_eq(Color::Red, Color::Red);
+            assert::is_ne(Color::Red, Color::Green);
+            // different enum types with the same discriminant must NOT be equal
+            assert::is_ne(Color::Red, Protection::Read);        // assert::repr_eq path
+            assert::is_eq(Color::Red == Protection::Read, false); // values_eq path
+            assert::is_eq(Color::Red == 1, true);
+            io::println("ok");
+        }
+    "#;
+    assert_eq!(run(src), Ok("ok\n".into()));
+}
