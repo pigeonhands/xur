@@ -146,7 +146,12 @@ pub(super) fn register(m: &mut ModuleBuilder<'_>) {
             hao_godot::engine::image::resolve_all(rt).map_err(|e| e.to_string())?;
             hao_godot::engine::rendering_server::resolve_all(rt).map_err(|e| e.to_string())?;
             hao_godot::engine::atlas_texture::resolve_all(rt).map_err(|e| e.to_string())?;
-            tracing::info!("godot::image: all bindings resolved");
+            // Build + resolve the compound extraction method here, on the
+            // script thread: its resolution uses UCO Hao.Loader calls that
+            // cannot run on the cooperative-mode game thread. Afterwards the
+            // game thread reaches it via a cached raw pointer.
+            hao_godot::engine::image::warm_compound(rt).map_err(|e| e.to_string())?;
+            tracing::info!("godot::image: all bindings resolved and compound method warmed");
             Ok(())
         },
     );
