@@ -22,6 +22,13 @@ fn coerce_repr(cx: &dyn Context, value: &Value) -> Option<Value> {
     None
 }
 
+fn values_eq(cx: &dyn Context, left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Native(a), Value::Native(b)) => cx.registry().native_eq(a, b),
+        _ => left == right,
+    }
+}
+
 fn repr_eq(cx: &dyn Context, left: &Value, right: &Value) -> bool {
     let lc = coerce_repr(cx, left);
     let rc = coerce_repr(cx, right);
@@ -29,9 +36,9 @@ fn repr_eq(cx: &dyn Context, left: &Value, right: &Value) -> bool {
         (Some(_), _) | (_, Some(_)) => {
             let left = lc.as_ref().unwrap_or(left);
             let right = rc.as_ref().unwrap_or(right);
-            left == right
+            values_eq(cx, left, right)
         }
-        _ => left == right,
+        _ => values_eq(cx, left, right),
     }
 }
 
