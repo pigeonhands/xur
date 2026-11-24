@@ -76,10 +76,12 @@ pub(crate) fn register(registry: &Registry) {
             let others = lock(&other.0).clone();
             lock(&list.0).extend(others);
         })
-        .function("to_hex", |bytes: Vec<u8>| {
-            bytes
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
+        .method("to_hex", |list: &[Value]| {
+            list.iter()
+                .map(|v| match v {
+                    Value::Int(i) => format!("{:02x}", i.to_i128() as u8),
+                    _ => String::new(),
+                })
                 .collect::<String>()
         })
         .raw_function_returns_xur("map", XurType::LIST, |cx, args| {

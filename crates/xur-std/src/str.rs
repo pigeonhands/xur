@@ -1,5 +1,4 @@
-//! Methods of strings: plain Rust functions, with the receiver converted to
-//! a `String` by facet.
+//! Methods of strings.
 
 use xur_runtime::{BuiltinType, Registry, XurStr};
 
@@ -13,44 +12,44 @@ pub(crate) fn register(registry: &Registry) {
         });
     registry
         .builtin(BuiltinType::Str)
-        .function("len", |s: String| s.chars().count() as i64)
-        .function("is_empty", |s: String| s.is_empty())
-        .function("ord", |s: String| -> Result<u32, String> {
+        .method("len", |s: &str| s.chars().count() as i64)
+        .method("is_empty", |s: &str| s.is_empty())
+        .method("ord", |s: &str| -> Result<u32, String> {
             let mut chars = s.chars();
             match (chars.next(), chars.next()) {
                 (Some(c), None) => Ok(c as u32),
                 _ => Err(format!("`ord` expects a single character, got {}-char string", s.chars().count())),
             }
         })
-        .function("to_upper", |s: String| s.to_uppercase())
-        .function("to_lower", |s: String| s.to_lowercase())
-        .function("trim", |s: String| s.trim().to_owned())
-        .function("trim_start", |s: String| s.trim_start().to_owned())
-        .function("trim_end", |s: String| s.trim_end().to_owned())
-        .function("contains", |s: String, part: String| s.contains(&part))
-        .function("starts_with", |s: String, prefix: String| {
-            s.starts_with(&prefix)
+        .method("to_upper", |s: &str| s.to_uppercase())
+        .method("to_lower", |s: &str| s.to_lowercase())
+        .method("trim", |s: &str| s.trim().to_owned())
+        .method("trim_start", |s: &str| s.trim_start().to_owned())
+        .method("trim_end", |s: &str| s.trim_end().to_owned())
+        .method("contains", |s: &str, part: XurStr| s.contains(&*part))
+        .method("starts_with", |s: &str, prefix: XurStr| {
+            s.starts_with(&*prefix)
         })
-        .function("ends_with", |s: String, suffix: String| {
-            s.ends_with(&suffix)
+        .method("ends_with", |s: &str, suffix: XurStr| {
+            s.ends_with(&*suffix)
         })
-        .function("replace", |s: String, from: String, to: String| {
-            s.replace(&from, &to)
+        .method("replace", |s: &str, from: XurStr, to: XurStr| {
+            s.replace(&*from, &to)
         })
-        .function("split", |s: String, separator: String| {
-            s.split(&separator).map(str::to_owned).collect::<Vec<_>>()
+        .method("split", |s: &str, separator: XurStr| {
+            s.split(&*separator).map(str::to_owned).collect::<Vec<_>>()
         })
-        .function("lines", |s: String| {
+        .method("lines", |s: &str| {
             s.lines().map(str::to_owned).collect::<Vec<_>>()
         })
-        .function("repeat", |s: String, n: u32| s.repeat(n as usize))
-        .function("pad_left", |s: String, width: usize, fill: String| {
+        .method("repeat", |s: &str, n: u32| s.repeat(n as usize))
+        .method("pad_left", |s: &str, width: usize, fill: XurStr| {
             pad_left(s, width, &fill)
         })
-        .function("pad_right", |s: String, width: usize, fill: String| {
+        .method("pad_right", |s: &str, width: usize, fill: XurStr| {
             pad_right(s, width, &fill)
         })
-        .function("slice", |s: String, start: i64, end: i64| {
+        .method("slice", |s: &str, start: i64, end: i64| {
             let chars: Vec<char> = s.chars().collect();
             let len = chars.len();
             let start = resolve_index(start, len);
@@ -61,22 +60,22 @@ pub(crate) fn register(registry: &Registry) {
                 chars[start..end].iter().collect()
             }
         })
-        .function("chars", |s: String| {
+        .method("chars", |s: &str| {
             s.chars().map(|c| c.to_string()).collect::<Vec<_>>()
         })
-        .function("bytes", |s: String| {
+        .method("bytes", |s: &str| {
             s.bytes().map(|b| b as i64).collect::<Vec<i64>>()
         })
-        .function("insert", |s: String, index: i64, substr: String| {
+        .method("insert", |s: &str, index: i64, substr: XurStr| {
             let chars: Vec<char> = s.chars().collect();
             let len = chars.len();
             let pos = resolve_index(index, len);
             let byte_pos = chars[..pos].iter().map(|c| c.len_utf8()).sum::<usize>();
-            let mut result = s;
+            let mut result = s.to_owned();
             result.insert_str(byte_pos, &substr);
             result
         })
-        .function("remove", |s: String, start: i64, end: i64| {
+        .method("remove", |s: &str, start: i64, end: i64| {
             let mut chars: Vec<char> = s.chars().collect();
             let len = chars.len();
             let start = resolve_index(start, len);
@@ -86,14 +85,14 @@ pub(crate) fn register(registry: &Registry) {
             }
             chars.into_iter().collect::<String>()
         })
-        .function("parse_int", |s: String| {
+        .method("parse_int", |s: &str| {
             s.trim().parse::<i64>().map_err(|e| e.to_string())
         })
-        .function("parse_hex", |s: String| {
+        .method("parse_hex", |s: &str| {
             i64::from_str_radix(s.trim().trim_start_matches("0x").trim_start_matches("0X"), 16)
                 .map_err(|e| e.to_string())
         })
-        .function("parse_float", |s: String| {
+        .method("parse_float", |s: &str| {
             s.trim().parse::<f64>().map_err(|e| e.to_string())
         })
         .method("find", |s: &str, needle: XurStr| -> Option<i64> {
@@ -113,18 +112,18 @@ fn resolve_index(index: i64, len: usize) -> usize {
     }
 }
 
-/// `s` with `fill` repeated in front until it is `width` characters long.
-fn pad_left(s: String, width: usize, fill: &str) -> String {
+fn pad_left(s: &str, width: usize, fill: &str) -> String {
     let missing = width.saturating_sub(s.chars().count());
     let padding: String = fill.chars().cycle().take(missing).collect();
-    padding + &s
+    padding + s
 }
 
-/// `s` with `fill` repeated behind until it is `width` characters long.
-fn pad_right(s: String, width: usize, fill: &str) -> String {
+fn pad_right(s: &str, width: usize, fill: &str) -> String {
     let missing = width.saturating_sub(s.chars().count());
     let padding: String = fill.chars().cycle().take(missing).collect();
-    s + &padding
+    let mut result = s.to_owned();
+    result.push_str(&padding);
+    result
 }
 
 

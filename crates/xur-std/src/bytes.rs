@@ -6,8 +6,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, lock};
-use xur_runtime::registry::XurType;
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, XurStr, lock};
+
 
 type Bytes = Arc<Mutex<Vec<u8>>>;
 
@@ -16,11 +16,11 @@ pub(crate) fn register(registry: &Registry) {
         .module("std::bytes")
         .named_function("zeroed", &["len"], |len: usize| vec![0u8; len])
         .named_function("from_list", &["bytes"], |bytes: Vec<u8>| bytes)
-        .named_function("from_hex", &["hex"], from_hex);
+        .named_function("from_hex", &["hex"], |hex: XurStr| from_hex(&hex));
     registry
         .builtin(BuiltinType::Str)
-        .function("to_bytes", |s: String| s.into_bytes())
-        .function("from_hex", from_hex);
+        .method("to_bytes", |s: &str| s.as_bytes().to_vec())
+        .method("from_hex", |s: &str| from_hex(s));
 
     let mut methods = registry.builtin(BuiltinType::Bytes);
     methods
@@ -34,11 +34,11 @@ pub(crate) fn register(registry: &Registry) {
             let other = lock(&other.0).clone();
             lock(&bytes.0).extend(other);
         })
-        .method("find", |bytes: &[u8], needle: Vec<u8>| -> Option<i64> {
-            find(bytes, &needle).map(|at| at as i64)
+        .method("find", |bytes: &[u8], needle: XurBytes| -> Option<i64> {
+            find(bytes, &lock(&needle.0)).map(|at| at as i64)
         })
-        .method("starts_with", |bytes: &[u8], prefix: Vec<u8>| -> bool {
-            bytes.starts_with(&prefix)
+        .method("starts_with", |bytes: &[u8], prefix: XurBytes| -> bool {
+            bytes.starts_with(&lock(&prefix.0))
         })
         .method("to_hex", |bytes: &[u8]| -> String {
             bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -102,7 +102,7 @@ pub(crate) fn register(registry: &Registry) {
 }
 
 /// Parses pairs of hex digits, ignoring whitespace: `"4d 5a"`.
-pub(crate) fn from_hex(hex: String) -> Result<Vec<u8>, String> {
+pub(crate) fn from_hex(hex: &str) -> Result<Vec<u8>, String> {
     let digits: Vec<char> = hex.chars().filter(|c| !c.is_whitespace()).collect();
     if !digits.len().is_multiple_of(2) {
         return Err("hex strings need two digits per byte".to_owned());
