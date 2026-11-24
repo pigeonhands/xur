@@ -4,8 +4,6 @@ use std::io::c;
 use std::fs;
 use std::cli;
 use std::path;
-use std::sync;
-use std::thread;
 
 fn run_example(p: str) -> Result<()> {
     let module = std::try_import(p)?;
@@ -71,23 +69,15 @@ fn try_run(example: str) -> ExampleResult {
 
 fn test_all() {
     let examples = all_examples();
-    let (tx, rx) = sync::channel();
     let total = examples.len();
-
-    for example in examples {
-        let tx = tx;
-        thread::spawn(|| {
-            tx.send(try_run(example)).unwrap();
-        });
-    }
 
     let results = [];
     let total_passed = 0;
     let total_failed = 0;
     let total_skipped = 0;
 
-    for _ in examples {
-        let r = rx.recv().unwrap();
+    for example in examples {
+        let r = try_run(example);
         results.push(r);
         match r {
             ExampleResult::Passed(_) => total_passed = total_passed + 1,

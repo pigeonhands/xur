@@ -7,7 +7,7 @@
 use std::time;
 use std::io;
 
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
 }
 
