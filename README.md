@@ -372,6 +372,28 @@ XUR_STUB_PATH=xur-stub/example LD_PRELOAD=target/release/libxur_stub.so ./target
 # XUR_STUB_PATH=xur-stub/example LD_PRELOAD=target/release/libxur_stub.so %command%
 ```
 
+### Attach-time injection: `xur stub inject`
+
+The same stub can be injected into an **already-running** process instead of
+preloaded at launch — useful when you can't set launch options or want to attach
+mid-session:
+
+```sh
+xur stub path                               # print the resolved libxur_stub.so
+xur stub inject <script.xur> --pid <PID>
+xur stub inject <script.xur> --name <process-name>
+```
+
+`inject` `dlopen`s the stub into the target (via ptrace) and runs the script on a
+background thread — the same `ctor()` → `stub_main()` path as `LD_PRELOAD`, except
+the host's `main` is already running, so `ctor()` hooks install mid-flight. The
+stub is auto-located next to the `xur` binary or on the system library path
+(override with `--stub`).
+
+Injection needs ptrace permission: on most distros `sudo sysctl
+kernel.yama.ptrace_scope=0`, run `xur` with `sudo`, or grant it `CAP_SYS_PTRACE`.
+Linux x86-64 only.
+
 Scripts can define `fn ctor()` for work that must run before the host's
 `main` (e.g. installing hooks), and `fn main()` or `fn stub_main()` for
 the payload. The stub adds extra modules for game engines:

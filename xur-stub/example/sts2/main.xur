@@ -5,6 +5,10 @@
 //     # Steam > Slay the Spire 2 > Properties > Launch options:
 //     XUR_STUB_PATH=xur-stub/example/sts2/main.xur \
 //         LD_PRELOAD=target/release/libxur_stub.so %command%
+//
+//     # Or inject into the already-running game (needs ptrace, e.g.
+//     # `sudo sysctl kernel.yama.ptrace_scope=0`):
+//     xur stub inject xur-stub/example/sts2/main.xur --name <game-process>
 
 use std::gui;
 use std::stub::overlay::egui;
