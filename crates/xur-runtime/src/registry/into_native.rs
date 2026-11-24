@@ -19,6 +19,27 @@ pub trait IntoNativeMethodMut<T, Marker> {
 /// Functions that can be registered with [`ModuleBuilder::function`]: any
 /// `Fn(A, B, ...) -> R` (up to six arguments) whose types implement
 /// [`Facet`]. `Marker` only distinguishes the implementations.
+///
+/// # Taking a registered native type as an argument
+///
+/// Each argument is marshaled with [`from_value::<Arg>`](crate::convert::from_value),
+/// which matches a value against the argument type's *shape*. A registered
+/// native type (`ty::<T>(..)`) must therefore be taken **by value** (`|x: T|`),
+/// so its own registered shape resolves and the native fast-path applies — e.g.
+/// `|tex: ManagedObject|`, `|obj: XurUnityObject|`.
+///
+/// Taking one **by reference** (`|x: &T|`) does *not* work: the `&T` reference
+/// shape is not a registered type, so `from_value` skips the native path and the
+/// call fails at runtime with `expected `&T`, found native object`. Only method
+/// receivers (`&self` in [`IntoNativeMethod`]) borrow a native by reference,
+/// because the receiver is pulled from the `NativeObject` directly (see the
+/// `@method` arm below). Registered native types are typically cheap `Copy`
+/// handles, so by-value is also the right default.
+///
+// TODO: support `&T` arguments for registered native types by borrowing the
+// `NativeObject` in-scope for the call (as the `@method` arm does for `&self`),
+// instead of routing `&T` through `from_value`. Would make the arg API
+// symmetric with receivers; low priority since by-value already works.
 pub trait IntoNativeFn<Marker> {
     fn into_native(self) -> (Signature, Box<CallFn>);
 }

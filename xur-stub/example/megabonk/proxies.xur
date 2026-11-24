@@ -9,6 +9,7 @@ use std::stub::hooking;
 use std::stub::il2cpp;
 use std::stub::il2cpp::il2cpp_proxy;
 use std::stub::unity::egui;
+use std::gui;
 use std::log;
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ pub struct HealthInfo {
 pub struct EnumEntry {
     name: str
     value: i32
-    icon: Option<i32>
+    icon: Option<gui::Texture>
     data_obj: Option<il2cpp::Object>
 }
 
@@ -381,7 +382,11 @@ fn load_icons(entries: [EnumEntry], list_obj: il2cpp::Object, enum_field: il2cpp
         if data_obj.is_null() { continue; }
         let enum_val: i32 = enum_field.read(data_obj);
         let tex = icon_field.read(data_obj);
-        let tex_id = if !tex.is_null() { Some(egui::register_texture(tex)) } else { None };
+        let tex_id = if !tex.is_null() {
+            match egui::register_texture(tex) { Ok(t) => Some(t), Err(_) => None }
+        } else {
+            None
+        };
         let i = 0;
         while i < entries.len() {
             if entries[i].value == enum_val {

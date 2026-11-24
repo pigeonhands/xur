@@ -1,5 +1,6 @@
 use std::cell;
 use std::fmt;
+use std::gui;
 use std::log;
 use std::stub::coreclr;
 use std::stub::godot;
@@ -80,14 +81,14 @@ pub enum Tab {
 
 struct CachedPortrait {
     id: str
-    tex_id: i64
+    tex_id: gui::Texture
     width: i32
     height: i32
 }
 
 struct CachedRelicIcon {
     id: str
-    tex_id: i64
+    tex_id: gui::Texture
     width: i32
     height: i32
 }
@@ -656,7 +657,7 @@ impl UiState {
         None
     }
 
-    pub fn cache_portrait(self, id: str, tex_id: i64, width: i32, height: i32) {
+    pub fn cache_portrait(self, id: str, tex_id: gui::Texture, width: i32, height: i32) {
         let cache = self.portraits.get();
         cache.push(CachedPortrait { id: id, tex_id: tex_id, width: width, height: height });
         self.portraits.set(cache);
@@ -729,7 +730,7 @@ impl UiState {
         None
     }
 
-    pub fn cache_relic_icon(self, id: str, tex_id: i64, width: i32, height: i32) {
+    pub fn cache_relic_icon(self, id: str, tex_id: gui::Texture, width: i32, height: i32) {
         let cache = self.relic_icons.get();
         cache.push(CachedRelicIcon { id: id, tex_id: tex_id, width: width, height: height });
         self.relic_icons.set(cache);

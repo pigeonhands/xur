@@ -69,3 +69,24 @@ pub fn with_ui(
     obj.with(|wrapper: &EguiUi| f(wrapper.ui()))
         .ok_or_else(|| RuntimeError::new("expected a `Ui`"))?
 }
+
+/// A texture id handed to Xur scripts. Mirrors `egui::TextureId`: a `Managed`
+/// texture is one uploaded to egui (e.g. `load_texture_rgba`), a `User` texture
+/// is a native game texture registered by a backend (e.g. a Unity texture). The
+/// `image` widget renders either; scripts just hold and pass it.
+#[derive(Facet, Clone, Copy, PartialEq)]
+#[repr(u8)]
+pub enum Texture {
+    Managed(i64),
+    User(i64),
+}
+
+impl Texture {
+    /// The egui texture id this handle refers to.
+    pub fn texture_id(self) -> egui::TextureId {
+        match self {
+            Texture::Managed(id) => egui::TextureId::Managed(id as u64),
+            Texture::User(id) => egui::TextureId::User(id as u64),
+        }
+    }
+}

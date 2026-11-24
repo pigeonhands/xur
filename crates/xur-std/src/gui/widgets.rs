@@ -8,7 +8,7 @@ use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use super::types::{EguiCtx, EguiUi, with_ctx, with_ui};
+use super::types::{EguiCtx, EguiUi, Texture, with_ctx, with_ui};
 
 static TEXTURES: Mutex<Option<HashMap<u64, TextureHandle>>> = Mutex::new(None);
 
@@ -85,7 +85,7 @@ pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'
 
     ty.method(
         "load_texture_rgba",
-        |wrapper: &EguiCtx, name: String, width: i64, height: i64, rgba: Vec<u8>| -> Result<i64, String> {
+        |wrapper: &EguiCtx, name: String, width: i64, height: i64, rgba: Vec<u8>| -> Result<Texture, String> {
             let w = width as usize;
             let h = height as usize;
             if rgba.len() != w * h * 4 {
@@ -108,14 +108,16 @@ pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'
             let handle = TextureHandle::new(tex_mngr, tex_id);
             let mut map = TEXTURES.lock().unwrap();
             map.get_or_insert_with(HashMap::new).insert(id, handle);
-            Ok(id as i64)
+            Ok(Texture::Managed(id as i64))
         },
     );
 
-    ty.method("free_texture", |_wrapper: &EguiCtx, id: i64| {
-        let mut map = TEXTURES.lock().unwrap();
-        if let Some(m) = map.as_mut() {
-            m.remove(&(id as u64));
+    ty.method("free_texture", |_wrapper: &EguiCtx, tex: Texture| {
+        if let Texture::Managed(id) = tex {
+            let mut map = TEXTURES.lock().unwrap();
+            if let Some(m) = map.as_mut() {
+                m.remove(&(id as u64));
+            }
         }
     });
 }
@@ -428,10 +430,10 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         })
     });
 
-    ty.method("image", |wrapper: &EguiUi, tex_id: i64, width: f64, height: f64| {
+    ty.method("image", |wrapper: &EguiUi, tex: Texture, width: f64, height: f64| {
         let ui = wrapper.ui();
         let sized = egui::load::SizedTexture::new(
-            TextureId::Managed(tex_id as u64),
+            tex.texture_id(),
             Vec2::new(width as f32, height as f32),
         );
         ui.add(Image::new(sized));

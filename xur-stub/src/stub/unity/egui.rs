@@ -3,12 +3,12 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use hao_egui::Context;
 use hao_il2cpp_unity::egui as hao_egui;
-use hao_il2cpp_unity::egui::{Image, TextureId, Vec2};
+use hao_il2cpp_unity::egui::TextureId;
 use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use xur_std::gui::{with_ctx, with_ui, EguiCtx, EguiUi};
+use xur_std::gui::{with_ctx, EguiCtx, Texture};
 
 use crate::stub::il2cpp::XurObject;
 
@@ -135,38 +135,31 @@ pub(crate) fn register(registry: &Registry) {
             Ok(Value::Unit)
         });
 
-        m.raw_function("register_texture", |_cx, args| {
-            let [obj_val] = args else {
-                return Err(RuntimeError::new("`register_texture` takes a Unity Object"));
-            };
-            let Value::Native(n) = obj_val else {
-                return Err(RuntimeError::new("`register_texture` takes a Unity Object"));
-            };
-            let obj = n
-                .with(|o: &XurObject| o.obj())
-                .ok_or_else(|| RuntimeError::new("expected an il2cpp Object"))?;
-            let tex_id = hao_egui::register_user_texture(obj)
-                .map_err(|e| RuntimeError::new(format!("register_texture: {e}")))?;
-            match tex_id {
-                TextureId::User(id) => Ok(Value::Int(id as i64)),
-                _ => unreachable!(),
-            }
-        });
+        m.named_function(
+            "register_texture",
+            &["obj"],
+            // By value, not `&XurObject`: function args marshal via
+            // `from_value`, which resolves a registered native type's own shape
+            // but not a `&T` reference shape (see IntoNativeFn docs).
+            |obj: XurObject| -> Result<Texture, String> {
+                let tex_id = hao_egui::register_user_texture(obj.obj())
+                    .map_err(|e| format!("register_texture: {e}"))?;
+                match tex_id {
+                    TextureId::User(id) => Ok(Texture::User(id as i64)),
+                    _ => Err("register_texture: unexpected texture id".into()),
+                }
+            },
+        );
 
-        m.raw_function("unregister_texture", |_cx, args| {
-            let [Value::Int(id)] = args else {
-                return Err(RuntimeError::new(
-                    "`unregister_texture` takes a texture id (int)",
-                ));
-            };
-            hao_egui::unregister_user_texture(TextureId::User(*id as u64));
-            Ok(Value::Unit)
+        m.named_function("unregister_texture", &["tex"], |tex: Texture| {
+            if let Texture::User(id) = tex {
+                hao_egui::unregister_user_texture(TextureId::User(id as u64));
+            }
         });
 
         register_run(m);
         register_frame_count(m);
         register_key(m);
-        register_image(m);
     });
 }
 
@@ -269,21 +262,3 @@ fn parse_keycode(name: &str) -> Option<KeyCode> {
     }
 }
 
-fn register_image(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
-    let mut ty = m.ty_existing::<EguiUi>();
-    ty.raw_function("image", |_cx, args| {
-        let [this, Value::Int(tex_id), Value::Float(width), Value::Float(height)] = args else {
-            return Err(RuntimeError::new(
-                "`image` takes (texture_id: int, width: float, height: float)",
-            ));
-        };
-        with_ui(this, |ui| {
-            let sized = hao_egui::load::SizedTexture::new(
-                TextureId::User(*tex_id as u64),
-                Vec2::new(*width as f32, *height as f32),
-            );
-            ui.add(Image::new(sized));
-            Ok(Value::Unit)
-        })
-    });
-}
