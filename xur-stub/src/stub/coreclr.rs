@@ -286,6 +286,50 @@ pub(crate) fn register(registry: &Registry) {
             ManagedObject(addr as usize)
         });
 
+        // Materializes any managed `IEnumerable` (lazy iterators, LINQ chains,
+        // dictionary views — whose layout pointer math cannot read) into a list
+        // of its elements, via the CLR's own `foreach` in Hao.Loader. Must run
+        // on the cooperative (game) thread, and the runtime must have warmed
+        // Enumerate off that thread first (see `warm_enumerate`).
+        m.named_function(
+            "enumerate",
+            &["obj"],
+            |obj: ManagedObject| -> Result<Vec<ManagedObject>, String> {
+                if obj.0 == 0 {
+                    return Ok(Vec::new());
+                }
+                let rt = RUNTIME
+                    .get()
+                    .ok_or_else(|| "runtime not initialized".to_string())?;
+                let items = rt.enumerate(obj.0).map_err(|e| e.to_string())?;
+                Ok(items.into_iter().map(ManagedObject).collect())
+            },
+        );
+
+        // JIT-compiles and caches the Enumerate helper. Call once off the game
+        // thread (at init) before any `enumerate` call on the game thread.
+        m.named_function("warm_enumerate", &[], || -> Result<(), String> {
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| "runtime not initialized".to_string())?;
+            rt.warm_enumerate().map_err(|e| e.to_string())
+        });
+
+        // Injects a dynamically-created .NET assembly from its raw bytes (e.g.
+        // read from a file or built elsewhere) into the running CLR. `name` is
+        // the assembly name (used for identity on Mono; cosmetic on CoreCLR).
+        m.named_function(
+            "load_library",
+            &["name", "bytes"],
+            |name: String, bytes: Vec<u8>| -> Result<(), String> {
+                let rt = RUNTIME
+                    .get()
+                    .ok_or_else(|| "runtime not initialized".to_string())?;
+                rt.load_assembly_bytes(&name, &bytes)
+                    .map_err(|e| e.to_string())
+            },
+        );
+
         register_runtime(m);
         register_method_ptr(m);
         register_managed_object(m);

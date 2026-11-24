@@ -25,6 +25,35 @@ Return a null managed object reference.
 .B from_address(addr: int) -> ManagedObject
 Wrap a raw memory address as a ManagedObject. No validation is
 performed; the address is trusted.
+.TP
+.B enumerate(obj: ManagedObject) -> Result<[ManagedObject]>
+Materialize any managed
+.B System.Collections.IEnumerable
+into a list of its elements, using the CLR's own
+.B foreach
+(a helper injected into the running runtime). This reads collections
+whose concrete layout pointer math cannot — compiler-generated lazy
+iterators, LINQ chains, and dictionary views — not just plain arrays and
+.BR List<T> .
+Must be called on the cooperative (engine) thread, and
+.B warm_enumerate
+must have run once off that thread first. Returns an empty list for a
+null argument.
+.TP
+.B warm_enumerate() -> Result<()>
+JIT-compile and cache the enumerate helper. Call once off the
+cooperative (engine) thread — e.g. at init, alongside other binding
+warm-up — before any
+.B enumerate
+call on that thread. Idempotent.
+.TP
+.B load_library(name: str, bytes: bytes) -> Result<()>
+Inject a dynamically-created .NET assembly, from its raw image bytes,
+into the running runtime. The bytes may come from a file
+.RB ( std::fs::read ),
+an embedded resource, or a module built elsewhere.
+.I name
+is the assembly name (used for identity on Mono; cosmetic on CoreCLR).
 .SH Runtime METHODS
 The Runtime handle is obtained from the engine module (e.g.
 .BR godot::init() ).
@@ -281,6 +310,24 @@ damage.hook(|this_addr| {
     // Skip damage entirely
     Some(0)
 });
+.fi
+.SS Enumerating an IEnumerable
+.nf
+// Off the engine thread (e.g. at init): warm the helper once.
+coreclr::warm_enumerate().unwrap();
+
+// On the engine thread: read a collection the CLR returns as an
+// IEnumerable (here a lazy iterator pointer math cannot walk).
+let all = rt.method("asm", "ModelDb", "get_AllCards").unwrap();
+for card in coreclr::enumerate(all.call_ptr()).unwrap() {
+    // ... use each element ...
+}
+.fi
+.SS Injecting a dynamic library
+.nf
+let bytes = std::fs::read("./Helper.dll").unwrap();
+coreclr::load_library("Helper", bytes).unwrap();
+let hello = rt.method("Helper", "Helper.Entry", "Hello").unwrap();
 .fi
 .SH SEE ALSO
 .BR xur.std.stub.hooking (7),
