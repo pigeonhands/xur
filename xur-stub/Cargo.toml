@@ -27,9 +27,9 @@ hao-runtime = { workspace = true, optional = true }
 libloading = { version = "0.9", optional = true }
 libc.workspace = true
 unrealkit = { workspace = true, optional = true }
-hao-egui-overlay = { version = "0.1.0", path = "../../hao/crates/hao-egui-overlay", optional = true }
+hao-egui-overlay = { version = "0.1.0", optional = true }
 rust_decimal = "1.43.0"
-procodile = { version = "0.3.2", path = "../../procodile/procodile" }
+procodile = { version = "0.3.2" }
 
 [features]
 default = ["il2cpp-runtime", "il2cpp-unity", "godot", "hooking", "unreal", "egui", "overlay", "xur-http", "xur-regex", "xur-datetime", "xur-json", "xur-re", "xur-gui", "xur-random", "xur-hash", "xur-decimal"]

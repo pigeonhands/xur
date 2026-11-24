@@ -1577,21 +1577,9 @@ dependencies = [
 
 [[package]]
 name = "hao"
-version = "0.0.9"
+version = "0.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78a84b4d6465062d784b8f37c36a2ec1aa8ac094b46621689b85311cc41ea15e"
-dependencies = [
- "bitflags 2.13.2",
- "facet",
- "pewter",
- "strum 0.28.0",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "hao"
-version = "0.0.10"
+checksum = "d5cc989e60678f3d421894f4d39d593f06c6f62727ee4ad64dcafc8489deeb2c"
 dependencies = [
  "bitflags 2.13.2",
  "facet",
@@ -1604,6 +1592,8 @@ dependencies = [
 [[package]]
 name = "hao-egui-overlay"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48aa3370ad0854aa2ec58c686b39a3912b36e9f979083daeaccd7515288c2cfa"
 dependencies = [
  "ash",
  "egui",
@@ -1616,7 +1606,9 @@ dependencies = [
 
 [[package]]
 name = "hao-godot"
-version = "0.0.5"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "665658a3095fdf1b243d5ce73941f325fbc4b48b9584d384dbe1b8ba703428e3"
 dependencies = [
  "hao-runtime",
  "hooking",
@@ -1626,19 +1618,21 @@ dependencies = [
 
 [[package]]
 name = "hao-il2cpp"
-version = "0.0.5"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a38df509710d5a812ab3366b3559c050ed522f39b5f9008f2fa4873f6742de3"
+checksum = "e255dcd97fe56094cac555528e0a09aac8be4c129ec8049842ce3b9176b36434"
 dependencies = [
  "facet",
- "hao 0.0.9",
+ "hao",
  "pewter",
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "hao-il2cpp-runtime"
-version = "0.0.5"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c452d989f9d24454b1900e7ec3bb9b908d60df976ddc0291c77613ae5d3981a8"
 dependencies = [
  "facet",
  "hooking",
@@ -1650,7 +1644,9 @@ dependencies = [
 
 [[package]]
 name = "hao-il2cpp-unity"
-version = "0.0.6"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48757908e38f3c65aed273df8ed0fcf38c5a0e95d515b89083fa2cade0cd8a70"
 dependencies = [
  "egui",
  "facet",
@@ -1660,10 +1656,12 @@ dependencies = [
 
 [[package]]
 name = "hao-runtime"
-version = "0.0.6"
+version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a4dbd4bd475c67349044b711e9c87d5c475d37b7221bed2b9168e5b7150869a"
 dependencies = [
  "facet",
- "hao 0.0.10",
+ "hao",
  "hooking",
  "libloading 0.9.0",
  "thiserror 2.0.21",
@@ -2956,6 +2954,8 @@ dependencies = [
 [[package]]
 name = "procodile"
 version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e4e94e36254590f16e5b93c3ebd605cd4e47e73f32074c7e2b19d0c6a3b334"
 dependencies = [
  "facet",
  "libc",
@@ -4021,6 +4021,8 @@ checksum = "ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557"
 [[package]]
 name = "unrealkit"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfcd8c0fff50ed13d16b90f2e09e3d19ece6c04c79b08e1bb2650955f491e0d5"
 dependencies = [
  "thiserror 2.0.21",
 ]
@@ -4946,7 +4948,7 @@ dependencies = [
  "eframe",
  "egui",
  "facet",
- "hao 0.0.9",
+ "hao",
  "hao-il2cpp",
  "hao-runtime",
  "iced-x86",
