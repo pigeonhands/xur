@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
+use facet::Facet;
 use hao_egui::Context;
 use hao_il2cpp_unity::egui as hao_egui;
 use hao_il2cpp_unity::egui::TextureId;
@@ -8,9 +9,18 @@ use hao_il2cpp_unity::{input, KeyCode};
 use xur_runtime::convert::into_value;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use xur_std::gui::{with_ctx, EguiCtx, Texture};
+use xur_std::gui::{EguiCtx, Texture};
 
 use crate::stub::il2cpp::XurUnityObject;
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+enum EguiError {
+    InvalidScale,
+    NotInitialized,
+    UnknownKey(String),
+}
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -115,32 +125,24 @@ fn init_early() {
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::unity::egui", |m| {
-        m.raw_function("init", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`init` takes no arguments"));
-            }
+        m.shape_type("EguiError", EguiError::SHAPE);
+
+        m.function("init", || {
             init_early();
-            Ok(Value::Unit)
         });
 
-        m.raw_function("set_scale", |_cx, args| {
-            let [Value::Float(factor)] = args else {
-                return Err(RuntimeError::new("`set_scale` takes a float"));
-            };
-            let f = *factor as f32;
+        m.named_function("set_scale", &["factor"], |factor: f64| -> Result<(), EguiError> {
+            let f = factor as f32;
             if f <= 0.0 {
-                return Err(RuntimeError::new("scale factor must be positive"));
+                return Err(EguiError::InvalidScale);
             }
             hao_egui::set_ui_scale(f);
-            Ok(Value::Unit)
+            Ok(())
         });
 
         m.named_function(
             "register_texture",
             &["obj"],
-            // By value, not `&XurUnityObject`: function args marshal via
-            // `from_value`, which resolves a registered native type's own shape
-            // but not a `&T` reference shape (see IntoNativeFn docs).
             |obj: XurUnityObject| -> Result<Texture, String> {
                 let tex_id = hao_egui::register_user_texture(obj.obj())
                     .map_err(|e| format!("register_texture: {e}"))?;
@@ -158,8 +160,17 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         register_run(m);
-        register_frame_count(m);
-        register_key(m);
+
+        m.function("frame_count", || -> i64 {
+            BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed)) as i64
+        });
+
+        let mut ty = m.ty_existing::<EguiCtx>();
+        ty.method("key", |_ctx: &EguiCtx, name: String| -> Result<bool, EguiError> {
+            let code = parse_keycode(&name)
+                .ok_or_else(|| EguiError::UnknownKey(name))?;
+            Ok(input::key(code).unwrap_or(false))
+        });
     });
 }
 
@@ -208,29 +219,6 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
     });
 }
 
-fn register_frame_count(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
-    m.raw_function("frame_count", move |_cx, args| {
-        if !args.is_empty() {
-            return Err(RuntimeError::new("`frame_count` takes no arguments"));
-        }
-        let count = BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed));
-        Ok(Value::Int(count as i64))
-    });
-}
-
-fn register_key(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
-    let mut ty = m.ty_existing::<EguiCtx>();
-    ty.raw_function("key", |_cx, args| {
-        let [this, Value::Str(name)] = args else {
-            return Err(RuntimeError::new("`key` takes a key name string"));
-        };
-        let _ = with_ctx(this, |_ctx| Ok(Value::Unit))?;
-        let code =
-            parse_keycode(name).ok_or_else(|| RuntimeError::new(format!("unknown key: {name}")))?;
-        Ok(Value::Bool(input::key(code).unwrap_or(false)))
-    });
-}
-
 fn parse_keycode(name: &str) -> Option<KeyCode> {
     match name.to_ascii_lowercase().as_str() {
         "f1" => Some(KeyCode::F1),
@@ -261,4 +249,3 @@ fn parse_keycode(name: &str) -> Option<KeyCode> {
         _ => None,
     }
 }
-
