@@ -1,11 +1,20 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
+use facet::Facet;
 use hao_egui_overlay::egui;
 use xur_runtime::convert::into_value;
 use xur_runtime::{Registry, RuntimeError, Value};
 
-use xur_std::gui::{with_ctx, EguiCtx};
+use xur_std::gui::EguiCtx;
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+enum EguiError {
+    InvalidScale,
+    NotInitialized,
+}
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -83,29 +92,42 @@ fn init_early() {
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::overlay::egui", |m| {
-        m.raw_function("init", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`init` takes no arguments"));
-            }
+        m.shape_type("EguiError", EguiError::SHAPE);
+
+        m.function("init", || {
             init_early();
-            Ok(Value::Unit)
         });
 
-        m.raw_function("set_scale", |_cx, args| {
-            let [Value::Float(factor)] = args else {
-                return Err(RuntimeError::new("`set_scale` takes a float"));
-            };
-            let f = *factor as f32;
+        m.named_function("set_scale", &["factor"], |factor: f64| -> Result<(), EguiError> {
+            let f = factor as f32;
             if f <= 0.0 {
-                return Err(RuntimeError::new("scale factor must be positive"));
+                return Err(EguiError::InvalidScale);
             }
             hao_egui_overlay::set_scale(f);
-            Ok(Value::Unit)
+            Ok(())
         });
 
         register_run(m);
-        register_frame_count(m);
-        register_key(m);
+
+        m.function("frame_count", || -> i64 {
+            BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed)) as i64
+        });
+
+        let mut ty = m.ty_existing::<EguiCtx>();
+        ty.method("key", |ctx: &EguiCtx, name: &str| -> bool {
+            ctx.ctx().input(|i| match name.to_ascii_lowercase().as_str() {
+                "f1" => i.key_down(egui::Key::F1),
+                "f2" => i.key_down(egui::Key::F2),
+                "f3" => i.key_down(egui::Key::F3),
+                "f4" => i.key_down(egui::Key::F4),
+                "f5" => i.key_down(egui::Key::F5),
+                "escape" | "esc" => i.key_down(egui::Key::Escape),
+                "space" => i.key_down(egui::Key::Space),
+                "tab" => i.key_down(egui::Key::Tab),
+                "return" | "enter" => i.key_down(egui::Key::Enter),
+                _ => false,
+            })
+        });
     });
 }
 
@@ -159,39 +181,5 @@ fn register_run(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
                 bridge.cv.notify_one();
             }
         }
-    });
-}
-
-fn register_frame_count(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
-    m.raw_function("frame_count", move |_cx, args| {
-        if !args.is_empty() {
-            return Err(RuntimeError::new("`frame_count` takes no arguments"));
-        }
-        let count = BRIDGE.get().map_or(0, |b| b.frames.load(Ordering::Relaxed));
-        Ok(Value::Int(count as i64))
-    });
-}
-
-fn register_key(m: &mut xur_runtime::registry::ModuleBuilder<'_>) {
-    let mut ty = m.ty_existing::<EguiCtx>();
-    ty.raw_function("key", |_cx, args| {
-        let [this, Value::Str(name)] = args else {
-            return Err(RuntimeError::new("`key` takes a key name string"));
-        };
-        with_ctx(this, |ctx| {
-            let pressed = ctx.input(|i| match name.to_ascii_lowercase().as_str() {
-                "f1" => i.key_down(egui::Key::F1),
-                "f2" => i.key_down(egui::Key::F2),
-                "f3" => i.key_down(egui::Key::F3),
-                "f4" => i.key_down(egui::Key::F4),
-                "f5" => i.key_down(egui::Key::F5),
-                "escape" | "esc" => i.key_down(egui::Key::Escape),
-                "space" => i.key_down(egui::Key::Space),
-                "tab" => i.key_down(egui::Key::Tab),
-                "return" | "enter" => i.key_down(egui::Key::Enter),
-                _ => false,
-            });
-            Ok(Value::Bool(pressed))
-        })
     });
 }
