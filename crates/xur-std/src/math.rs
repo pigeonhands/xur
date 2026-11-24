@@ -34,14 +34,8 @@ pub(crate) fn register(registry: &Registry) {
         .named_function("INFINITY", &[], || f64::INFINITY)
         .named_function("NAN", &[], || f64::NAN)
         // Utility
-        .named_function("clamp", &["val", "min", "max"], |x: f64, min: f64, max: f64| -> Result<f64, String> {
-            if min.is_nan() || max.is_nan() {
-                return Err("`clamp`: bounds must not be NaN".into());
-            }
-            if min > max {
-                return Err(format!("`clamp`: min ({min}) must be <= max ({max})"));
-            }
-            Ok(x.clamp(min, max))
+        .named_function("clamp", &["val", "min", "max"], |x: f64, min: f64, max: f64| -> f64 {
+            x.clamp(min, max)
         })
         .named_function("lerp", &["a", "b", "t"], |a: f64, b: f64, t: f64| a + (b - a) * t)
         .named_function("fmin", &["a", "b"], |a: f64, b: f64| a.min(b))
@@ -154,9 +148,10 @@ mod tests {
 
     #[test]
     fn utility_functions() {
-        let clamped = call("clamp", &[Value::Float(5.0), Value::Float(0.0), Value::Float(3.0)]);
-        let Value::Adt(adt) = &clamped else { panic!("expected Ok(float), got {clamped:?}") };
-        assert_eq!(adt.fields, vec![Value::Float(3.0)]);
+        assert_eq!(
+            call("clamp", &[Value::Float(5.0), Value::Float(0.0), Value::Float(3.0)]),
+            Value::Float(3.0)
+        );
 
         let Value::Float(lerp_val) = call("lerp", &[Value::Float(0.0), Value::Float(10.0), Value::Float(0.5)]) else {
             panic!("expected float");
