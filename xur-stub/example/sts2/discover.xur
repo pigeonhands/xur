@@ -8,15 +8,17 @@ use std::io;
 use std::re::dotnet;
 
 fn dump_type(module: dotnet::Module, full_name: str) {
-    let ty = module.find_type_by_full_name(full_name);
-    if ty == () {
-        io::println(fmt::format("NOT FOUND: {}", full_name));
-        return;
-    }
+    let ty = match module.find_type_by_full_name(full_name) {
+        Some(t) => t,
+        None => {
+            io::println(fmt::format("NOT FOUND: {}", full_name));
+            return;
+        }
+    };
     io::println(fmt::format("=== {} ===", ty.full_name()));
-    let base = ty.base_type();
-    if base != () {
-        io::println(fmt::format("  base: {}", base));
+    match ty.base_type() {
+        Some(base) => { io::println(fmt::format("  base: {}", base)); }
+        None => {}
     }
     io::println("  fields:");
     for f in ty.fields() {
@@ -40,9 +42,10 @@ fn main() -> Result<()> {
     io::println("");
 
     let targets = [
-        "MegaCrit.Sts2.Core.Runs.RunManager",
-        "MegaCrit.Sts2.Core.Runs.RunState",
-        "MegaCrit.Sts2.Core.Combat.CombatRoom",
+        "MegaCrit.Sts2.Core.Models.ModelDb",
+        "MegaCrit.Sts2.Core.Models.CardModel",
+        "MegaCrit.Sts2.Core.Models.AbstractModel",
+        "MegaCrit.Sts2.Core.Models.ModelId",
     ];
 
     for name in targets {

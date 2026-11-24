@@ -9,12 +9,61 @@
 use std::gui;
 use std::stub::overlay::egui;
 use std::stub::godot;
+use std::stub::coreclr;
 use std::log;
 use std::fmt;
 
 const proxies = std::import("./proxies.xur");
 const draw = std::import("./ui.xur");
+const catalog = std::import("./catalog.xur");
 use proxies::Tab;
+
+// The resolved game proxies, built once the CoreCLR runtime and game models
+// are ready. GameState/Combat are required; the helpers are optional (a
+// resolution failure logs and leaves that feature unavailable).
+struct Trainer {
+    game: proxies::GameState
+    combat: proxies::Combat
+    cards: Option<proxies::CardHelper>
+    catalog: Option<catalog::CardCatalog>
+    relics: Option<proxies::RelicHelper>
+    relic_catalog: Option<catalog::RelicCatalog>
+}
+
+impl Trainer {
+    fn init(rt: coreclr::Runtime, state: proxies::UiState) -> Result<Trainer> {
+        let game = proxies::GameState::init(rt)?;
+        let combat = proxies::Combat::init(rt)?;
+        combat.install_auto_draw_hook(rt, state);
+        // JIT-compile the IEnumerable helper now, off the game thread, so the
+        // catalog builds (which call coreclr::enumerate on the game thread) can
+        // use it. Best-effort: on failure catalogs just stay empty.
+        match coreclr::warm_enumerate() {
+            Ok(()) => {}
+            Err(e) => { log::info(fmt::format("warm_enumerate error: {}", e)); }
+        }
+        let cards = match proxies::CardHelper::init(rt) {
+            Ok(c) => Some(c),
+            Err(e) => { log::info(fmt::format("CardHelper init error: {}", e)); None }
+        };
+        let card_catalog = match catalog::CardCatalog::init(rt) {
+            Ok(c) => Some(c),
+            Err(e) => { log::info(fmt::format("CardCatalog init error: {}", e)); None }
+        };
+        let relics = match proxies::RelicHelper::init(rt) {
+            Ok(r) => Some(r),
+            Err(e) => { log::info(fmt::format("RelicHelper init error: {}", e)); None }
+        };
+        let relic_catalog = match catalog::RelicCatalog::init(rt) {
+            Ok(r) => Some(r),
+            Err(e) => { log::info(fmt::format("RelicCatalog init error: {}", e)); None }
+        };
+        Ok(Trainer {
+            game: game, combat: combat, cards: cards, catalog: card_catalog,
+            relics: relics, relic_catalog: relic_catalog,
+        })
+    }
+}
 
 fn ctor() {
     log::subscriber().to_file("/tmp/sts2-trainer.log").truncate().with_max_level(log::Level::Debug).init();
@@ -36,10 +85,7 @@ fn stub_main() {
 
     let visible = true;
     let f1_down = false;
-    let game: Option<proxies::GameState> = None;
-    let combat: Option<proxies::Combat> = None;
-    let cards: Option<proxies::CardHelper> = None;
-    let relics: Option<proxies::RelicHelper> = None;
+    let trainer: Option<Trainer> = None;
     let init_error: Option<str> = None;
     let state = proxies::UiState::new();
 
@@ -57,38 +103,33 @@ fn stub_main() {
         draw::process_pending_portraits(ctx, state);
         draw::process_pending_relic_icons(ctx, state);
 
-        if game.is_none() && init_error.is_none() {
-            match proxies::GameState::init(rt) {
-                Ok(g) => {
-                    match proxies::Combat::init(rt) {
-                        Ok(c) => {
-                            c.install_auto_draw_hook(rt, state);
-                            game = Some(g);
-                            combat = Some(c);
-                            match proxies::CardHelper::init(rt) {
-                                Ok(ch) => { cards = Some(ch); }
-                                Err(e) => {
-                                    log::info(fmt::format("CardHelper init error: {}", e));
-                                }
-                            }
-                            match proxies::RelicHelper::init(rt) {
-                                Ok(rh) => { relics = Some(rh); }
-                                Err(e) => {
-                                    log::info(fmt::format("RelicHelper init error: {}", e));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            log::info(fmt::format("Combat init error: {}", e));
-                            init_error = Some(e);
-                        }
-                    }
-                }
+        if trainer.is_none() && init_error.is_none() {
+            match Trainer::init(rt, state) {
+                Ok(t) => { trainer = Some(t); }
                 Err(e) => {
-                    log::info(fmt::format("GameState init error: {}", e));
+                    log::info(fmt::format("trainer init error: {}", e));
                     init_error = Some(e);
                 }
             }
+        }
+
+        // Preload card portraits in the background once a run is active (not
+        // during startup — readback needs the renderer and card models up),
+        // a few per frame so the Cards tab is ready without a freeze.
+        match trainer {
+            Some(t) => {
+                let in_run = match t.game.in_game() { Ok(v) => v, Err(_) => false };
+                if in_run {
+                    match t.catalog {
+                        Some(cat) => {
+                            catalog::seed_preload(cat, state);
+                            catalog::drive_preload(cat, state, 8);
+                        }
+                        None => {}
+                    }
+                }
+            }
+            None => {}
         }
 
         ctx.window_sized("STS2 Trainer", 380.0, |win| {
@@ -101,17 +142,15 @@ fn stub_main() {
                 None => {}
             }
 
-            let g = match game {
-                Some(g) => g,
+            let t = match trainer {
+                Some(t) => t,
                 None => {
                     win.small("waiting for CoreCLR runtime...");
                     return;
                 }
             };
-            let c = match combat {
-                Some(c) => c,
-                None => { return; }
-            };
+            let g = t.game;
+            let c = t.combat;
 
             let in_game = match g.in_game() { Ok(v) => v, Err(_) => false };
             if !in_game {
@@ -140,16 +179,26 @@ fn stub_main() {
             match state.tab.get() {
                 Tab::Combat => { draw::draw_combat(win, g, c, state); }
                 Tab::Cards  => {
-                    match cards {
-                        Some(ch) => { draw::draw_cards(win, g, c, ch, state); }
+                    match t.cards {
+                        Some(ch) => {
+                            match t.catalog {
+                                Some(cat) => { draw::draw_cards(win, g, c, ch, cat, state); }
+                                None => { win.small("card catalog not available (check log)"); }
+                            }
+                        }
                         None => { win.small("card helper not available (check log)"); }
                     }
                 }
                 Tab::Gold   => { draw::draw_gold(win, g, state); }
                 Tab::Player => { draw::draw_player(win, g); }
                 Tab::Relics => {
-                    match relics {
-                        Some(rh) => { draw::draw_relics(win, rh, state); }
+                    match t.relics {
+                        Some(rh) => {
+                            match t.relic_catalog {
+                                Some(rc) => { draw::draw_relics(win, rh, rc, state); }
+                                None => { win.small("relic catalog not available (check log)"); }
+                            }
+                        }
                         None => { win.small("relic helper not available (check log)"); }
                     }
                 }

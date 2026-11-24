@@ -1,0 +1,287 @@
+// catalog.xur — stable ModelDb card catalog + portrait preloading.
+//
+// Card portraits must come from the session-stable `ModelDb.get_AllCards`
+// catalog, NOT from per-combat card instances: a combat card is a CardModel
+// *copy* that is freed when the combat ends, so holding its raw pointer across
+// a dispatch boundary and dereferencing it after a GC (e.g. the next combat)
+// crashes the runtime. Like the relic catalog, we capture stable integer
+// indices + the stable string id and re-resolve the model on the game thread.
+
+use std::stub::coreclr;
+use std::stub::godot;
+use std::log;
+use std::fmt;
+
+const proxies = std::import("./proxies.xur");
+
+pub struct CardCatalog {
+    get_all_cards: coreclr::MethodPtr,
+    get_portrait: coreclr::MethodPtr,
+    get_has_portrait: coreclr::MethodPtr,
+    get_id: coreclr::MethodPtr,
+    get_entry: coreclr::MethodPtr,
+}
+
+// Reads any managed collection into a list of its elements by letting the CLR
+// enumerate it (coreclr::enumerate -> Hao.Loader::Enumerate). Unlike hand-walked
+// pointer math, this reads a `get_AllCards`-style lazy iterator, not just plain
+// arrays and `List<T>`. MUST run on the cooperative (game) thread, so every
+// caller here is reached through a `godot::dispatch` closure.
+fn enumerate(obj: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
+    match coreclr::enumerate(obj) {
+        Ok(items) => items,
+        Err(e) => {
+            log::info(fmt::format("enumerate error: {}", e));
+            []
+        }
+    }
+}
+
+impl CardCatalog {
+    pub fn init(rt: coreclr::Runtime) -> Result<CardCatalog> {
+        let asm = "sts2";
+        let db_t = "MegaCrit.Sts2.Core.Models.ModelDb";
+        let card_t = "MegaCrit.Sts2.Core.Models.CardModel";
+        let model_t = "MegaCrit.Sts2.Core.Models.AbstractModel";
+        let model_id_t = "MegaCrit.Sts2.Core.Models.ModelId";
+        let get_all_cards = rt.method(asm, db_t, "get_AllCards")?;
+        let get_portrait = rt.method(asm, card_t, "get_Portrait")?;
+        let get_has_portrait = rt.method(asm, card_t, "get_HasPortrait")?;
+        let get_id = rt.method(asm, model_t, "get_Id")?;
+        let get_entry = rt.method(asm, model_id_t, "get_Entry")?;
+        Ok(CardCatalog { get_all_cards, get_portrait, get_has_portrait, get_id, get_entry })
+    }
+
+    // The stable string id of any CardModel (catalog model or combat copy).
+    pub fn card_id(self, model: coreclr::ManagedObject) -> str {
+        if model.is_null() { return ""; }
+        let id = self.get_id.call_ptr(model);
+        if id.is_null() { return ""; }
+        let entry = self.get_entry.call_ptr(id);
+        if entry.is_null() { return ""; }
+        match entry.read_string() { Ok(s) => s, Err(_) => "" }
+    }
+
+    // Every catalog card that has a portrait, as (stable id, catalog index).
+    // Holds no managed pointers — ids are strings, indices are ints.
+    pub fn all_cards(self) -> [proxies::CardEntry] {
+        let result = [];
+        let models = enumerate(self.get_all_cards.call_ptr());
+        let seen = [];
+        let i = 0;
+        for model in models {
+            if self.get_has_portrait.call(model) != 0 {
+                let id = self.card_id(model);
+                if id != "" && !seen.contains(id) {
+                    seen.push(id);
+                    result.push(proxies::CardEntry { id: id, index: i });
+                }
+            }
+            i += 1;
+        }
+        result
+    }
+
+    // Re-resolves catalog card `index` on the game thread and extracts its
+    // portrait. Returns a pending-portrait keyed by the stable id.
+    pub fn portrait_at(self, index: i32, known_id: str) -> Option<proxies::PendingPortrait> {
+        let models = enumerate(self.get_all_cards.call_ptr());
+        if index < 0 || index >= models.len() { return None; }
+        let model = models[index];
+        let tex = self.get_portrait.call_ptr(model);
+        if tex.is_null() { return None; }
+        match godot::texture_to_rgba(tex) {
+            Ok(result) => {
+                if result.0 > 0 && result.1 > 0 {
+                    Some(proxies::PendingPortrait {
+                        id: known_id, width: result.0,
+                        height: result.1, data: result.2,
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    }
+}
+
+// Dispatches a single catalog card's portrait extraction to the game thread,
+// once. The closure captures only this call's stable id + index (no managed
+// instance pointer), so it is safe across GC and combat transitions. Marking
+// the id requested makes the whole preload idempotent.
+fn dispatch_one(cat: CardCatalog, state: proxies::UiState, id: str, index: i32) {
+    if state.is_portrait_requested(id) { return; }
+    state.mark_portrait_requested(id);
+    godot::dispatch(|| {
+        match cat.portrait_at(index, id) {
+            Some(pending) => { state.push_pending_portrait(pending); }
+            None => {}
+        }
+    });
+}
+
+// Builds the card catalog (once) and seeds the preload queue. all_cards()
+// enumerates get_AllCards via the CLR and makes per-card managed calls, so it
+// must run on the cooperative (game) thread — dispatched here, exactly like the
+// relic catalog. The seeding flag is claimed synchronously so only one build is
+// dispatched. Call when in a run: readback needs the renderer and models up.
+pub fn seed_preload(cat: CardCatalog, state: proxies::UiState) {
+    if !state.start_card_preload_seeding() { return; }
+    godot::dispatch(|| {
+        let cards = cat.all_cards();
+        let n = cards.len();
+        state.set_card_preload_queue(cards);
+        log::info(fmt::format("card catalog: {} portraits to preload", n));
+    });
+}
+
+// Dispatches extraction for up to `budget` queued cards. Extraction runs on the
+// game thread (one per dispatch), so a small per-frame budget keeps the game
+// responsive while the whole deck preloads over a second or so in the
+// background. The atlas is read back once; later cards are cheap crops.
+pub fn drive_preload(cat: CardCatalog, state: proxies::UiState, budget: i32) {
+    for entry in state.take_card_preload_batch(budget) {
+        dispatch_one(cat, state, entry.id, entry.index);
+    }
+}
+
+// ─── Relic catalog ────────────────────────────────────────────────────────
+// The session-stable relic catalog from ModelDb.AllSharedRelicPools, moved
+// here from RelicHelper so both model catalogs live in one place. Relics are
+// indexed by (pool_idx, elem_idx) — stable integers re-resolved on use, same
+// as the card catalog's index.
+
+pub struct RelicCatalog {
+    get_shared_relic_pools: coreclr::MethodPtr,
+    pool_get_all_relics: coreclr::MethodPtr,
+    get_icon: coreclr::MethodPtr,
+    get_title: coreclr::MethodPtr,
+    get_formatted_text: coreclr::MethodPtr,
+    get_id: coreclr::MethodPtr,
+    get_entry: coreclr::MethodPtr,
+}
+
+impl RelicCatalog {
+    pub fn init(rt: coreclr::Runtime) -> Result<RelicCatalog> {
+        let asm = "sts2";
+        let db_t = "MegaCrit.Sts2.Core.Models.ModelDb";
+        let pool_t = "MegaCrit.Sts2.Core.Models.RelicPoolModel";
+        let relic_t = "MegaCrit.Sts2.Core.Models.RelicModel";
+        let loc_t = "MegaCrit.Sts2.Core.Localization.LocString";
+        let model_t = "MegaCrit.Sts2.Core.Models.AbstractModel";
+        let model_id_t = "MegaCrit.Sts2.Core.Models.ModelId";
+        let get_shared_relic_pools = rt.method(asm, db_t, "get_AllSharedRelicPools")?;
+        let pool_get_all_relics = rt.method(asm, pool_t, "get_AllRelics")?;
+        let get_icon = rt.method(asm, relic_t, "get_Icon")?;
+        let get_title = rt.method(asm, relic_t, "get_Title")?;
+        let get_formatted_text = rt.method(asm, loc_t, "GetFormattedText")?;
+        let get_id = rt.method(asm, model_t, "get_Id")?;
+        let get_entry = rt.method(asm, model_id_t, "get_Entry")?;
+        Ok(RelicCatalog {
+            get_shared_relic_pools, pool_get_all_relics, get_icon,
+            get_title, get_formatted_text, get_id, get_entry,
+        })
+    }
+
+    pub fn relic_id(self, relic: coreclr::ManagedObject) -> str {
+        if relic.is_null() { return ""; }
+        let model_id = self.get_id.call_ptr(relic);
+        if model_id.is_null() { return ""; }
+        let entry = self.get_entry.call_ptr(model_id);
+        if entry.is_null() { return ""; }
+        match entry.read_string() { Ok(v) => v, Err(_) => "" }
+    }
+
+    pub fn relic_title(self, relic: coreclr::ManagedObject) -> str {
+        if relic.is_null() { return "?"; }
+        let loc = self.get_title.call_ptr(relic);
+        if loc.is_null() { return "?"; }
+        let s = self.get_formatted_text.call_ptr(loc);
+        if s.is_null() { return "?"; }
+        match s.read_string() { Ok(v) => v, Err(_) => "?" }
+    }
+
+    // All relics across the shared pools, as (name, stable id, pool/elem index).
+    pub fn all_relics(self) -> [proxies::CatalogRelic] {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return []; }
+        let catalog = [];
+        let seen = [];
+        let pi = 0;
+        for pool in enumerate(shared) {
+            let relics = self.pool_get_all_relics.call_ptr(pool);
+            if relics.is_null() { pi += 1; continue; }
+            let ei = 0;
+            for r in enumerate(relics) {
+                let id = self.relic_id(r);
+                if id != "" && !seen.contains(id) {
+                    seen.push(id);
+                    catalog.push(proxies::CatalogRelic {
+                        name: self.relic_title(r), id: id,
+                        pool_idx: pi, elem_idx: ei,
+                    });
+                }
+                ei += 1;
+            }
+            pi += 1;
+        }
+        catalog
+    }
+
+    // Re-resolves relic (pool_idx, elem_idx) and extracts its icon.
+    pub fn relic_icon_at(self, pool_idx: i32, elem_idx: i32, known_id: str) -> Option<proxies::PendingRelicIcon> {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return None; }
+        let pools = enumerate(shared);
+        if pool_idx < 0 || pool_idx >= pools.len() { return None; }
+        let pool = pools[pool_idx];
+        let relics = self.pool_get_all_relics.call_ptr(pool);
+        if relics.is_null() { return None; }
+        let elems = enumerate(relics);
+        if elem_idx < 0 || elem_idx >= elems.len() { return None; }
+        let relic = elems[elem_idx];
+        if relic.is_null() { return None; }
+        let tex = self.get_icon.call_ptr(relic);
+        if tex.is_null() { return None; }
+        match godot::texture_to_rgba(tex) {
+            Ok(result) => {
+                if result.0 > 0 && result.1 > 0 {
+                    Some(proxies::PendingRelicIcon {
+                        id: known_id, width: result.0,
+                        height: result.1, data: result.2,
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    }
+
+    // Finds a catalog relic by its stable id (for granting it).
+    pub fn find_relic_by_id(self, id: str) -> Option<coreclr::ManagedObject> {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return None; }
+        for pool in enumerate(shared) {
+            let relics = self.pool_get_all_relics.call_ptr(pool);
+            if relics.is_null() { continue; }
+            for r in enumerate(relics) {
+                if self.relic_id(r) == id { return Some(r); }
+            }
+        }
+        None
+    }
+
+    // Grants the relic with the given id to the player. The relic is re-resolved
+    // by id on the game thread (never captured across the dispatch), then handed
+    // to RelicHelper's gameplay primitive to actually obtain it.
+    pub fn add_relic(self, rh: proxies::RelicHelper, id: str) {
+        godot::dispatch(|| {
+            match self.find_relic_by_id(id) {
+                Some(relic) => { rh.grant_relic(relic); }
+                None => {}
+            }
+        });
+    }
+}

@@ -374,6 +374,10 @@ mod tests {
                 include_str!("../example/sts2/proxies.xur"),
             ),
             ("sts2/ui.xur", include_str!("../example/sts2/ui.xur")),
+            (
+                "sts2/catalog.xur",
+                include_str!("../example/sts2/catalog.xur"),
+            ),
         ]);
     }
 }

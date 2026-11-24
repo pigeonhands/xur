@@ -6,6 +6,7 @@ use std::stub::overlay::egui;
 use std::stub::godot;
 
 const proxies = std::import("./proxies.xur");
+const catalog = std::import("./catalog.xur");
 
 pub fn draw_status(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat) {
     match game.creature() {
@@ -93,34 +94,21 @@ pub fn draw_combat(ui: gui::Ui, game: proxies::GameState, combat: proxies::Comba
     }
 }
 
-fn request_card_portrait(ch: proxies::CardHelper, card_obj: coreclr::ManagedObject, addr: i64, state: proxies::UiState) {
-    if state.is_portrait_requested(addr) { return; }
-    state.mark_portrait_requested(addr);
-    godot::dispatch(|| {
-        match ch.card_portrait_rgba(card_obj) {
-            Some(rgba) => {
-                state.push_pending_portrait(proxies::PendingPortrait {
-                    addr: addr, width: rgba.width, height: rgba.height, data: rgba.data,
-                });
-            }
-            None => {}
-        }
-    });
-}
-
 pub fn process_pending_portraits(ctx: gui::Ctx, state: proxies::UiState) {
     let pending = state.take_pending_portraits();
-    let max = 3;
+    // Each upload submits to the GPU and waits on a fence, so cap per-frame to
+    // avoid a hard hitch; 16 drains a full deck preload in a second or so.
+    let max = 16;
     let i = 0;
     let deferred = [];
     for p in pending {
         if i >= max {
             deferred.push(p);
         } else {
-            let name = fmt::format("card_{}", p.addr);
+            let name = fmt::format("card_{}", p.id);
             match ctx.load_texture_rgba(name, p.width, p.height, p.data) {
                 Ok(id) => {
-                    state.cache_portrait(p.addr, id, p.width, p.height);
+                    state.cache_portrait(p.id, id, p.width, p.height);
                 }
                 Err(e) => {
                     log::info(fmt::format("portrait upload err: {}", e));
@@ -136,7 +124,7 @@ pub fn process_pending_portraits(ctx: gui::Ctx, state: proxies::UiState) {
     }
 }
 
-fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, state: proxies::UiState, cards: [proxies::CardInfo], label: str) {
+fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, cat: catalog::CardCatalog, state: proxies::UiState, cards: [proxies::CardInfo], label: str) {
     if cards.len() == 0 {
         ui.small(fmt::format("{}: empty", label));
         return;
@@ -145,13 +133,14 @@ fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, state: proxies::UiState
     ui.scroll(label, 200.0, |scroll| {
         scroll.grid(fmt::format("{}_grid", label), 3, |g| {
             for card in cards {
-                let addr = card.obj.address();
-                match state.find_portrait(addr) {
+                // Portraits are preloaded from the stable catalog and keyed by
+                // the card's stable id; a combat card maps to it via get_Id.
+                let id = cat.card_id(card.obj);
+                match state.find_portrait(id) {
                     Some(cached) => {
                         g.image(cached.tex_id, 63.0, 48.0);
                     }
                     None => {
-                        request_card_portrait(ch, card.obj, addr, state);
                         g.label("...");
                     }
                 }
@@ -165,7 +154,7 @@ fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, state: proxies::UiState
     });
 }
 
-pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat, ch: proxies::CardHelper, state: proxies::UiState) {
+pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat, ch: proxies::CardHelper, cat: catalog::CardCatalog, state: proxies::UiState) {
 
     let pcs = match game.combat_state() { Ok(v) => v, Err(e) => { ui.small(fmt::format("error: {}", e)); return; } };
     if pcs.is_null() {
@@ -181,17 +170,17 @@ pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat
     });
 
     let hand_cards = match ch.pile_cards(combat.hand_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, state, hand_cards, "Hand");
+    draw_pile_cards(ui, ch, cat, state, hand_cards, "Hand");
 
     ui.separator();
 
     let draw_cards = match ch.pile_cards(combat.draw_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, state, draw_cards, "Draw Pile");
+    draw_pile_cards(ui, ch, cat, state, draw_cards, "Draw Pile");
 
     ui.separator();
 
     let disc_cards = match ch.pile_cards(combat.discard_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, state, disc_cards, "Discard");
+    draw_pile_cards(ui, ch, cat, state, disc_cards, "Discard");
 }
 
 pub fn draw_gold(ui: gui::Ui, game: proxies::GameState, state: proxies::UiState) {
@@ -224,14 +213,14 @@ pub fn draw_player(ui: gui::Ui, game: proxies::GameState) {
     }
 }
 
-fn request_relic_icon(rh: proxies::RelicHelper, relic: proxies::CatalogRelic, state: proxies::UiState) {
+fn request_relic_icon(rc: catalog::RelicCatalog, relic: proxies::CatalogRelic, state: proxies::UiState) {
     if state.is_relic_icon_requested(relic.id) { return; }
     state.mark_relic_icon_requested(relic.id);
     let pool_idx = relic.pool_idx;
     let elem_idx = relic.elem_idx;
     let id = relic.id;
     godot::dispatch(|| {
-        match rh.relic_icon_at(pool_idx, elem_idx, id) {
+        match rc.relic_icon_at(pool_idx, elem_idx, id) {
             Some(pending) => { state.push_pending_relic_icon(pending); }
             None => {}
         }
@@ -266,7 +255,7 @@ pub fn process_pending_relic_icons(ctx: gui::Ctx, state: proxies::UiState) {
     }
 }
 
-pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, state: proxies::UiState) {
+pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, rc: catalog::RelicCatalog, state: proxies::UiState) {
     let current = rh.current_relics();
     ui.label(fmt::format("Current Relics ({})", current.len()));
     if current.len() == 0 {
@@ -301,10 +290,10 @@ pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, state: proxies::UiStat
         if !state.relic_catalog_built.get() {
             state.relic_catalog_built.set(true);
             godot::dispatch(|| {
-                let catalog = rh.all_relics();
-                if catalog.len() > 0 {
-                    state.relic_catalog.set(catalog);
-                    log::info(fmt::format("catalog: {} relics", catalog.len()));
+                let relics = rc.all_relics();
+                if relics.len() > 0 {
+                    state.relic_catalog.set(relics);
+                    log::info(fmt::format("catalog: {} relics", relics.len()));
                 }
             });
         }
@@ -322,13 +311,13 @@ pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, state: proxies::UiStat
                         g.image(cached.tex_id, 32.0, 32.0);
                     }
                     None => {
-                        request_relic_icon(rh, relic, state);
+                        request_relic_icon(rc, relic, state);
                         g.label("...");
                     }
                 }
                 g.label(relic.name);
                 if g.button("Add") {
-                    rh.add_relic(relic.id);
+                    rc.add_relic(rh, relic.id);
                 }
                 g.end_row();
             }

@@ -54,14 +54,11 @@ pub struct RelicHelper {
     get_player_relics: coreclr::MethodPtr
     get_title: coreclr::MethodPtr
     get_formatted_text: coreclr::MethodPtr
-    get_icon: coreclr::MethodPtr
     get_id: coreclr::MethodPtr
     get_entry: coreclr::MethodPtr
     to_mutable: coreclr::MethodPtr
     relic_obtain: coreclr::MethodPtr
     task_run_safely: coreclr::MethodPtr
-    get_shared_relic_pools: coreclr::MethodPtr
-    pool_get_all_relics: coreclr::MethodPtr
     get_rm_instance: coreclr::MethodPtr
     get_state: coreclr::MethodPtr
     get_players: coreclr::MethodPtr
@@ -73,12 +70,6 @@ pub struct RelicInfo {
     pub id: str
 }
 
-pub struct PortraitData {
-    pub width: i32
-    pub height: i32
-    pub data: bytes
-}
-
 pub enum Tab {
     Combat
     Cards
@@ -88,7 +79,7 @@ pub enum Tab {
 }
 
 struct CachedPortrait {
-    addr: i64
+    id: str
     tex_id: i64
     width: i32
     height: i32
@@ -102,10 +93,16 @@ struct CachedRelicIcon {
 }
 
 pub struct PendingPortrait {
-    pub addr: i64
+    pub id: str
     pub width: i32
     pub height: i32
     pub data: bytes
+}
+
+// A catalog card with a portrait: its stable id and index into get_AllCards.
+pub struct CardEntry {
+    pub id: str
+    pub index: i32
 }
 
 pub struct PendingRelicIcon {
@@ -130,7 +127,9 @@ pub struct UiState {
     player_addr: cell::Cell<i64>
     portraits: cell::Cell<[CachedPortrait]>
     pending: cell::Cell<[PendingPortrait]>
-    requested: cell::Cell<[i64]>
+    requested: cell::Cell<[str]>
+    card_preload_queue: cell::Cell<[CardEntry]>
+    card_preload_seeded: cell::Cell<bool>
     relic_filter: cell::Cell<str>
     relic_catalog: cell::Cell<[CatalogRelic]>
     relic_catalog_built: cell::Cell<bool>
@@ -481,21 +480,6 @@ impl CardHelper {
         Ok(result)
     }
 
-    pub fn card_portrait_rgba(self, card: coreclr::ManagedObject) -> Option<PortraitData> {
-        if card.is_null() { return None; }
-        let tex = self.get_portrait.call_ptr(card);
-        if tex.is_null() { return None; }
-        match godot::texture_to_rgba(tex) {
-            Ok(result) => {
-                Some(PortraitData { width: result.0, height: result.1, data: result.2 })
-            }
-            Err(e) => {
-                log::info(fmt::format("portrait error: {}", e));
-                None
-            }
-        }
-    }
-
     pub fn inspect_remove(self, card: coreclr::ManagedObject) {
         if card.is_null() { log::info("inspect: card is null"); return; }
         let rm = self.get_rm_instance.call_ptr();
@@ -552,15 +536,11 @@ impl RelicHelper {
         let get_player_relics = rt.method(asm, player_t, "get_Relics")?;
         let get_title = rt.method(asm, relic_t, "get_Title")?;
         let get_formatted_text = rt.method(asm, loc_t, "GetFormattedText")?;
-        let get_icon = rt.method(asm, relic_t, "get_Icon")?;
         let get_id = rt.method(asm, model_t, "get_Id")?;
         let get_entry = rt.method(asm, model_id_t, "get_Entry")?;
         let to_mutable = rt.method(asm, relic_t, "ToMutable")?;
         let relic_obtain = rt.find_method(asm, relic_cmd_t, "Obtain", 3)?;
         let task_run_safely = rt.method(asm, task_t, "RunSafely")?;
-        let pool_t = "MegaCrit.Sts2.Core.Models.RelicPoolModel";
-        let get_shared_relic_pools = rt.method(asm, model_db_t, "get_AllSharedRelicPools")?;
-        let pool_get_all_relics = rt.method(asm, pool_t, "get_AllRelics")?;
         godot::resolve_image_bindings()?;
         let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
         let get_state = rt.method(asm, rm_t, "get_State")?;
@@ -569,9 +549,8 @@ impl RelicHelper {
         log::info("RelicHelper resolved");
         Ok(RelicHelper {
             get_player_relics, get_title, get_formatted_text,
-            get_icon, get_id, get_entry,
+            get_id, get_entry,
             to_mutable, relic_obtain, task_run_safely,
-            get_shared_relic_pools, pool_get_all_relics,
             get_rm_instance, get_state, get_players,
         })
     }
@@ -604,44 +583,6 @@ impl RelicHelper {
         result
     }
 
-    fn read_array(arr: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
-        let result = [];
-        if arr.is_null() { return result; }
-        let len = match arr.read_i64(8) { Ok(v) => v, Err(_) => 0 };
-        if len <= 0 || len > 10000 { return result; }
-        let i = 0;
-        while i < len {
-            let el = arr.deref(16 + i * 8);
-            if !el.is_null() { result.push(el); }
-            i += 1;
-        }
-        result
-    }
-
-    fn read_collection(obj: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
-        if obj.is_null() { return []; }
-        // Try List<T>: +16 = _size (i32), +8 = _items (T[] array)
-        let size = match obj.read_i32(16) { Ok(c) => c, Err(_) => -1 };
-        let field8 = obj.deref(8);
-        if size > 0 && !field8.is_null() {
-            let arr_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => 0 };
-            if arr_len >= size {
-                return RelicHelper::read_array(field8);
-            }
-        }
-        // Try ReadOnlyCollection<T>: +8 = inner IList (array or list)
-        if !field8.is_null() {
-            // Check if field8 itself is an array (MT + length at +8)
-            let inner_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => -1 };
-            if inner_len > 0 && inner_len < 10000 {
-                return RelicHelper::read_array(field8);
-            }
-            // Otherwise try as List<T>
-            return RelicHelper::read_list(field8);
-        }
-        []
-    }
-
     pub fn relic_title(self, relic: coreclr::ManagedObject) -> str {
         if relic.is_null() { return "?"; }
         let loc = self.get_title.call_ptr(relic);
@@ -672,122 +613,17 @@ impl RelicHelper {
         result
     }
 
-    pub fn all_relics(self) -> [CatalogRelic] {
-        let shared = self.get_shared_relic_pools.call_ptr();
-        if shared.is_null() { return []; }
-        let catalog = [];
-        let seen = [];
-        let pools = RelicHelper::read_collection(shared);
-        let pi = 0;
-        for pool in pools {
-            let relics = self.pool_get_all_relics.call_ptr(pool);
-            if relics.is_null() { pi += 1; continue; }
-            let elems = RelicHelper::read_collection(relics);
-            let ei = 0;
-            for r in elems {
-                let id = self.relic_id(r);
-                if id == "" { ei += 1; continue; }
-                if !seen.contains(id) {
-                    seen.push(id);
-                    catalog.push(CatalogRelic {
-                        name: self.relic_title(r), id: id,
-                        pool_idx: pi, elem_idx: ei,
-                    });
-                }
-                ei += 1;
-            }
-            pi += 1;
-        }
-        catalog
-    }
-
-    fn read_collection_at(obj: coreclr::ManagedObject, idx: i32) -> coreclr::ManagedObject {
-        if obj.is_null() { return coreclr::null(); }
-        let field8 = obj.deref(8);
-        if field8.is_null() { return coreclr::null(); }
-        let inner_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => -1 };
-        if inner_len > 0 && idx < inner_len {
-            return field8.deref(16 + idx * 8);
-        }
-        let size = match field8.read_i32(16) { Ok(c) => c, Err(_) => -1 };
-        if size > 0 {
-            let items = field8.deref(8);
-            if !items.is_null() && idx < size {
-                return items.deref(16 + idx * 8);
-            }
-        }
-        coreclr::null()
-    }
-
-    pub fn relic_icon_at(self, pool_idx: i32, elem_idx: i32, known_id: str) -> Option<PendingRelicIcon> {
-        let shared = self.get_shared_relic_pools.call_ptr();
-        if shared.is_null() { return None; }
-        let pool = RelicHelper::read_collection_at(shared, pool_idx);
-        if pool.is_null() { return None; }
-        let relics = self.pool_get_all_relics.call_ptr(pool);
-        if relics.is_null() { return None; }
-        let relic = RelicHelper::read_collection_at(relics, elem_idx);
-        if relic.is_null() { return None; }
-        let tex = self.get_icon.call_ptr(relic);
-        if tex.is_null() { return None; }
-        match godot::texture_to_rgba(tex) {
-            Ok(result) => {
-                if result.0 > 0 && result.1 > 0 {
-                    Some(PendingRelicIcon {
-                        id: known_id, width: result.0,
-                        height: result.1, data: result.2,
-                    })
-                } else {
-                    None
-                }
-            }
-            Err(_) => None
-        }
-    }
-
-    pub fn find_relic_by_id(self, id: str) -> Option<coreclr::ManagedObject> {
-        let shared = self.get_shared_relic_pools.call_ptr();
-        if shared.is_null() { return None; }
-        for pool in RelicHelper::read_collection(shared) {
-            let relics = self.pool_get_all_relics.call_ptr(pool);
-            if relics.is_null() { continue; }
-            for r in RelicHelper::read_collection(relics) {
-                if self.relic_id(r) == id { return Some(r); }
-            }
-        }
-        None
-    }
-
-    pub fn relic_icon_rgba(self, relic: coreclr::ManagedObject) -> Option<PortraitData> {
-        if relic.is_null() { return None; }
-        let tex = self.get_icon.call_ptr(relic);
-        if tex.is_null() { return None; }
-        match godot::texture_to_rgba(tex) {
-            Ok(result) => {
-                Some(PortraitData { width: result.0, height: result.1, data: result.2 })
-            }
-            Err(e) => {
-                log::info(fmt::format("relic icon error: {}", e));
-                None
-            }
-        }
-    }
-
-    pub fn add_relic(self, id: str) {
+    // Grants a catalog relic to the player. The relic catalog lives in
+    // catalog.xur (RelicCatalog); it finds the relic on the game thread and
+    // calls this gameplay primitive with the fresh object — so no managed
+    // pointer is held across a frame. Must run on the game thread.
+    pub fn grant_relic(self, relic: coreclr::ManagedObject) {
+        if relic.is_null() { return; }
         let p = self.player();
         if p.is_null() { return; }
-        let mutable = self.to_mutable;
-        let obtain = self.relic_obtain;
-        let run_safely = self.task_run_safely;
-        godot::dispatch(|| {
-            let fresh = match self.find_relic_by_id(id) {
-                Some(r) => r,
-                None => { return; }
-            };
-            let m = mutable.call_ptr(fresh);
-            let task = obtain.call_ptr(m, p, -1);
-            run_safely.call(task);
-        });
+        let m = self.to_mutable.call_ptr(relic);
+        let task = self.relic_obtain.call_ptr(m, p, -1);
+        self.task_run_safely.call(task);
     }
 }
 
@@ -802,6 +638,8 @@ impl UiState {
             portraits: cell::new([]),
             pending: cell::new([]),
             requested: cell::new([]),
+            card_preload_queue: cell::new([]),
+            card_preload_seeded: cell::new(false),
             relic_filter: cell::new(""),
             relic_catalog: cell::new([]),
             relic_catalog_built: cell::new(false),
@@ -811,31 +649,66 @@ impl UiState {
         }
     }
 
-    pub fn find_portrait(self, addr: i64) -> Option<CachedPortrait> {
+    pub fn find_portrait(self, id: str) -> Option<CachedPortrait> {
         for entry in self.portraits.get() {
-            if entry.addr == addr { return Some(entry); }
+            if entry.id == id { return Some(entry); }
         }
         None
     }
 
-    pub fn cache_portrait(self, addr: i64, tex_id: i64, width: i32, height: i32) {
+    pub fn cache_portrait(self, id: str, tex_id: i64, width: i32, height: i32) {
         let cache = self.portraits.get();
-        cache.push(CachedPortrait { addr: addr, tex_id: tex_id, width: width, height: height });
+        cache.push(CachedPortrait { id: id, tex_id: tex_id, width: width, height: height });
         self.portraits.set(cache);
     }
 
-    pub fn is_portrait_requested(self, addr: i64) -> bool {
+    pub fn is_portrait_requested(self, id: str) -> bool {
         for a in self.requested.get() {
-            if a == addr { return true; }
+            if a == id { return true; }
         }
         false
     }
 
-    pub fn mark_portrait_requested(self, addr: i64) {
+    pub fn mark_portrait_requested(self, id: str) {
         let r = self.requested.get();
-        r.push(addr);
+        r.push(id);
         self.requested.set(r);
     }
+
+    // Seeds the preload queue once (when the catalog is first available in a
+    // run). Returns true if seeding happened, false if already seeded.
+    // Claims the one-time right to build the card catalog. Returns true for the
+    // first caller only; set synchronously so the build can be dispatched to the
+    // game thread without a second dispatch slipping in before it completes.
+    pub fn start_card_preload_seeding(self) -> bool {
+        if self.card_preload_seeded.get() { return false; }
+        self.card_preload_seeded.set(true);
+        true
+    }
+
+    pub fn set_card_preload_queue(self, cards: [CardEntry]) {
+        self.card_preload_queue.set(cards);
+    }
+
+    // Removes and returns up to `budget` cards from the front of the preload
+    // queue, to be extracted this frame.
+    pub fn take_card_preload_batch(self, budget: i32) -> [CardEntry] {
+        let queue = self.card_preload_queue.get();
+        let batch = [];
+        let rest = [];
+        let i = 0;
+        for entry in queue {
+            if i < budget {
+                batch.push(entry);
+            } else {
+                rest.push(entry);
+            }
+            i += 1;
+        }
+        self.card_preload_queue.set(rest);
+        batch
+    }
+
 
     pub fn push_pending_portrait(self, p: PendingPortrait) {
         let cur = self.pending.get();
