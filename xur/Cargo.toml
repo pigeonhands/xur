@@ -25,3 +25,5 @@ ariadne.workspace = true
 clap.workspace = true
 tower-lsp.workspace = true
 tokio.workspace = true
+procodile.workspace = true
+pewter.workspace = true

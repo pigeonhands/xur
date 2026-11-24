@@ -1,6 +1,7 @@
 mod debug;
 mod lsp;
 mod run;
+mod stub;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -38,5 +39,6 @@ pub fn run(command: Command) -> Result<()> {
         }
         Command::Lsp => lsp::run(),
         Command::Debug(command) => debug::run(command),
+        Command::Stub(command) => stub::run(command),
     }
 }
