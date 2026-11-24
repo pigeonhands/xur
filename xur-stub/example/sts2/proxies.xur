@@ -1,4 +1,5 @@
 use std::cell;
+use std::decimal;
 use std::fmt;
 use std::gui;
 use std::log;
@@ -36,14 +37,24 @@ pub struct Combat {
     draw_card_cmd: coreclr::MethodPtr
     godmode: cell::Cell<bool>
     player_creature_addr: cell::Cell<i64>
+    // Hook targets (the raw method = precode) and the last JIT-body address we
+    // hooked. The game's internal calls run the JIT body, which moves when the
+    // method re-tiers (Tier0 -> Tier1) after ~one combat; maintain_hooks re-hooks
+    // the new body when the address changes, so hooks survive combat transitions.
+    lose_hp_raw: coreclr::MethodPtr
+    damage_block_raw: coreclr::MethodPtr
+    check_raw: coreclr::MethodPtr
+    lose_hp_body: cell::Cell<i64>
+    damage_block_body: cell::Cell<i64>
+    check_body: cell::Cell<i64>
 }
 
 pub struct CardHelper {
     get_title: coreclr::MethodPtr
     get_portrait: coreclr::MethodPtr
-    rs_remove_card: coreclr::MethodPtr
     get_rm_instance: coreclr::MethodPtr
-    get_state: coreclr::MethodPtr
+    get_reward_sync: coreclr::MethodPtr
+    do_card_removal: coreclr::MethodPtr
 }
 
 pub struct CardInfo {
@@ -116,6 +127,7 @@ pub struct PendingRelicIcon {
 pub struct CatalogRelic {
     pub name: str
     pub id: str
+    pub desc: str
     pub pool_idx: i32
     pub elem_idx: i32
 }
@@ -126,16 +138,19 @@ pub struct UiState {
     energy_amount: cell::Cell<i32>
     auto_draw: cell::Cell<bool>
     player_addr: cell::Cell<i64>
-    portraits: cell::Cell<[CachedPortrait]>
+    portraits: map
     pending: cell::Cell<[PendingPortrait]>
-    requested: cell::Cell<[str]>
+    requested: map
     card_preload_queue: cell::Cell<[CardEntry]>
     card_preload_seeded: cell::Cell<bool>
     relic_filter: cell::Cell<str>
     relic_catalog: cell::Cell<[CatalogRelic]>
     relic_catalog_built: cell::Cell<bool>
-    relic_icons_requested: cell::Cell<[str]>
-    relic_icons: cell::Cell<[CachedRelicIcon]>
+    relic_icons_requested: map
+    relic_icons: map
+    // id -> description text, filled on the game thread when the relic catalog
+    // builds (get_Description must NOT be called from the render thread).
+    relic_descs: map
     relic_icons_pending: cell::Cell<[PendingRelicIcon]>
 }
 
@@ -248,22 +263,13 @@ impl Combat {
         let get_exhaust_pile = rt.method(asm, pcs_t, "get_ExhaustPile")?;
         let draw_card_cmd = rt.find_method(asm, "MegaCrit.Sts2.Core.Commands.CardPileCmd", "Draw", 2)?;
 
-        log::info("installing godmode hooks...");
+        log::info("resolving hook targets...");
         let godmode = cell::new(false);
         let player_creature_addr = cell::new(0);
         let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
         let damage_block_raw = rt.method(asm, creature_t, "DamageBlockInternal")?;
-        let lose_hp_ptr = lose_hp_raw.resolve_jit();
-        let damage_block_ptr = damage_block_raw.resolve_jit();
-        log::info(fmt::format("LoseHpInternal: precode={} jit={}", lose_hp_raw.address(), lose_hp_ptr.address()));
-        log::info(fmt::format("DamageBlockInternal: precode={} jit={}", damage_block_raw.address(), damage_block_ptr.address()));
-        lose_hp_ptr.hook(|this_addr| {
-            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
-        });
-        damage_block_ptr.hook(|this_addr| {
-            if godmode.get() && this_addr == player_creature_addr.get() { Some(0) } else { None }
-        });
-        log::info("godmode hooks installed");
+        let cm_t = "MegaCrit.Sts2.Core.Combat.CombatManager";
+        let check_raw = rt.find_method(asm, cm_t, "CheckForEmptyHand", 3)?;
 
         Ok(Combat {
             get_energy, get_pcs_max_energy, get_stars,
@@ -271,36 +277,76 @@ impl Combat {
             set_energy, set_stars, set_block, set_hp, set_max_hp,
             get_hand, get_draw_pile, get_discard_pile, get_exhaust_pile,
             draw_card_cmd, godmode, player_creature_addr,
+            lose_hp_raw, damage_block_raw, check_raw,
+            lose_hp_body: cell::new(0),
+            damage_block_body: cell::new(0),
+            check_body: cell::new(0),
         })
     }
 
-    pub fn install_auto_draw_hook(self, rt: coreclr::Runtime, state: UiState) {
-        let cm_t = "MegaCrit.Sts2.Core.Combat.CombatManager";
-        let check = rt.find_method("sts2", cm_t, "CheckForEmptyHand", 3);
-        match check {
-            Ok(method) => {
-                let ptr = method.resolve_jit();
-                log::info(fmt::format("CheckForEmptyHand: precode={} jit={}", method.address(), ptr.address()));
-                let auto_draw = state.auto_draw;
-                let player_addr = state.player_addr;
-                let draw_cmd = self.draw_card_cmd;
-                ptr.hook(|_this| {
-                    if auto_draw.get() {
-                        let addr = player_addr.get();
-                        if addr != 0 {
-                            let player = coreclr::from_address(addr);
-                            godot::dispatch(|| {
-                                draw_cmd.call(coreclr::null(), player);
-                            });
-                        }
+    // Hook (and re-hook) the current JIT body of each hooked method. Call every
+    // in-run frame: when a method re-tiers to a new address, resolve_jit() returns
+    // the new body and we hook it, so godmode/auto-draw keep working across combats
+    // without disabling tiered compilation. Hooking the precode (the raw method
+    // pointer) does NOT work here: the game's internal call sites run the JIT body,
+    // not the precode, so only a body hook intercepts them.
+    pub fn maintain_hooks(self, state: UiState) {
+        let godmode = self.godmode;
+        let pca = self.player_creature_addr;
+
+        // LoseHpInternal(Decimal amount, ValueProp) and DamageBlockInternal share
+        // the same signature. hook_args marshals by the closure's param types, so
+        // `this` arrives as the creature (a managed pointer) and `amount` as the
+        // Decimal damage. Returning amount=0 makes the method run normally and
+        // return a VALID result (no HP/block lost, not "killed") — this avoids
+        // nulling the return, which softlocked on e.g. Osty's death.
+        let lh = self.lose_hp_raw.resolve_jit();
+        if lh.address() != 0 && lh.address() != self.lose_hp_body.get() {
+            lh.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
+                if godmode.get() && this.address() == pca.get() {
+                    log::info(fmt::format("godmode LoseHp: this=0x{:x} amount={} -> 0", this.address(), amount));
+                    (this, decimal::from_int(0))
+                } else {
+                    (this, amount)
+                }
+            });
+            self.lose_hp_body.set(lh.address());
+            log::info(fmt::format("godmode: (re)hooked LoseHpInternal body at {}", lh.address()));
+        }
+
+        let db = self.damage_block_raw.resolve_jit();
+        if db.address() != 0 && db.address() != self.damage_block_body.get() {
+            db.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
+                if godmode.get() && this.address() == pca.get() {
+                    log::info(fmt::format("godmode DamageBlock: this=0x{:x} amount={} -> 0", this.address(), amount));
+                    (this, decimal::from_int(0))
+                } else {
+                    (this, amount)
+                }
+            });
+            self.damage_block_body.set(db.address());
+            log::info(fmt::format("godmode: (re)hooked DamageBlockInternal body at {}", db.address()));
+        }
+
+        let ck = self.check_raw.resolve_jit();
+        if ck.address() != 0 && ck.address() != self.check_body.get() {
+            let auto_draw = state.auto_draw;
+            let player_addr = state.player_addr;
+            let draw_cmd = self.draw_card_cmd;
+            ck.hook(|_this| {
+                if auto_draw.get() {
+                    let addr = player_addr.get();
+                    if addr != 0 {
+                        let player = coreclr::from_address(addr);
+                        godot::dispatch(|| {
+                            draw_cmd.call(coreclr::null(), player);
+                        });
                     }
-                    None
-                });
-                log::info("auto-draw hook installed on CheckForEmptyHand");
-            }
-            Err(e) => {
-                log::info(fmt::format("auto-draw hook failed: {}", e));
-            }
+                }
+                None
+            });
+            self.check_body.set(ck.address());
+            log::info(fmt::format("auto-draw: (re)hooked CheckForEmptyHand body at {}", ck.address()));
         }
     }
 
@@ -395,24 +441,24 @@ impl Combat {
         Combat::pile_count(self.get_exhaust_pile.call_ptr(pcs))
     }
 
-    pub fn hand_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
-        if pcs.is_null() { return coreclr::null(); }
-        self.get_hand.call_ptr(pcs)
+    pub fn hand_pile(self, pcs: coreclr::ManagedObject) -> Option<coreclr::ManagedObject> {
+        let pcs = pcs.non_null()?;
+        self.get_hand.call_ptr(pcs).non_null()
     }
 
-    pub fn draw_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
-        if pcs.is_null() { return coreclr::null(); }
-        self.get_draw_pile.call_ptr(pcs)
+    pub fn draw_pile(self, pcs: coreclr::ManagedObject) -> Option<coreclr::ManagedObject> {
+        let pcs = pcs.non_null()?;
+        self.get_draw_pile.call_ptr(pcs).non_null()
     }
 
-    pub fn discard_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
-        if pcs.is_null() { return coreclr::null(); }
-        self.get_discard_pile.call_ptr(pcs)
+    pub fn discard_pile(self, pcs: coreclr::ManagedObject) -> Option<coreclr::ManagedObject> {
+        let pcs = pcs.non_null()?;
+        self.get_discard_pile.call_ptr(pcs).non_null()
     }
 
-    pub fn exhaust_pile(self, pcs: coreclr::ManagedObject) -> coreclr::ManagedObject {
-        if pcs.is_null() { return coreclr::null(); }
-        self.get_exhaust_pile.call_ptr(pcs)
+    pub fn exhaust_pile(self, pcs: coreclr::ManagedObject) -> Option<coreclr::ManagedObject> {
+        let pcs = pcs.non_null()?;
+        self.get_exhaust_pile.call_ptr(pcs).non_null()
     }
 
     pub fn draw_cards(self, player: coreclr::ManagedObject, n: i32) {
@@ -438,19 +484,19 @@ impl CardHelper {
     pub fn init(rt: coreclr::Runtime) -> Result<CardHelper> {
         let asm = "sts2";
         let card_t = "MegaCrit.Sts2.Core.Models.CardModel";
-        let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
         let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
+        let sync_t = "MegaCrit.Sts2.Core.Multiplayer.Game.RewardSynchronizer";
 
         log::info("resolving CardHelper...");
         let get_title = rt.method(asm, card_t, "get_Title")?;
         let get_portrait = rt.method(asm, card_t, "get_Portrait")?;
-        let rs_remove_card = rt.method(asm, rs_t, "RemoveCard")?;
         let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
-        let get_state = rt.method(asm, rm_t, "get_State")?;
+        let get_reward_sync = rt.method(asm, rm_t, "get_RewardSynchronizer")?;
+        let do_card_removal = rt.method(asm, sync_t, "DoUnsyncedCardRemoval")?;
 
         godot::resolve_image_bindings()?;
 
-        Ok(CardHelper { get_title, get_portrait, rs_remove_card, get_rm_instance, get_state })
+        Ok(CardHelper { get_title, get_portrait, get_rm_instance, get_reward_sync, do_card_removal })
     }
 
     pub fn card_title(self, card: coreclr::ManagedObject) -> Result<str> {
@@ -460,9 +506,9 @@ impl CardHelper {
         Ok(s.read_string()?)
     }
 
-    pub fn pile_cards(self, pile: coreclr::ManagedObject) -> Result<[CardInfo]> {
+    pub fn pile_cards(self, pile: Option<coreclr::ManagedObject>) -> Result<[CardInfo]> {
         let result = [];
-        if pile.is_null() { return Ok(result); }
+        let pile = match pile { Some(p) => p, None => return Ok(result) };
         let list = pile.deref(8);
         if list.is_null() { return Ok(result); }
         let count = list.read_i32(16)?;
@@ -481,40 +527,23 @@ impl CardHelper {
         Ok(result)
     }
 
-    pub fn inspect_remove(self, card: coreclr::ManagedObject) {
-        if card.is_null() { log::info("inspect: card is null"); return; }
-        let rm = self.get_rm_instance.call_ptr();
-        if rm.is_null() { log::info("inspect: RunManager is null"); return; }
-        let rs = self.get_state.call_ptr(rm);
-        if rs.is_null() { log::info("inspect: RunState is null"); return; }
-        log::info(fmt::format("inspect: rs=0x{:x} card=0x{:x}", rs.address(), card.address()));
-        let i = 0;
-        while i < 192 {
-            match rs.read_i64(i) {
-                Ok(v) => { log::info(fmt::format("  rs+0x{:x}: 0x{:x}", i, v)); }
-                Err(_) => {}
-            }
-            i += 8;
-        }
-        log::info("--- card object ---");
-        i = 0;
-        while i < 64 {
-            match card.read_i64(i) {
-                Ok(v) => { log::info(fmt::format("  card+0x{:x}: 0x{:x}", i, v)); }
-                Err(_) => {}
-            }
-            i += 8;
-        }
-        log::info("inspect done (RemoveCard NOT called)");
-    }
-
-    pub fn remove_card(self, card: coreclr::ManagedObject) {
-        if card.is_null() { return; }
-        let rm = self.get_rm_instance.call_ptr();
-        if rm.is_null() { return; }
-        let rs = self.get_state.call_ptr(rm);
-        if rs.is_null() { return; }
-        self.rs_remove_card.call(rs, card);
+    // Opens the game's own card-removal screen (the card picker), the same flow a
+    // shop/reward's card removal triggers: RunManager.Instance.RewardSynchronizer
+    // .DoUnsyncedCardRemoval(player). The game handles deck mutation + UI itself,
+    // so this is robust (no fragile combat-copy / private-field poking). Runs on
+    // the game thread; the returned Task is fire-and-forget.
+    pub fn open_card_removal(self, player: coreclr::ManagedObject) {
+        if player.is_null() { return; }
+        let get_rm = self.get_rm_instance;
+        let get_sync = self.get_reward_sync;
+        let do_removal = self.do_card_removal;
+        godot::dispatch(|| {
+            let rm = get_rm.call_ptr();
+            if rm.is_null() { return; }
+            let sync = get_sync.call_ptr(rm);
+            if sync.is_null() { return; }
+            do_removal.call(sync, player);
+        });
     }
 }
 
@@ -636,44 +665,35 @@ impl UiState {
             energy_amount: cell::new(10),
             auto_draw: cell::new(false),
             player_addr: cell::new(0),
-            portraits: cell::new([]),
+            portraits: #{},
             pending: cell::new([]),
-            requested: cell::new([]),
+            requested: #{},
             card_preload_queue: cell::new([]),
             card_preload_seeded: cell::new(false),
             relic_filter: cell::new(""),
             relic_catalog: cell::new([]),
             relic_catalog_built: cell::new(false),
-            relic_icons_requested: cell::new([]),
-            relic_icons: cell::new([]),
+            relic_icons_requested: #{},
+            relic_icons: #{},
+            relic_descs: #{},
             relic_icons_pending: cell::new([]),
         }
     }
 
     pub fn find_portrait(self, id: str) -> Option<CachedPortrait> {
-        for entry in self.portraits.get() {
-            if entry.id == id { return Some(entry); }
-        }
-        None
+        self.portraits.get(id)
     }
 
     pub fn cache_portrait(self, id: str, tex_id: gui::Texture, width: i32, height: i32) {
-        let cache = self.portraits.get();
-        cache.push(CachedPortrait { id: id, tex_id: tex_id, width: width, height: height });
-        self.portraits.set(cache);
+        self.portraits.insert(id, CachedPortrait { id: id, tex_id: tex_id, width: width, height: height });
     }
 
     pub fn is_portrait_requested(self, id: str) -> bool {
-        for a in self.requested.get() {
-            if a == id { return true; }
-        }
-        false
+        self.requested.contains_key(id)
     }
 
     pub fn mark_portrait_requested(self, id: str) {
-        let r = self.requested.get();
-        r.push(id);
-        self.requested.set(r);
+        self.requested.insert(id, true);
     }
 
     // Seeds the preload queue once (when the catalog is first available in a
@@ -724,16 +744,11 @@ impl UiState {
     }
 
     pub fn find_relic_icon(self, id: str) -> Option<CachedRelicIcon> {
-        for entry in self.relic_icons.get() {
-            if entry.id == id { return Some(entry); }
-        }
-        None
+        self.relic_icons.get(id)
     }
 
     pub fn cache_relic_icon(self, id: str, tex_id: gui::Texture, width: i32, height: i32) {
-        let cache = self.relic_icons.get();
-        cache.push(CachedRelicIcon { id: id, tex_id: tex_id, width: width, height: height });
-        self.relic_icons.set(cache);
+        self.relic_icons.insert(id, CachedRelicIcon { id: id, tex_id: tex_id, width: width, height: height });
     }
 
     pub fn push_pending_relic_icon(self, p: PendingRelicIcon) {
@@ -753,15 +768,10 @@ impl UiState {
     }
 
     pub fn is_relic_icon_requested(self, id: str) -> bool {
-        for r in self.relic_icons_requested.get() {
-            if r == id { return true; }
-        }
-        false
+        self.relic_icons_requested.contains_key(id)
     }
 
     pub fn mark_relic_icon_requested(self, id: str) {
-        let r = self.relic_icons_requested.get();
-        r.push(id);
-        self.relic_icons_requested.set(r);
+        self.relic_icons_requested.insert(id, true);
     }
 }

@@ -97,8 +97,9 @@ pub fn draw_combat(ui: gui::Ui, game: proxies::GameState, combat: proxies::Comba
 pub fn process_pending_portraits(ctx: gui::Ctx, state: proxies::UiState) {
     let pending = state.take_pending_portraits();
     // Each upload submits to the GPU and waits on a fence, so cap per-frame to
-    // avoid a hard hitch; 16 drains a full deck preload in a second or so.
-    let max = 16;
+    // avoid a hard hitch (smaller = smoother but slower to fill); 4 keeps the
+    // combat-enter frame responsive while still draining over a few seconds.
+    let max = 4;
     let i = 0;
     let deferred = [];
     for p in pending {
@@ -124,14 +125,14 @@ pub fn process_pending_portraits(ctx: gui::Ctx, state: proxies::UiState) {
     }
 }
 
-fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, cat: catalog::CardCatalog, state: proxies::UiState, cards: [proxies::CardInfo], label: str) {
+fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, cat: catalog::CardCatalog, state: proxies::UiState, cards: [proxies::CardInfo], label: str, grid_id: str) {
     if cards.len() == 0 {
         ui.small(fmt::format("{}: empty", label));
         return;
     }
     ui.label(fmt::format("{} ({})", label, cards.len()));
     ui.scroll(label, 200.0, |scroll| {
-        scroll.grid(fmt::format("{}_grid", label), 3, |g| {
+        scroll.grid(grid_id, 2, |g| {
             for card in cards {
                 // Portraits are preloaded from the stable catalog and keyed by
                 // the card's stable id; a combat card maps to it via get_Id.
@@ -145,9 +146,6 @@ fn draw_pile_cards(ui: gui::Ui, ch: proxies::CardHelper, cat: catalog::CardCatal
                     }
                 }
                 g.label(card.title);
-                if g.button("Inspect") {
-                    ch.inspect_remove(card.obj);
-                }
                 g.end_row();
             }
         });
@@ -168,19 +166,22 @@ pub fn draw_cards(ui: gui::Ui, game: proxies::GameState, combat: proxies::Combat
         if row.button("Draw 3") { combat.draw_cards(p, 3); }
         if row.button("Draw 5") { combat.draw_cards(p, 5); }
     });
+    // Opens the game's own card-removal picker (same flow as a shop/reward purge).
+    if ui.button("Remove Card") { ch.open_card_removal(p); }
+    ui.separator();
 
     let hand_cards = match ch.pile_cards(combat.hand_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, cat, state, hand_cards, "Hand");
+    draw_pile_cards(ui, ch, cat, state, hand_cards, "Hand", "hand_grid");
 
     ui.separator();
 
     let draw_cards = match ch.pile_cards(combat.draw_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, cat, state, draw_cards, "Draw Pile");
+    draw_pile_cards(ui, ch, cat, state, draw_cards, "Draw Pile", "drawpile_grid");
 
     ui.separator();
 
     let disc_cards = match ch.pile_cards(combat.discard_pile(pcs)) { Ok(v) => v, Err(_) => [] };
-    draw_pile_cards(ui, ch, cat, state, disc_cards, "Discard");
+    draw_pile_cards(ui, ch, cat, state, disc_cards, "Discard", "discard_grid");
 }
 
 pub fn draw_gold(ui: gui::Ui, game: proxies::GameState, state: proxies::UiState) {
@@ -272,7 +273,10 @@ pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, rc: catalog::RelicCata
                             g.label("...");
                         }
                     }
-                    g.label(relic.name);
+                    // Description comes from the catalog's id->desc map (resolved
+                    // on the game thread); "" until the catalog has built.
+                    let tip = match state.relic_descs.get(relic.id) { Some(d) => d, None => "" };
+                    g.hover_text(tip, |h| { h.label(relic.name); });
                     g.end_row();
                 }
             });
@@ -292,8 +296,13 @@ pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, rc: catalog::RelicCata
             godot::dispatch(|| {
                 let relics = rc.all_relics();
                 if relics.len() > 0 {
+                    for r in relics {
+                        state.relic_descs.insert(r.id, r.desc);
+                    }
                     state.relic_catalog.set(relics);
                     log::info(fmt::format("catalog: {} relics", relics.len()));
+                    let r0 = relics[0];
+                    log::info(fmt::format("sample relic desc: id={} desc=\"{}\"", r0.id, r0.desc));
                 }
             });
         }
@@ -315,7 +324,7 @@ pub fn draw_relics(ui: gui::Ui, rh: proxies::RelicHelper, rc: catalog::RelicCata
                         g.label("...");
                     }
                 }
-                g.label(relic.name);
+                g.hover_text(relic.desc, |h| { h.label(relic.name); });
                 if g.button("Add") {
                     rc.add_relic(rh, relic.id);
                 }

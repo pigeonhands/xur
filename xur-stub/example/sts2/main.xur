@@ -34,7 +34,6 @@ impl Trainer {
     fn init(rt: coreclr::Runtime, state: proxies::UiState) -> Result<Trainer> {
         let game = proxies::GameState::init(rt)?;
         let combat = proxies::Combat::init(rt)?;
-        combat.install_auto_draw_hook(rt, state);
         // JIT-compile the IEnumerable helper now, off the game thread, so the
         // catalog builds (which call coreclr::enumerate on the game thread) can
         // use it. Best-effort: on failure catalogs just stay empty.
@@ -120,10 +119,30 @@ fn stub_main() {
             Some(t) => {
                 let in_run = match t.game.in_game() { Ok(v) => v, Err(_) => false };
                 if in_run {
+                    // Refresh the hook-target addresses every frame, NOT only inside
+                    // window_sized: godmode/auto-draw fire even when the overlay is
+                    // hidden or collapsed, and the player creature is reallocated each
+                    // combat — a stale address makes godmode miss the new creature.
+                    match t.game.player() {
+                        Ok(p) => { state.player_addr.set(p.address()); }
+                        Err(_) => {}
+                    }
+                    match t.game.creature() {
+                        Ok(cr) => { if !cr.is_null() { t.combat.player_creature_addr.set(cr.address()); } }
+                        Err(_) => {}
+                    }
+                    // (Re)hook godmode/auto-draw onto the current JIT body. Runs
+                    // every in-run frame so hooks survive a method re-tiering
+                    // (Tier0 -> Tier1) when entering a new combat.
+                    t.combat.maintain_hooks(state);
                     match t.catalog {
                         Some(cat) => {
                             catalog::seed_preload(cat, state);
-                            catalog::drive_preload(cat, state, 8);
+                            // Each unit is a GPU texture readback on the game thread.
+                            // The catalog is large (~580 cards), so keep this tiny:
+                            // 2/frame drains in a few seconds without stalling the
+                            // frame where a combat is loading its own art.
+                            catalog::drive_preload(cat, state, 2);
                         }
                         None => {}
                     }

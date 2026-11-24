@@ -157,6 +157,7 @@ pub struct RelicCatalog {
     pool_get_all_relics: coreclr::MethodPtr,
     get_icon: coreclr::MethodPtr,
     get_title: coreclr::MethodPtr,
+    get_description: coreclr::MethodPtr,
     get_formatted_text: coreclr::MethodPtr,
     get_id: coreclr::MethodPtr,
     get_entry: coreclr::MethodPtr,
@@ -175,12 +176,13 @@ impl RelicCatalog {
         let pool_get_all_relics = rt.method(asm, pool_t, "get_AllRelics")?;
         let get_icon = rt.method(asm, relic_t, "get_Icon")?;
         let get_title = rt.method(asm, relic_t, "get_Title")?;
+        let get_description = rt.method(asm, relic_t, "get_Description")?;
         let get_formatted_text = rt.method(asm, loc_t, "GetFormattedText")?;
         let get_id = rt.method(asm, model_t, "get_Id")?;
         let get_entry = rt.method(asm, model_id_t, "get_Entry")?;
         Ok(RelicCatalog {
             get_shared_relic_pools, pool_get_all_relics, get_icon,
-            get_title, get_formatted_text, get_id, get_entry,
+            get_title, get_description, get_formatted_text, get_id, get_entry,
         })
     }
 
@@ -202,6 +204,17 @@ impl RelicCatalog {
         match s.read_string() { Ok(v) => v, Err(_) => "?" }
     }
 
+    // Relic rules text. Same LocString -> GetFormattedText chain as the title,
+    // so placeholders like damage/gold values come out already substituted.
+    pub fn relic_description(self, relic: coreclr::ManagedObject) -> str {
+        if relic.is_null() { return ""; }
+        let loc = self.get_description.call_ptr(relic);
+        if loc.is_null() { return ""; }
+        let s = self.get_formatted_text.call_ptr(loc);
+        if s.is_null() { return ""; }
+        match s.read_string() { Ok(v) => v, Err(_) => "" }
+    }
+
     // All relics across the shared pools, as (name, stable id, pool/elem index).
     pub fn all_relics(self) -> [proxies::CatalogRelic] {
         let shared = self.get_shared_relic_pools.call_ptr();
@@ -219,6 +232,7 @@ impl RelicCatalog {
                     seen.push(id);
                     catalog.push(proxies::CatalogRelic {
                         name: self.relic_title(r), id: id,
+                        desc: self.relic_description(r),
                         pool_idx: pi, elem_idx: ei,
                     });
                 }
