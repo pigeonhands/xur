@@ -6,6 +6,10 @@ Maps in xur are shared and change in place (like lists).
 .B std::map
 is not imported directly; instead these are methods on any map value
 .RB ( "#{}" ).
+The type is written
+.B map
+in annotations (e.g. a struct field or parameter); like a list, only the
+container is type-checked \(em keys and values are dynamic.
 .SH METHODS
 .TP
 .B len() -> int

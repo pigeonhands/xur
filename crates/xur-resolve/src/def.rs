@@ -80,12 +80,15 @@ pub enum PrimTy {
     Isize,
     F32,
     F64,
+    /// A map (`#{}`), backed by a shared DashMap. Like a list, only the
+    /// container is type-checked; keys and values are dynamic.
+    Map,
     /// The metatype: accepts values that are themselves types.
     Type,
 }
 
 impl PrimTy {
-    pub const ALL: [PrimTy; 16] = [
+    pub const ALL: [PrimTy; 17] = [
         Self::Bool,
         Self::Str,
         Self::Bytes,
@@ -101,6 +104,7 @@ impl PrimTy {
         Self::Isize,
         Self::F32,
         Self::F64,
+        Self::Map,
         Self::Type,
     ];
 
@@ -121,6 +125,7 @@ impl PrimTy {
             Self::Isize => "isize",
             Self::F32 => "f32",
             Self::F64 => "f64",
+            Self::Map => "map",
             Self::Type => "type",
         }
     }

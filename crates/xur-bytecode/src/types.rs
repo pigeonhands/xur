@@ -66,6 +66,7 @@ pub(crate) fn prim_rt_type(prim: PrimTy) -> RtType {
         PrimTy::I32 => int("i32", i32::MIN.into(), i32::MAX.into()),
         PrimTy::I64 => int("i64", i64::MIN, i64::MAX),
         PrimTy::Isize => int("isize", i64::MIN, i64::MAX),
+        PrimTy::Map => RtType::Map,
         PrimTy::Type => RtType::Type,
     }
 }

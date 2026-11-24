@@ -10,6 +10,24 @@ enum Color {
     Blue
 }
 
+// A map can be stored in a struct field or passed/returned by a function; the
+// type annotation is just `map` (only the container is checked — keys and
+// values stay dynamic).
+struct Histogram {
+    counts: map
+}
+
+fn tally(items: [str]) -> map {
+    let m = #{};
+    for item in items {
+        match m.get(item) {
+            Some(n) => { m[item] = n + 1; }
+            None    => { m[item] = 1; }
+        }
+    }
+    m
+}
+
 fn main() -> Result<()> {
     // Map literals.
     let scores = #{ "alice": 10, "bob": 20, "carol": 30 };
@@ -65,6 +83,11 @@ fn main() -> Result<()> {
     // clear.
     ids.clear();
     io::println("after clear: {}, len: {}", ids, ids.len());
+
+    // Maps as a `map`-typed return value and struct field.
+    let hist = Histogram { counts: tally(["a", "b", "a", "c", "a", "b"]) };
+    io::println("histogram: {}", hist.counts);
+    io::println("a appears {} time(s)", hist.counts["a"]);
 
     Ok(())
 }

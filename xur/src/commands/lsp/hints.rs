@@ -37,6 +37,7 @@ impl InferredTy {
                     BuiltinType::Int
                 }
                 PrimTy::F32 | PrimTy::F64 => BuiltinType::Float,
+                PrimTy::Map => BuiltinType::Map,
                 PrimTy::Type => return None,
             },
             Self::List(_) => BuiltinType::List,
