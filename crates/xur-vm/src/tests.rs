@@ -645,8 +645,8 @@ fn the_reflect_example_runs() {
             "Robot::forward:\n",
             "  params:      2\n",
             "  param_names: [\"self\", \"steps\"]\n",
-            "  param_types: [(), i64]\n",
-            "  return_type: Robot\n",
+            "  param_types: [None, Some(i64)]\n",
+            "  return_type: Some(Robot)\n",
         )
         .into())
     );
