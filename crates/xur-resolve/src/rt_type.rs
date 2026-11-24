@@ -18,8 +18,8 @@ pub enum RtType {
     /// An integer type, with the range its values must be in.
     Int {
         name: &'static str,
-        min: i64,
-        max: i64,
+        min: i128,
+        max: i128,
     },
     Tuple(Vec<RtType>),
     /// A list. Only the list itself is checked, not each element, so a

@@ -136,16 +136,16 @@ impl Kind {
             Self::Bool => RtType::Bool,
             &Self::Float { size } => RtType::Float { name: if size <= 4 { "f32" } else { "f64" } },
             &Self::Int { size, signed } => {
-                let (name, min, max): (&str, i64, i64) = match (size, signed) {
-                    (1, false) => ("u8", 0, u8::MAX as i64),
-                    (2, false) => ("u16", 0, u16::MAX as i64),
-                    (4, false) => ("u32", 0, u32::MAX as i64),
-                    (8, false) => ("u64", 0, i64::MAX),
-                    (1, true) => ("i8", i8::MIN as i64, i8::MAX as i64),
-                    (2, true) => ("i16", i16::MIN as i64, i16::MAX as i64),
-                    (4, true) => ("i32", i32::MIN as i64, i32::MAX as i64),
-                    (8, true) => ("i64", i64::MIN, i64::MAX),
-                    _ => ("i64", i64::MIN, i64::MAX),
+                let (name, min, max): (&str, i128, i128) = match (size, signed) {
+                    (1, false) => ("u8", 0, u8::MAX as i128),
+                    (2, false) => ("u16", 0, u16::MAX as i128),
+                    (4, false) => ("u32", 0, u32::MAX as i128),
+                    (8, false) => ("u64", 0, u64::MAX as i128),
+                    (1, true) => ("i8", i8::MIN as i128, i8::MAX as i128),
+                    (2, true) => ("i16", i16::MIN as i128, i16::MAX as i128),
+                    (4, true) => ("i32", i32::MIN as i128, i32::MAX as i128),
+                    (8, true) => ("i64", i64::MIN as i128, i64::MAX as i128),
+                    _ => ("i64", i64::MIN as i128, i64::MAX as i128),
                 };
                 RtType::Int { name, min, max }
             }

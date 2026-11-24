@@ -183,7 +183,7 @@ impl Interp<'_> {
             | (RtType::Map, Value::Map(_)) => true,
             (RtType::Int { min, max, .. }, Value::Int(i)) => {
                 let v = i.to_i128();
-                v >= *min as i128 && v <= *max as i128
+                v >= *min && v <= *max
             }
             (RtType::Tuple(tys), Value::Tuple(items)) => {
                 tys.len() == items.len()
