@@ -320,8 +320,10 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
             let mut ret = Value::Unit;
-            // scope() groups the body's widgets so the hover test covers the whole
-            // cell; its InnerResponse.response is what on_hover_text attaches to.
+            // scope() groups the body's widgets so the tooltip covers the whole
+            // cell. In egui 0.37 the scope's response only *remembers* the rect
+            // (it doesn't sense hover), so re-register an interactive hover region
+            // over that rect — otherwise on_hover_text never fires.
             let scoped = ui.scope(|inner_ui| {
                 let cx = unsafe { &mut *cx_ptr };
                 let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
@@ -331,7 +333,9 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
                 }
             });
             if !tip.is_empty() {
-                scoped.response.on_hover_text(tip.as_ref());
+                let id = scoped.response.id.with("hover_text");
+                ui.interact(scoped.response.rect, id, egui::Sense::hover())
+                    .on_hover_text(tip.as_ref());
             }
             Ok(ret)
         })
