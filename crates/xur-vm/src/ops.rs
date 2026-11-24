@@ -28,15 +28,15 @@ pub(crate) fn unary(op: UnOp, value: &Value) -> RunResult<Value> {
 
 impl Interp<'_> {
     pub(crate) fn coerce_repr(&self, value: &Value) -> Option<Value> {
-        if let Value::Adt(adt) = value {
-            if adt.fields.is_empty() {
-                let program = self.shared.program();
-                return program
-                    .resolutions()
-                    .repr_values
-                    .get(&adt.ctor)
-                    .map(|&v| Value::Int(v));
-            }
+        if let Value::Adt(adt) = value
+            && adt.fields.is_empty()
+        {
+            let program = self.shared.program();
+            return program
+                .resolutions()
+                .repr_values
+                .get(&adt.ctor)
+                .map(|&v| Value::Int(v));
         }
         None
     }
@@ -112,7 +112,18 @@ impl Interp<'_> {
     pub(crate) fn values_eq(&self, lhs: &Value, rhs: &Value) -> bool {
         match (lhs, rhs) {
             (Value::Native(a), Value::Native(b)) => self.shared.registry.native_eq(a, b),
-            _ => lhs == rhs,
+            _ => {
+                let lhs_c = self.coerce_repr(lhs);
+                let rhs_c = self.coerce_repr(rhs);
+                match (&lhs_c, &rhs_c) {
+                    (Some(_), _) | (_, Some(_)) => {
+                        let lhs = lhs_c.as_ref().unwrap_or(lhs);
+                        let rhs = rhs_c.as_ref().unwrap_or(rhs);
+                        lhs == rhs
+                    }
+                    _ => lhs == rhs,
+                }
+            }
         }
     }
 }

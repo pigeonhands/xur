@@ -13,11 +13,33 @@ pub(crate) fn register(registry: &Registry) {
         .named_raw_function_returns_xur("fail", &["message"], XurType::UNIT, |cx, args| fail(cx, args));
 }
 
+fn coerce_repr(cx: &dyn Context, value: &Value) -> Option<Value> {
+    if let Value::Adt(adt) = value
+        && adt.fields.is_empty()
+    {
+        return cx.repr_value(adt.ctor).map(Value::Int);
+    }
+    None
+}
+
+fn repr_eq(cx: &dyn Context, left: &Value, right: &Value) -> bool {
+    let lc = coerce_repr(cx, left);
+    let rc = coerce_repr(cx, right);
+    match (&lc, &rc) {
+        (Some(_), _) | (_, Some(_)) => {
+            let left = lc.as_ref().unwrap_or(left);
+            let right = rc.as_ref().unwrap_or(right);
+            left == right
+        }
+        _ => left == right,
+    }
+}
+
 fn is_eq(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [left, right] = args else {
         return Err(RuntimeError::new("`is_eq` takes two arguments"));
     };
-    if left != right {
+    if !repr_eq(cx, left, right) {
         return Err(RuntimeError::new(format!(
             "assertion failed: {} != {}",
             cx.display(left),
@@ -31,7 +53,7 @@ fn is_ne(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [left, right] = args else {
         return Err(RuntimeError::new("`is_ne` takes two arguments"));
     };
-    if left == right {
+    if repr_eq(cx, left, right) {
         return Err(RuntimeError::new(format!(
             "assertion failed: values are equal: {}",
             cx.display(left),
