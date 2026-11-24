@@ -10,7 +10,7 @@ use xur_runtime::{Registry, RuntimeError, Value};
 
 use xur_std::gui::{with_ctx, EguiCtx, Texture};
 
-use crate::stub::il2cpp::XurObject;
+use crate::stub::il2cpp::XurUnityObject;
 
 struct Bridge {
     mu: Mutex<BridgeState>,
@@ -138,10 +138,10 @@ pub(crate) fn register(registry: &Registry) {
         m.named_function(
             "register_texture",
             &["obj"],
-            // By value, not `&XurObject`: function args marshal via
+            // By value, not `&XurUnityObject`: function args marshal via
             // `from_value`, which resolves a registered native type's own shape
             // but not a `&T` reference shape (see IntoNativeFn docs).
-            |obj: XurObject| -> Result<Texture, String> {
+            |obj: XurUnityObject| -> Result<Texture, String> {
                 let tex_id = hao_egui::register_user_texture(obj.obj())
                     .map_err(|e| format!("register_texture: {e}"))?;
                 match tex_id {

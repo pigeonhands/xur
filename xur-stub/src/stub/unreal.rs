@@ -54,9 +54,9 @@ fn xur_result(cx: &dyn Context, value: Result<Value, String>) -> Value {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurSdk;
+struct XurUnrealSdk;
 
-impl std::fmt::Display for XurSdk {
+impl std::fmt::Display for XurUnrealSdk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "UnrealSdk")
     }
@@ -64,12 +64,12 @@ impl std::fmt::Display for XurSdk {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurUObject(*const u8);
+struct XurUnrealObject(*const u8);
 
-unsafe impl Send for XurUObject {}
-unsafe impl Sync for XurUObject {}
+unsafe impl Send for XurUnrealObject {}
+unsafe impl Sync for XurUnrealObject {}
 
-impl std::fmt::Display for XurUObject {
+impl std::fmt::Display for XurUnrealObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(sdk) = get_sdk() {
             let obj = unrealkit::UObject::new(self.0, &sdk.names);
@@ -82,12 +82,12 @@ impl std::fmt::Display for XurUObject {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurUClass(*const u8);
+struct XurUnrealClass(*const u8);
 
-unsafe impl Send for XurUClass {}
-unsafe impl Sync for XurUClass {}
+unsafe impl Send for XurUnrealClass {}
+unsafe impl Sync for XurUnrealClass {}
 
-impl std::fmt::Display for XurUClass {
+impl std::fmt::Display for XurUnrealClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(sdk) = get_sdk() {
             let cls = unrealkit::UClass::new(self.0, &sdk.names);
@@ -100,12 +100,12 @@ impl std::fmt::Display for XurUClass {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurUProperty(*const u8);
+struct XurUnrealProperty(*const u8);
 
-unsafe impl Send for XurUProperty {}
-unsafe impl Sync for XurUProperty {}
+unsafe impl Send for XurUnrealProperty {}
+unsafe impl Sync for XurUnrealProperty {}
 
-impl std::fmt::Display for XurUProperty {
+impl std::fmt::Display for XurUnrealProperty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(sdk) = get_sdk() {
             let prop = unrealkit::FProperty::new(self.0, &sdk.names);
@@ -118,12 +118,12 @@ impl std::fmt::Display for XurUProperty {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurUFunction(*const u8);
+struct XurUnrealFunction(*const u8);
 
-unsafe impl Send for XurUFunction {}
-unsafe impl Sync for XurUFunction {}
+unsafe impl Send for XurUnrealFunction {}
+unsafe impl Sync for XurUnrealFunction {}
 
-impl std::fmt::Display for XurUFunction {
+impl std::fmt::Display for XurUnrealFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(sdk) = get_sdk() {
             let func = unrealkit::UFunction::new(self.0, &sdk.names);
@@ -141,7 +141,7 @@ impl std::fmt::Display for XurUFunction {
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::unreal", |m| {
         // init(version: int, text_base: ptr, text_size: int) -> Result<UnrealSdk>
-        m.raw_function_returns::<XurSdk>("init", |cx, args| {
+        m.raw_function_returns::<XurUnrealSdk>("init", |cx, args| {
             let (version_int, text_base, text_size) = match args {
                 [Value::Int(v), Value::Ptr(base), Value::Int(size)] => (*v, *base, *size),
                 _ => {
@@ -167,7 +167,7 @@ pub(crate) fn register(registry: &Registry) {
                 Ok(sdk) => {
                     SDK.set(sdk)
                         .map_err(|_| err("unreal SDK already initialized"))?;
-                    let v = into_value(cx, XurSdk)?;
+                    let v = into_value(cx, XurUnrealSdk)?;
                     Ok(xur_result(cx, Ok(v)))
                 }
                 Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
@@ -175,7 +175,7 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // init_from_pointers(version: int, gnames: ptr, gobjects: ptr) -> Result<UnrealSdk>
-        m.raw_function_returns::<XurSdk>("init_from_pointers", |cx, args| {
+        m.raw_function_returns::<XurUnrealSdk>("init_from_pointers", |cx, args| {
             let (version_int, gnames_ptr, gobjects_ptr) = match args {
                 [Value::Int(v), Value::Ptr(gn), Value::Ptr(go)] => (*v, *gn, *go),
                 _ => {
@@ -201,7 +201,7 @@ pub(crate) fn register(registry: &Registry) {
                 Ok(sdk) => {
                     SDK.set(sdk)
                         .map_err(|_| err("unreal SDK already initialized"))?;
-                    let v = into_value(cx, XurSdk)?;
+                    let v = into_value(cx, XurUnrealSdk)?;
                     Ok(xur_result(cx, Ok(v)))
                 }
                 Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
@@ -209,7 +209,7 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // objects() -> [UObject]
-        m.raw_function_returns::<XurUObject>("objects", |cx, args| {
+        m.raw_function_returns::<XurUnrealObject>("objects", |cx, args| {
             if !args.is_empty() {
                 return Err(err("`objects` takes no arguments"));
             }
@@ -217,14 +217,14 @@ pub(crate) fn register(registry: &Registry) {
             let sdk = get_sdk()?;
             let objects: Result<Vec<Value>, _> = sdk
                 .objects()
-                .map(|obj| into_value(cx, XurUObject(obj.ptr())))
+                .map(|obj| into_value(cx, XurUnrealObject(obj.ptr())))
                 .collect();
 
             Ok(Value::list(objects?))
         });
 
         // find_object(name: str) -> Option<UObject>
-        m.raw_function_returns::<XurUObject>("find_object", |cx, args| {
+        m.raw_function_returns::<XurUnrealObject>("find_object", |cx, args| {
             let name = match args {
                 [Value::Str(s)] => s.clone(),
                 _ => return Err(err("`find_object` takes (name: str)")),
@@ -233,13 +233,13 @@ pub(crate) fn register(registry: &Registry) {
             let sdk = get_sdk()?;
             let found = sdk
                 .find_object_by_name(&name)
-                .map(|obj| into_value(cx, XurUObject(obj.ptr())))
+                .map(|obj| into_value(cx, XurUnrealObject(obj.ptr())))
                 .transpose()?;
             Ok(xur_option(cx, found))
         });
 
         // find_objects_by_class(class_name: str) -> [UObject]
-        m.raw_function_returns::<XurUObject>("find_objects_by_class", |cx, args| {
+        m.raw_function_returns::<XurUnrealObject>("find_objects_by_class", |cx, args| {
             let class_name = match args {
                 [Value::Str(s)] => s.clone(),
                 _ => return Err(err("`find_objects_by_class` takes (class_name: str)")),
@@ -249,7 +249,7 @@ pub(crate) fn register(registry: &Registry) {
             let objects: Result<Vec<Value>, _> = sdk
                 .objects()
                 .filter(|obj| obj.class().name() == &*class_name)
-                .map(|obj| into_value(cx, XurUObject(obj.ptr())))
+                .map(|obj| into_value(cx, XurUnrealObject(obj.ptr())))
                 .collect();
 
             Ok(Value::list(objects?))
@@ -288,28 +288,28 @@ pub(crate) fn register(registry: &Registry) {
 
         // --- UObject type ---
 
-        m.ty::<XurUObject>("UObject")
-            .function("name", |obj: &XurUObject| -> String {
+        m.ty::<XurUnrealObject>("UObject")
+            .function("name", |obj: &XurUnrealObject| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UObject::new(obj.0, &sdk.names).name()
             })
-            .function("full_name", |obj: &XurUObject| -> String {
+            .function("full_name", |obj: &XurUnrealObject| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UObject::new(obj.0, &sdk.names).full_name()
             })
-            .raw_function_returns::<XurUClass>("class", |cx, args| {
+            .raw_function_returns::<XurUnrealClass>("class", |cx, args| {
                 let this = extract_uobject(&args[0])?;
                 let sdk = get_sdk()?;
                 let uobj = unrealkit::UObject::new(this.0, &sdk.names);
-                into_value(cx, XurUClass(uobj.class().ptr()))
+                into_value(cx, XurUnrealClass(uobj.class().ptr()))
             })
-            .raw_function_returns::<XurUObject>("outer", |cx, args| {
+            .raw_function_returns::<XurUnrealObject>("outer", |cx, args| {
                 let this = extract_uobject(&args[0])?;
                 let sdk = get_sdk()?;
                 let uobj = unrealkit::UObject::new(this.0, &sdk.names);
                 let outer = uobj
                     .outer()
-                    .map(|o| into_value(cx, XurUObject(o.ptr())))
+                    .map(|o| into_value(cx, XurUnrealObject(o.ptr())))
                     .transpose()?;
                 Ok(xur_option(cx, outer))
             })
@@ -325,7 +325,7 @@ pub(crate) fn register(registry: &Registry) {
                 let uobj = unrealkit::UObject::new(this.0, &sdk.names);
                 Ok(Value::Bool(uobj.is_a(class_name)))
             })
-            .function("ptr", |obj: &XurUObject| -> u64 { obj.0 as u64 })
+            .function("ptr", |obj: &XurUnrealObject| -> u64 { obj.0 as u64 })
             .raw_function("get", |cx, args| {
                 if args.len() != 2 {
                     return Err(err("`get` takes (name: str)"));
@@ -364,18 +364,18 @@ pub(crate) fn register(registry: &Registry) {
 
         // --- UClass type ---
 
-        m.ty::<XurUClass>("UClass")
-            .function("name", |cls: &XurUClass| -> String {
+        m.ty::<XurUnrealClass>("UClass")
+            .function("name", |cls: &XurUnrealClass| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UClass::new(cls.0, &sdk.names).name()
             })
-            .raw_function_returns::<XurUClass>("super_class", |cx, args| {
+            .raw_function_returns::<XurUnrealClass>("super_class", |cx, args| {
                 let this = extract_uclass(&args[0])?;
                 let sdk = get_sdk()?;
                 let ucls = unrealkit::UClass::new(this.0, &sdk.names);
                 let sup = ucls
                     .super_class()
-                    .map(|s| into_value(cx, XurUClass(s.ptr())))
+                    .map(|s| into_value(cx, XurUnrealClass(s.ptr())))
                     .transpose()?;
                 Ok(xur_option(cx, sup))
             })
@@ -392,7 +392,7 @@ pub(crate) fn register(registry: &Registry) {
                     .collect();
                 Ok(Value::list(children))
             })
-            .function("instance_size", |cls: &XurUClass| -> i64 {
+            .function("instance_size", |cls: &XurUnrealClass| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UClass::new(cls.0, &sdk.names).instance_size() as i64
             })
@@ -406,7 +406,7 @@ pub(crate) fn register(registry: &Registry) {
                     .collect();
                 Ok(Value::list(chain))
             })
-            .raw_function_returns::<XurUProperty>("property", |cx, args| {
+            .raw_function_returns::<XurUnrealProperty>("property", |cx, args| {
                 if args.len() != 2 {
                     return Err(err("`property` takes (name: str)"));
                 }
@@ -418,7 +418,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = unrealkit::UClass::new(this.0, &sdk.names);
                 match ucls.find_property(name) {
                     Some(prop) => {
-                        let v = into_value(cx, XurUProperty(prop.ptr()))?;
+                        let v = into_value(cx, XurUnrealProperty(prop.ptr()))?;
                         Ok(xur_option(cx, Some(v)))
                     }
                     None => Ok(xur_option(cx, None)),
@@ -430,7 +430,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = unrealkit::UClass::new(this.0, &sdk.names);
                 let props: Result<Vec<Value>, _> = ucls
                     .properties()
-                    .map(|p| into_value(cx, XurUProperty(p.ptr())))
+                    .map(|p| into_value(cx, XurUnrealProperty(p.ptr())))
                     .collect();
                 Ok(Value::list(props?))
             })
@@ -441,11 +441,11 @@ pub(crate) fn register(registry: &Registry) {
                 let props: Result<Vec<Value>, _> = ucls
                     .class_hierarchy()
                     .flat_map(|c| c.properties())
-                    .map(|p| into_value(cx, XurUProperty(p.ptr())))
+                    .map(|p| into_value(cx, XurUnrealProperty(p.ptr())))
                     .collect();
                 Ok(Value::list(props?))
             })
-            .raw_function_returns::<XurUFunction>("method", |cx, args| {
+            .raw_function_returns::<XurUnrealFunction>("method", |cx, args| {
                 if args.len() != 2 {
                     return Err(err("`method` takes (name: str)"));
                 }
@@ -457,7 +457,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = unrealkit::UClass::new(this.0, &sdk.names);
                 match ucls.find_function(name) {
                     Some(func) => {
-                        let v = into_value(cx, XurUFunction(func.ptr()))?;
+                        let v = into_value(cx, XurUnrealFunction(func.ptr()))?;
                         Ok(xur_option(cx, Some(v)))
                     }
                     None => Ok(xur_option(cx, None)),
@@ -469,7 +469,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = unrealkit::UClass::new(this.0, &sdk.names);
                 let funcs: Result<Vec<Value>, _> = ucls
                     .functions()
-                    .map(|f| into_value(cx, XurUFunction(f.ptr())))
+                    .map(|f| into_value(cx, XurUnrealFunction(f.ptr())))
                     .collect();
                 Ok(Value::list(funcs?))
             })
@@ -480,31 +480,31 @@ pub(crate) fn register(registry: &Registry) {
                 let funcs: Result<Vec<Value>, _> = ucls
                     .class_hierarchy()
                     .flat_map(|c| c.functions())
-                    .map(|f| into_value(cx, XurUFunction(f.ptr())))
+                    .map(|f| into_value(cx, XurUnrealFunction(f.ptr())))
                     .collect();
                 Ok(Value::list(funcs?))
             });
 
         // --- UProperty type ---
 
-        m.ty::<XurUProperty>("UProperty")
-            .function("name", |prop: &XurUProperty| -> String {
+        m.ty::<XurUnrealProperty>("UProperty")
+            .function("name", |prop: &XurUnrealProperty| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::FProperty::new(prop.0, &sdk.names).name()
             })
-            .function("type_name", |prop: &XurUProperty| -> String {
+            .function("type_name", |prop: &XurUnrealProperty| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::FProperty::new(prop.0, &sdk.names).class_name()
             })
-            .function("offset", |prop: &XurUProperty| -> i64 {
+            .function("offset", |prop: &XurUnrealProperty| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::FProperty::new(prop.0, &sdk.names).offset() as i64
             })
-            .function("element_size", |prop: &XurUProperty| -> i64 {
+            .function("element_size", |prop: &XurUnrealProperty| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::FProperty::new(prop.0, &sdk.names).element_size() as i64
             })
-            .function("ptr", |prop: &XurUProperty| -> i64 {
+            .function("ptr", |prop: &XurUnrealProperty| -> i64 {
                 prop.0 as usize as i64
             })
             .raw_function("read", |cx, args| {
@@ -533,32 +533,32 @@ pub(crate) fn register(registry: &Registry) {
 
         // --- UFunction type ---
 
-        m.ty::<XurUFunction>("UFunction")
-            .function("name", |f: &XurUFunction| -> String {
+        m.ty::<XurUnrealFunction>("UFunction")
+            .function("name", |f: &XurUnrealFunction| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).name()
             })
-            .function("full_name", |f: &XurUFunction| -> String {
+            .function("full_name", |f: &XurUnrealFunction| -> String {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).full_name()
             })
-            .function("num_params", |f: &XurUFunction| -> i64 {
+            .function("num_params", |f: &XurUnrealFunction| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).num_params() as i64
             })
-            .function("params_size", |f: &XurUFunction| -> i64 {
+            .function("params_size", |f: &XurUnrealFunction| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).params_size() as i64
             })
-            .function("flags", |f: &XurUFunction| -> i64 {
+            .function("flags", |f: &XurUnrealFunction| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).function_flags() as i64
             })
-            .function("native_ptr", |f: &XurUFunction| -> i64 {
+            .function("native_ptr", |f: &XurUnrealFunction| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UFunction::new(f.0, &sdk.names).native_func_ptr() as usize as i64
             })
-            .function("ptr", |f: &XurUFunction| -> i64 { f.0 as usize as i64 })
+            .function("ptr", |f: &XurUnrealFunction| -> i64 { f.0 as usize as i64 })
             .raw_function("signature", |_cx, args| {
                 let this = extract_ufunction(&args[0])?;
                 let sdk = get_sdk()?;
@@ -571,7 +571,7 @@ pub(crate) fn register(registry: &Registry) {
                 let func = unrealkit::UFunction::new(this.0, &sdk.names);
                 let params: Result<Vec<Value>, _> = func
                     .params()
-                    .map(|p| into_value(cx, XurUProperty(p.ptr())))
+                    .map(|p| into_value(cx, XurUnrealProperty(p.ptr())))
                     .collect();
                 Ok(Value::list(params?))
             })
@@ -635,35 +635,35 @@ pub(crate) fn register(registry: &Registry) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn extract_uobject(val: &Value) -> Result<XurUObject, RuntimeError> {
+fn extract_uobject(val: &Value) -> Result<XurUnrealObject, RuntimeError> {
     let Value::Native(n) = val else {
         return Err(err("expected a UObject"));
     };
-    n.with(|o: &XurUObject| o.clone())
+    n.with(|o: &XurUnrealObject| o.clone())
         .ok_or_else(|| err("expected a UObject"))
 }
 
-fn extract_uclass(val: &Value) -> Result<XurUClass, RuntimeError> {
+fn extract_uclass(val: &Value) -> Result<XurUnrealClass, RuntimeError> {
     let Value::Native(n) = val else {
         return Err(err("expected a UClass"));
     };
-    n.with(|c: &XurUClass| c.clone())
+    n.with(|c: &XurUnrealClass| c.clone())
         .ok_or_else(|| err("expected a UClass"))
 }
 
-fn extract_ufunction(val: &Value) -> Result<XurUFunction, RuntimeError> {
+fn extract_ufunction(val: &Value) -> Result<XurUnrealFunction, RuntimeError> {
     let Value::Native(n) = val else {
         return Err(err("expected a UFunction"));
     };
-    n.with(|f: &XurUFunction| f.clone())
+    n.with(|f: &XurUnrealFunction| f.clone())
         .ok_or_else(|| err("expected a UFunction"))
 }
 
-fn extract_uproperty(val: &Value) -> Result<XurUProperty, RuntimeError> {
+fn extract_uproperty(val: &Value) -> Result<XurUnrealProperty, RuntimeError> {
     let Value::Native(n) = val else {
         return Err(err("expected a UProperty"));
     };
-    n.with(|p: &XurUProperty| p.clone())
+    n.with(|p: &XurUnrealProperty| p.clone())
         .ok_or_else(|| err("expected a UProperty"))
 }
 
@@ -681,7 +681,7 @@ fn property_value_to_xur(
                 let none = cx.lang().none;
                 Ok(Value::adt(none, Vec::new()))
             } else {
-                into_value(cx, XurUObject(ptr))
+                into_value(cx, XurUnrealObject(ptr))
             }
         }
         unrealkit::PropertyValue::Bytes(b) => Ok(Value::bytes(b)),

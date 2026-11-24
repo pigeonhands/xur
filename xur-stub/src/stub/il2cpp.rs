@@ -60,9 +60,9 @@ fn static_api() -> Option<&'static StaticApi> {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurIl2Cpp;
+struct XurUnitySdk;
 
-impl std::fmt::Display for XurIl2Cpp {
+impl std::fmt::Display for XurUnitySdk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Il2Cpp")
     }
@@ -72,12 +72,12 @@ use super::hooking::XurSkip;
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurClass(usize); // rt::Class doesn't impl Clone, store the raw pointer
+struct XurUnityClass(usize); // rt::Class doesn't impl Clone, store the raw pointer
 
-unsafe impl Send for XurClass {}
-unsafe impl Sync for XurClass {}
+unsafe impl Send for XurUnityClass {}
+unsafe impl Sync for XurUnityClass {}
 
-impl XurClass {
+impl XurUnityClass {
     fn new(class: &rt::Class) -> Self {
         Self(class.as_ptr() as usize)
     }
@@ -93,7 +93,7 @@ impl XurClass {
     }
 }
 
-impl std::fmt::Display for XurClass {
+impl std::fmt::Display for XurUnityClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let class = self.class();
         write!(f, "Class({}.{})", class.namespace(), class.name())
@@ -102,12 +102,12 @@ impl std::fmt::Display for XurClass {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurField(usize); // rt::Field raw pointer
+struct XurUnityField(usize); // rt::Field raw pointer
 
-unsafe impl Send for XurField {}
-unsafe impl Sync for XurField {}
+unsafe impl Send for XurUnityField {}
+unsafe impl Sync for XurUnityField {}
 
-impl XurField {
+impl XurUnityField {
     fn new(field: &rt::Field) -> Self {
         Self(field.as_ptr() as usize)
     }
@@ -118,7 +118,7 @@ impl XurField {
     }
 }
 
-impl std::fmt::Display for XurField {
+impl std::fmt::Display for XurUnityField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let field = self.field();
         write!(f, "Field({})", field.name())
@@ -127,12 +127,12 @@ impl std::fmt::Display for XurField {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurMethod(usize); // rt::Method raw pointer
+struct XurUnityMethod(usize); // rt::Method raw pointer
 
-unsafe impl Send for XurMethod {}
-unsafe impl Sync for XurMethod {}
+unsafe impl Send for XurUnityMethod {}
+unsafe impl Sync for XurUnityMethod {}
 
-impl XurMethod {
+impl XurUnityMethod {
     fn new(method: &rt::Method) -> Self {
         Self(method.as_ptr() as usize)
     }
@@ -143,7 +143,7 @@ impl XurMethod {
     }
 }
 
-impl std::fmt::Display for XurMethod {
+impl std::fmt::Display for XurUnityMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let method = self.method();
         write!(f, "Method({})", method.name())
@@ -152,12 +152,12 @@ impl std::fmt::Display for XurMethod {
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
-struct XurImage(usize); // rt::Image raw pointer (the Il2CppImage*)
+struct XurUnityImage(usize); // rt::Image raw pointer (the Il2CppImage*)
 
-unsafe impl Send for XurImage {}
-unsafe impl Sync for XurImage {}
+unsafe impl Send for XurUnityImage {}
+unsafe impl Sync for XurUnityImage {}
 
-impl XurImage {
+impl XurUnityImage {
     fn new(image: &rt::Image) -> Self {
         // Image { il2cpp, ptr } — same layout as Class.
         let (_, ptr): (&Il2Cpp, *mut c_void) = unsafe { std::mem::transmute_copy(image) };
@@ -170,7 +170,7 @@ impl XurImage {
     }
 }
 
-impl std::fmt::Display for XurImage {
+impl std::fmt::Display for XurUnityImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let image = self.image();
         write!(f, "Image({})", image.name())
@@ -225,12 +225,12 @@ impl std::fmt::Display for XurHookContext {
 
 #[derive(Facet, Clone, Copy)]
 #[facet(opaque)]
-pub(crate) struct XurObject(usize); // Object raw pointer
+pub(crate) struct XurUnityObject(usize); // Object raw pointer
 
-unsafe impl Send for XurObject {}
-unsafe impl Sync for XurObject {}
+unsafe impl Send for XurUnityObject {}
+unsafe impl Sync for XurUnityObject {}
 
-impl XurObject {
+impl XurUnityObject {
     fn from_obj(obj: rt::Object) -> Self {
         Self(obj.as_ptr() as usize)
     }
@@ -240,7 +240,7 @@ impl XurObject {
     }
 }
 
-impl std::fmt::Display for XurObject {
+impl std::fmt::Display for XurUnityObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0 == 0 {
             write!(f, "Object(null)")
@@ -313,7 +313,7 @@ fn read_instance_field(
         | ElementType::GenericInst
         | ElementType::SzArray => {
             let v: rt::Object = unsafe { field.read(object) };
-            Ok(into_value(cx, XurObject::from_obj(v))?)
+            Ok(into_value(cx, XurUnityObject::from_obj(v))?)
         }
         ElementType::ValueType => {
             let il2cpp_r = Il2Cpp::get().unwrap();
@@ -381,7 +381,7 @@ fn write_instance_field(
             | ElementType::SzArray,
             Value::Native(n),
         ) => {
-            if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
+            if let Some(obj) = n.with(|o: &XurUnityObject| o.obj()) {
                 unsafe { field.write(object, obj) };
             } else {
                 return Err(RuntimeError::new("expected an Object"));
@@ -445,7 +445,7 @@ fn read_static_field(
             unsafe {
                 (api.get)(field.as_ptr(), &mut v as *mut *mut c_void as *mut c_void);
             }
-            Ok(into_value(cx, XurObject::from_obj(rt::Object(v)))?)
+            Ok(into_value(cx, XurUnityObject::from_obj(rt::Object(v)))?)
         }
         _ => Err(RuntimeError::new(format!(
             "unsupported static field type (element {elem})",
@@ -481,7 +481,7 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
             | ElementType::SzArray,
             Value::Native(n),
         ) => {
-            if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
+            if let Some(obj) = n.with(|o: &XurUnityObject| o.obj()) {
                 let ptr = obj.as_ptr();
                 unsafe { (api.set)(field.as_ptr(), &ptr as *const *mut c_void as *const c_void) };
             } else {
@@ -558,7 +558,7 @@ fn do_invoke(
                 invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Native(n) => {
-                if let Some(obj) = n.with(|o: &XurObject| o.obj()) {
+                if let Some(obj) = n.with(|o: &XurUnityObject| o.obj()) {
                     invoke_args.push(obj.as_ptr());
                 } else {
                     invoke_args.push(std::ptr::null_mut());
@@ -584,7 +584,7 @@ fn do_invoke(
     }
 
     if result.is_null() {
-        return into_value(cx, XurObject(0));
+        return into_value(cx, XurUnityObject(0));
     }
 
     let ret_type = unsafe { (api.il2cpp_method_get_return_type)(method_raw) };
@@ -644,7 +644,7 @@ fn unmarshal_invoke_result(
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
             Ok(Value::Float(unsafe { *(ptr as *const f64) }))
         }
-        _ => into_value(cx, XurObject::from_obj(rt::Object(result))),
+        _ => into_value(cx, XurUnityObject::from_obj(rt::Object(result))),
     }
 }
 
@@ -680,7 +680,7 @@ fn marshal_arg(
                 | element::OBJECT
                 | element::GENERICINST
                 | element::SZARRAY
-                | element::ARRAY => into_value(cx, XurObject(raw as usize)),
+                | element::ARRAY => into_value(cx, XurUnityObject(raw as usize)),
                 _ => Ok(Value::Int(raw as i64)),
             }
         }
@@ -699,7 +699,7 @@ fn write_arg_to_regs(regs: &mut hooking::SavedRegs, param: &rt::GenericParam, va
                 Value::Bool(b) => *b as u64,
                 Value::Int(n) => *n as u64,
                 Value::Float(f) => *f as u64,
-                Value::Native(n) => n.with(|o: &XurObject| o.0 as u64).unwrap_or(0),
+                Value::Native(n) => n.with(|o: &XurUnityObject| o.0 as u64).unwrap_or(0),
                 _ => return,
             };
             regs.write_int(i, raw);
@@ -739,7 +739,7 @@ fn value_to_override(val: Value, return_element: i32) -> hooking::HookAction {
         Value::Native(ref n) => {
             if n.with(|_: &XurSkip| ()).is_some() {
                 hooking::HookAction::OverrideInt(0)
-            } else if let Some(ptr) = n.with(|o: &XurObject| o.0 as u64) {
+            } else if let Some(ptr) = n.with(|o: &XurUnityObject| o.0 as u64) {
                 hooking::HookAction::OverrideInt(ptr)
             } else {
                 hooking::HookAction::OverrideInt(0)
@@ -799,7 +799,7 @@ fn marshal_call_result(
         | element::OBJECT
         | element::GENERICINST
         | element::SZARRAY
-        | element::ARRAY => into_value(cx, XurObject(call_result.int_val as usize))
+        | element::ARRAY => into_value(cx, XurUnityObject(call_result.int_val as usize))
             .unwrap_or_else(|_| Value::Int(call_result.int_val as i64)),
         _ => Value::Int(call_result.int_val as i64),
     }
@@ -814,14 +814,14 @@ pub(crate) fn register(registry: &Registry) {
         m.register_macro("il2cpp_proxy", super::il2cpp_proxy::Il2CppProxyExpander);
 
         // --- loaded() ---
-        m.raw_function_returns::<XurIl2Cpp>("loaded", |cx, args| {
+        m.raw_function_returns::<XurUnitySdk>("loaded", |cx, args| {
             if !args.is_empty() {
                 return Err(RuntimeError::new("`loaded` takes no arguments"));
             }
             match Il2Cpp::loaded() {
                 Ok(_il2cpp) => {
                     ensure_thread_attached();
-                    let v = into_value(cx, XurIl2Cpp)?;
+                    let v = into_value(cx, XurUnitySdk)?;
                     Ok(xur_result(cx, Ok(v)))
                 }
                 Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
@@ -829,16 +829,16 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // --- null() ---
-        m.raw_function_returns::<XurObject>("null", |cx, args| {
+        m.raw_function_returns::<XurUnityObject>("null", |cx, args| {
             if !args.is_empty() {
                 return Err(RuntimeError::new("`null` takes no arguments"));
             }
-            into_value(cx, XurObject(0))
+            into_value(cx, XurUnityObject(0))
         });
 
         // --- Il2Cpp methods ---
-        m.ty::<XurIl2Cpp>("Runtime")
-            .raw_function_returns::<XurClass>("class", |cx, args| {
+        m.ty::<XurUnitySdk>("Runtime")
+            .raw_function_returns::<XurUnityClass>("class", |cx, args| {
                 let [_this, Value::Str(assembly), Value::Str(namespace), Value::Str(name)] = args
                 else {
                     return Err(RuntimeError::new(
@@ -848,19 +848,19 @@ pub(crate) fn register(registry: &Registry) {
                 let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
                 match il2cpp.class(assembly, namespace, name) {
                     Ok(cls) => {
-                        let v = into_value(cx, XurClass::new(&cls))?;
+                        let v = into_value(cx, XurUnityClass::new(&cls))?;
                         Ok(xur_result(cx, Ok(v)))
                     }
                     Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
                 }
             })
-            .raw_function_returns::<XurObject>("string", |cx, args| {
+            .raw_function_returns::<XurUnityObject>("string", |cx, args| {
                 let [_this, Value::Str(value)] = args else {
                     return Err(RuntimeError::new("`string` takes a string"));
                 };
                 let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
                 match il2cpp.string(value) {
-                    Ok(s) => into_value(cx, XurObject::from_obj(s.0)),
+                    Ok(s) => into_value(cx, XurUnityObject::from_obj(s.0)),
                     Err(e) => Err(rt_err(e)),
                 }
             })
@@ -872,14 +872,14 @@ pub(crate) fn register(registry: &Registry) {
                 let images = il2cpp.assemblies();
                 let list: Result<Vec<Value>, _> = images
                     .iter()
-                    .map(|img| into_value(cx, XurImage::new(img)))
+                    .map(|img| into_value(cx, XurUnityImage::new(img)))
                     .collect();
                 Ok(Value::list(list?))
             });
 
         // --- Class methods ---
-        m.ty::<XurClass>("Class")
-            .raw_function_returns::<XurField>("field", |cx, args| {
+        m.ty::<XurUnityClass>("Class")
+            .raw_function_returns::<XurUnityField>("field", |cx, args| {
                 let [this, Value::Str(name)] = args else {
                     return Err(RuntimeError::new("`field` takes a field name"));
                 };
@@ -887,11 +887,11 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let result = obj
-                    .with(|c: &XurClass| -> Result<Value, RuntimeError> {
+                    .with(|c: &XurUnityClass| -> Result<Value, RuntimeError> {
                         let cls = c.class();
                         match cls.field(name) {
                             Ok(f) => {
-                                let v = into_value(cx, XurField::new(&f))?;
+                                let v = into_value(cx, XurUnityField::new(&f))?;
                                 Ok(xur_result(cx, Ok(v)))
                             }
                             Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
@@ -900,7 +900,7 @@ pub(crate) fn register(registry: &Registry) {
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
                 Ok(result)
             })
-            .raw_function_returns::<XurMethod>("method", |cx, args| {
+            .raw_function_returns::<XurUnityMethod>("method", |cx, args| {
                 let [this, Value::Str(name), Value::Int(param_count)] = args else {
                     return Err(RuntimeError::new("`method` takes (name, parameter_count)"));
                 };
@@ -908,11 +908,11 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let result = obj
-                    .with(|c: &XurClass| -> Result<Value, RuntimeError> {
+                    .with(|c: &XurUnityClass| -> Result<Value, RuntimeError> {
                         let cls = c.class();
                         match cls.method(name, *param_count as i32) {
                             Ok(m) => {
-                                let v = into_value(cx, XurMethod::new(&m))?;
+                                let v = into_value(cx, XurUnityMethod::new(&m))?;
                                 Ok(xur_result(cx, Ok(v)))
                             }
                             Err(e) => Ok(xur_result(cx, Err(e.to_string()))),
@@ -921,7 +921,7 @@ pub(crate) fn register(registry: &Registry) {
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
                 Ok(result)
             })
-            .raw_function_returns::<XurObject>("new_object", |cx, args| {
+            .raw_function_returns::<XurUnityObject>("new_object", |cx, args| {
                 let [this] = args else {
                     return Err(RuntimeError::new("`new_object` takes no arguments"));
                 };
@@ -929,9 +929,9 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let result = obj
-                    .with(|c: &XurClass| {
+                    .with(|c: &XurUnityClass| {
                         let cls = c.class();
-                        into_value(cx, XurObject::from_obj(cls.new_object()))
+                        into_value(cx, XurUnityObject::from_obj(cls.new_object()))
                     })
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
                 Ok(result)
@@ -944,10 +944,10 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let list = obj
-                    .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                    .with(|c: &XurUnityClass| -> Result<Vec<Value>, RuntimeError> {
                         c.class()
                             .fields()
-                            .map(|f| into_value(cx, XurField::new(&f)))
+                            .map(|f| into_value(cx, XurUnityField::new(&f)))
                             .collect()
                     })
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
@@ -961,24 +961,24 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let list = obj
-                    .with(|c: &XurClass| -> Result<Vec<Value>, RuntimeError> {
+                    .with(|c: &XurUnityClass| -> Result<Vec<Value>, RuntimeError> {
                         c.class()
                             .methods()
-                            .map(|m| into_value(cx, XurMethod::new(&m)))
+                            .map(|m| into_value(cx, XurUnityMethod::new(&m)))
                             .collect()
                     })
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
                 Ok(Value::list(list))
             })
-            .method("name", |c: &XurClass| -> String {
+            .method("name", |c: &XurUnityClass| -> String {
                 c.class().name().to_owned()
             })
-            .method("namespace", |c: &XurClass| -> String {
+            .method("namespace", |c: &XurUnityClass| -> String {
                 c.class().namespace().to_owned()
             });
 
         // --- Field methods ---
-        m.ty::<XurField>("Field")
+        m.ty::<XurUnityField>("Field")
             .raw_function("read", |cx, args| {
                 let [this, obj_val] = args else {
                     return Err(RuntimeError::new("`read` takes an object"));
@@ -1011,21 +1011,21 @@ pub(crate) fn register(registry: &Registry) {
                 write_static_field(&field, value)?;
                 Ok(Value::Unit)
             })
-            .method("name", |f: &XurField| -> String {
+            .method("name", |f: &XurUnityField| -> String {
                 f.field().name().to_owned()
             })
-            .method("type_name", |f: &XurField| -> String {
+            .method("type_name", |f: &XurUnityField| -> String {
                 f.field().type_name()
             })
-            .method("offset", |f: &XurField| -> i64 {
+            .method("offset", |f: &XurUnityField| -> i64 {
                 f.field().offset() as i64
             })
-            .method("is_static", |f: &XurField| -> bool {
+            .method("is_static", |f: &XurUnityField| -> bool {
                 f.field().is_static()
             });
 
         // --- Method methods ---
-        m.ty::<XurMethod>("Method")
+        m.ty::<XurUnityMethod>("Method")
             .raw_function("invoke", |cx, args| {
                 if args.is_empty() {
                     return Err(RuntimeError::new("`invoke` takes (object, ...args)"));
@@ -1078,10 +1078,10 @@ pub(crate) fn register(registry: &Registry) {
                     .map_err(rt_err)?
                 }
             })
-            .method("name", |m: &XurMethod| -> String {
+            .method("name", |m: &XurUnityMethod| -> String {
                 m.method().name().to_owned()
             })
-            .method("signature", |m: &XurMethod| -> String {
+            .method("signature", |m: &XurUnityMethod| -> String {
                 m.method().signature()
             })
             .raw_function("code_address", |_cx, args| {
@@ -1341,8 +1341,8 @@ pub(crate) fn register(registry: &Registry) {
             });
 
         // --- Image methods ---
-        m.ty::<XurImage>("Image")
-            .method("name", |i: &XurImage| -> String {
+        m.ty::<XurUnityImage>("Image")
+            .method("name", |i: &XurUnityImage| -> String {
                 i.image().name().to_owned()
             })
             .raw_function("classes", |cx, args| {
@@ -1353,10 +1353,10 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected an `Image`"));
                 };
                 let list = obj
-                    .with(|i: &XurImage| -> Result<Vec<Value>, RuntimeError> {
+                    .with(|i: &XurUnityImage| -> Result<Vec<Value>, RuntimeError> {
                         i.image()
                             .classes()
-                            .map(|c| into_value(cx, XurClass::new(&c)))
+                            .map(|c| into_value(cx, XurUnityClass::new(&c)))
                             .collect()
                     })
                     .ok_or_else(|| RuntimeError::new("expected an `Image`"))??;
@@ -1370,16 +1370,16 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("expected an `Image`"));
                 };
                 let count = obj
-                    .with(|i: &XurImage| i.image().class_count())
+                    .with(|i: &XurUnityImage| i.image().class_count())
                     .ok_or_else(|| RuntimeError::new("expected an `Image`"))?;
                 Ok(Value::Int(count as i64))
             });
 
         // --- Object methods ---
-        m.ty::<XurObject>("Object")
-            .method("address", |o: &XurObject| -> i64 { o.0 as i64 })
-            .method("is_null", |o: &XurObject| -> bool { o.0 == 0 })
-            .raw_function_returns::<XurClass>("class", |cx, args| {
+        m.ty::<XurUnityObject>("Object")
+            .method("address", |o: &XurUnityObject| -> i64 { o.0 as i64 })
+            .method("is_null", |o: &XurUnityObject| -> bool { o.0 == 0 })
+            .raw_function_returns::<XurUnityClass>("class", |cx, args| {
                 let [this] = args else {
                     return Err(RuntimeError::new("`class` takes no arguments"));
                 };
@@ -1390,7 +1390,7 @@ pub(crate) fn register(registry: &Registry) {
                 let il2cpp =
                     rt::Il2Cpp::get().ok_or_else(|| RuntimeError::new("il2cpp not loaded"))?;
                 let cls = unsafe { il2cpp.class_of(object) };
-                into_value(cx, XurClass::new(&cls))
+                into_value(cx, XurUnityClass::new(&cls))
             });
     });
 }
@@ -1403,7 +1403,7 @@ fn extract_field(val: &Value) -> Result<rt::Field, RuntimeError> {
     let Value::Native(obj) = val else {
         return Err(RuntimeError::new("expected a `Field`"));
     };
-    obj.with(|f: &XurField| f.field())
+    obj.with(|f: &XurUnityField| f.field())
         .ok_or_else(|| RuntimeError::new("expected a `Field`"))
 }
 
@@ -1411,7 +1411,7 @@ fn extract_method(val: &Value) -> Result<rt::Method, RuntimeError> {
     let Value::Native(obj) = val else {
         return Err(RuntimeError::new("expected a `Method`"));
     };
-    obj.with(|m: &XurMethod| m.method())
+    obj.with(|m: &XurUnityMethod| m.method())
         .ok_or_else(|| RuntimeError::new("expected a `Method`"))
 }
 
@@ -1419,6 +1419,6 @@ fn extract_object(val: &Value) -> Result<rt::Object, RuntimeError> {
     let Value::Native(obj) = val else {
         return Err(RuntimeError::new("expected an `Object`"));
     };
-    obj.with(|o: &XurObject| o.obj())
+    obj.with(|o: &XurUnityObject| o.obj())
         .ok_or_else(|| RuntimeError::new("expected an `Object`"))
 }
