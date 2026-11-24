@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, lock};
 use xur_runtime::registry::XurType;
 
 type Bytes = Arc<Mutex<Vec<u8>>>;
@@ -29,14 +29,10 @@ pub(crate) fn register(registry: &Registry) {
         .method_mut("push", |bytes: &mut Vec<u8>, byte: i64| {
             bytes.push(byte as u8);
         })
-        .raw_function_returns_xur("extend", XurType::UNIT, |_, args| {
-            let (bytes, [Value::Bytes(other)]) = receiver(args)? else {
-                return Err(RuntimeError::new("`extend` takes bytes"));
-            };
+        .method("extend", |bytes: &XurBytes, other: XurBytes| {
             // Copy first: `data.extend(data)` locks the same buffer twice.
-            let other = lock(other).clone();
-            lock(bytes).extend(other);
-            Ok(Value::Unit)
+            let other = lock(&other.0).clone();
+            lock(&bytes.0).extend(other);
         })
         .method("find", |bytes: &[u8], needle: Vec<u8>| -> Option<i64> {
             find(bytes, &needle).map(|at| at as i64)

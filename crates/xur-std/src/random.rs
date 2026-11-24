@@ -1,5 +1,5 @@
 use rand::Rng;
-use xur_runtime::{Registry, RuntimeError, Value, lock};
+use xur_runtime::{Registry, RuntimeError, Value, XurList, lock};
 
 pub(crate) fn register(registry: &Registry) {
     registry
@@ -12,7 +12,7 @@ pub(crate) fn register(registry: &Registry) {
         })
         .function("float", || rand::rng().random::<f64>())
         .function("bool", || rand::rng().random::<bool>())
-        .raw_function("choice", |_cx, args| {
+        .named_raw_function("choice", &["list"], |_cx, args| {
             let [Value::List(list)] = args else {
                 return Err(RuntimeError::new("`choice` takes a list"));
             };
@@ -23,27 +23,18 @@ pub(crate) fn register(registry: &Registry) {
             let i = rand::rng().random_range(0..items.len());
             Ok(items[i].clone())
         })
-        .raw_function("shuffle", |_cx, args| {
-            let [Value::List(list)] = args else {
-                return Err(RuntimeError::new("`shuffle` takes a list"));
-            };
-            let mut items = lock(list).clone();
+        .function("shuffle", |list: XurList| -> Value {
+            let mut items = lock(&list.0).clone();
             let mut rng = rand::rng();
             for i in (1..items.len()).rev() {
                 let j = rng.random_range(0..=i);
                 items.swap(i, j);
             }
-            Ok(Value::list(items))
+            Value::list(items)
         })
-        .raw_function("bytes", |_cx, args| {
-            let [Value::Int(len)] = args else {
-                return Err(RuntimeError::new("`bytes` takes (len: int)"));
-            };
-            let len_usize = len.to_usize().ok_or_else(|| {
-                RuntimeError::new(format!("`bytes`: length must be non-negative, got {len}"))
-            })?;
-            let mut buf = vec![0u8; len_usize];
+        .named_function("bytes", &["len"], |len: usize| -> Vec<u8> {
+            let mut buf = vec![0u8; len];
             rand::rng().fill(&mut buf[..]);
-            Ok(Value::Bytes(std::sync::Arc::new(buf.into())))
+            buf
         });
 }

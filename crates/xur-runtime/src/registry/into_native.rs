@@ -152,6 +152,7 @@ impl_into_native_fn!(A, B, C, D, E, G);
 // Builtin-type methods: borrow the receiver from a Value without cloning.
 // ---------------------------------------------------------------------------
 
+use std::sync::Arc;
 use crate::value::lock;
 
 /// A type that can be borrowed from a [`Value`] variant without cloning.
@@ -183,6 +184,33 @@ impl BuiltinRecv for str {
     }
 }
 
+impl BuiltinRecv for [Value] {
+    fn with<R>(value: &Value, f: impl FnOnce(&[Value]) -> R) -> Result<R, RuntimeError> {
+        let Value::List(list) = value else {
+            return Err(RuntimeError::new(format!("expected list, found {}", value.kind())));
+        };
+        Ok(f(&lock(list)))
+    }
+}
+
+impl BuiltinRecv for crate::XurList {
+    fn with<R>(value: &Value, f: impl FnOnce(&Self) -> R) -> Result<R, RuntimeError> {
+        let Value::List(list) = value else {
+            return Err(RuntimeError::new(format!("expected list, found {}", value.kind())));
+        };
+        Ok(f(&crate::XurList(Arc::clone(list))))
+    }
+}
+
+impl BuiltinRecv for crate::XurBytes {
+    fn with<R>(value: &Value, f: impl FnOnce(&Self) -> R) -> Result<R, RuntimeError> {
+        let Value::Bytes(bytes) = value else {
+            return Err(RuntimeError::new(format!("expected bytes, found {}", value.kind())));
+        };
+        Ok(f(&crate::XurBytes(Arc::clone(bytes))))
+    }
+}
+
 /// A type that can be mutably borrowed from a [`Value`] variant.
 pub trait BuiltinRecvMut {
     fn with_mut<R>(value: &Value, f: impl FnOnce(&mut Self) -> R) -> Result<R, RuntimeError>;
@@ -194,6 +222,15 @@ impl BuiltinRecvMut for Vec<u8> {
             return Err(RuntimeError::new(format!("expected bytes, found {}", value.kind())));
         };
         Ok(f(&mut lock(bytes)))
+    }
+}
+
+impl BuiltinRecvMut for Vec<Value> {
+    fn with_mut<R>(value: &Value, f: impl FnOnce(&mut Vec<Value>) -> R) -> Result<R, RuntimeError> {
+        let Value::List(list) = value else {
+            return Err(RuntimeError::new(format!("expected list, found {}", value.kind())));
+        };
+        Ok(f(&mut lock(list)))
     }
 }
 

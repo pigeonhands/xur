@@ -40,3 +40,16 @@ impl<T: Facet<'static> + Send + 'static> IntoXurValue for T {
         convert::into_value(cx, self)
     }
 }
+
+impl FromValue for Value {
+    fn from_value(_cx: &dyn ConvertCx, value: &Value) -> RunResult<Self> {
+        Ok(value.clone())
+    }
+}
+
+impl IntoXurValue for Value {
+    fn into_xur_value(self, _cx: &dyn ConvertCx) -> RunResult<Value> {
+        Ok(self)
+    }
+}
+

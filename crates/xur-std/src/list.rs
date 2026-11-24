@@ -4,7 +4,7 @@
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurList, lock};
 use xur_runtime::registry::{ElemHint, XurType};
 
 use crate::option;
@@ -14,24 +14,10 @@ type List = Arc<Mutex<Vec<Value>>>;
 pub(crate) fn register(registry: &Registry) {
     registry
         .builtin(BuiltinType::List)
-        .raw_function_returns::<i64>("len", |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            Ok(Value::int(lock(list).len() as i64))
-        })
-        .raw_function_returns::<bool>("is_empty", |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            Ok(Value::Bool(lock(list).is_empty()))
-        })
-        .raw_function_returns_xur("push", XurType::UNIT, |_, args| {
-            let (list, [item]) = receiver(args)? else {
-                return arity(1);
-            };
-            lock(list).push(item.clone());
-            Ok(Value::Unit)
+        .method("len", |list: &[Value]| -> i64 { list.len() as i64 })
+        .method("is_empty", |list: &[Value]| -> bool { list.is_empty() })
+        .method_mut("push", |list: &mut Vec<Value>, item: Value| {
+            list.push(item);
         })
         .raw_function("pop", |cx, args| {
             let (list, []) = receiver(args)? else {
@@ -80,34 +66,15 @@ pub(crate) fn register(registry: &Registry) {
             let index = position(int(index)?, items.len(), items.len())?;
             Ok(items.remove(index))
         })
-        .raw_function_returns::<bool>("contains", |_, args| {
-            let (list, [item]) = receiver(args)? else {
-                return arity(1);
-            };
-            Ok(Value::Bool(lock(list).contains(item)))
+        .method("contains", |list: &[Value], item: Value| -> bool {
+            list.contains(&item)
         })
-        .raw_function_returns_xur("clear", XurType::UNIT, |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            lock(list).clear();
-            Ok(Value::Unit)
-        })
-        .raw_function_returns_xur("reverse", XurType::UNIT, |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            lock(list).reverse();
-            Ok(Value::Unit)
-        })
-        .raw_function_returns_xur("extend", XurType::UNIT, |_, args| {
-            let (list, [Value::List(other)]) = receiver(args)? else {
-                return Err(RuntimeError::new("`extend` takes a list"));
-            };
+        .method_mut("clear", |list: &mut Vec<Value>| { list.clear(); })
+        .method_mut("reverse", |list: &mut Vec<Value>| { list.reverse(); })
+        .method("extend", |list: &XurList, other: XurList| {
             // Copy first: `xs.extend(xs)` locks the same list twice.
-            let others = lock(other).clone();
-            lock(list).extend(others);
-            Ok(Value::Unit)
+            let others = lock(&other.0).clone();
+            lock(&list.0).extend(others);
         })
         .function("to_hex", |bytes: Vec<u8>| {
             bytes
@@ -314,77 +281,57 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(Value::list(items))
         })
-        .raw_function_returns_xur("enumerate", XurType::LIST, |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list).clone();
-            let result = items
-                .into_iter()
-                .enumerate()
-                .map(|(i, item)| Value::list(vec![Value::int(i as i64), item]))
-                .collect();
-            Ok(Value::list(result))
+        .method("enumerate", |list: &[Value]| -> Value {
+            Value::list(
+                list.iter()
+                    .enumerate()
+                    .map(|(i, item)| Value::list(vec![Value::int(i as i64), item.clone()]))
+                    .collect(),
+            )
         })
-        .raw_function_returns_xur("flatten", XurType::LIST, |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list).clone();
+        .method("flatten", |list: &[Value]| -> Value {
             let mut result = Vec::new();
-            for item in items {
+            for item in list {
                 match item {
-                    Value::List(inner) => result.extend(lock(&inner).clone()),
-                    other => result.push(other),
+                    Value::List(inner) => result.extend(lock(inner).clone()),
+                    other => result.push(other.clone()),
                 }
             }
-            Ok(Value::list(result))
+            Value::list(result)
         })
-        .raw_function_returns_xur("slice", XurType::LIST, |_, args| {
-            let (list, [start, end]) = receiver(args)? else {
-                return arity(2);
-            };
-            let items = lock(list).clone();
-            let len = items.len();
-            let start = resolve_index(int(start)?, len);
-            let end = resolve_index(int(end)?, len);
+        .method("slice", |list: &[Value], start: i64, end: i64| -> Value {
+            let len = list.len();
+            let start = resolve_index(start, len);
+            let end = resolve_index(end, len);
             if start >= end {
-                return Ok(Value::list(Vec::new()));
+                return Value::list(Vec::new());
             }
-            Ok(Value::list(items[start..end].to_vec()))
+            Value::list(list[start..end].to_vec())
         })
-        .raw_function_returns_xur("dedup", XurType::LIST, |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list).clone();
+        .method("dedup", |list: &[Value]| -> Value {
             let mut result: Vec<Value> = Vec::new();
-            for item in items {
-                if result.last() != Some(&item) {
-                    result.push(item);
+            for item in list {
+                if result.last() != Some(item) {
+                    result.push(item.clone());
                 }
             }
-            Ok(Value::list(result))
+            Value::list(result)
         })
         .raw_function("sum", |_, args| {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
-            let items = lock(list).clone();
+            let items = lock(list);
             let Some(first) = items.first() else {
                 return Err(RuntimeError::new("sum on an empty list"));
             };
             match first {
                 Value::Int(_) => {
                     let mut total: i128 = 0;
-                    for item in &items {
+                    for item in items.iter() {
                         match item {
                             Value::Int(n) => total += n.to_i128(),
-                            _ => {
-                                return Err(RuntimeError::new(
-                                    "sum: mixed types (expected all Int)",
-                                ))
-                            }
+                            _ => return Err(RuntimeError::new("sum: mixed types")),
                         }
                     }
                     Ok(Value::int(i64::try_from(total).map_err(|_| {
@@ -393,21 +340,15 @@ pub(crate) fn register(registry: &Registry) {
                 }
                 Value::Float(_) => {
                     let mut total: f64 = 0.0;
-                    for item in &items {
+                    for item in items.iter() {
                         match item {
                             Value::Float(n) => total += n.as_f64(),
-                            _ => {
-                                return Err(RuntimeError::new(
-                                    "sum: mixed types (expected all Float)",
-                                ))
-                            }
+                            _ => return Err(RuntimeError::new("sum: mixed types")),
                         }
                     }
                     Ok(Value::float(total))
                 }
-                _ => Err(RuntimeError::new(
-                    "sum: elements must be Int or Float",
-                )),
+                _ => Err(RuntimeError::new("sum: elements must be Int or Float")),
             }
         })
         .raw_function("min", |cx, args| {
@@ -454,18 +395,14 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(option(cx, Some(best.clone())))
         })
-        .raw_function_returns_xur("zip", XurType::LIST, |_, args| {
-            let (list, [Value::List(other)]) = receiver(args)? else {
-                return Err(RuntimeError::new("`zip` takes a list"));
-            };
-            let left = lock(list).clone();
-            let right = lock(other).clone();
-            let result = left
-                .into_iter()
-                .zip(right)
-                .map(|(a, b)| Value::list(vec![a, b]))
+        .method("zip", |list: &[Value], other: XurList| -> Value {
+            let right = lock(&other.0);
+            let result = list
+                .iter()
+                .zip(right.iter())
+                .map(|(a, b)| Value::list(vec![a.clone(), b.clone()]))
                 .collect();
-            Ok(Value::list(result))
+            Value::list(result)
         });
 }
 
