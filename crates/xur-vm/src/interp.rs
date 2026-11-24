@@ -802,15 +802,12 @@ fn find_try_unwrap_attr(attrs: &[xur_ast::Attribute]) -> Option<&str> {
         }
         if let MetaItemKind::List(items) = &attr.meta.kind {
             for item in items {
-                if let MetaItemInner::MetaItem(meta) = item {
-                    let is_unwrap = meta.path.as_ident().is_some_and(|id| id.name.as_str() == "unwrap");
-                    if is_unwrap {
-                        if let MetaItemKind::NameValue(lit) = &meta.kind {
-                            if let LitKind::Str(name) = &lit.kind {
-                                return Some(name.as_str());
-                            }
-                        }
-                    }
+                if let MetaItemInner::MetaItem(meta) = item
+                    && meta.path.as_ident().is_some_and(|id| id.name.as_str() == "unwrap")
+                    && let MetaItemKind::NameValue(lit) = &meta.kind
+                    && let LitKind::Str(name) = &lit.kind
+                {
+                    return Some(name.as_str());
                 }
             }
         }

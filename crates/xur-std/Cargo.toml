@@ -26,7 +26,7 @@ re-dotnet         = ["dep:hao"]
 re-dotnet-il2cpp  = ["re-dotnet", "dep:hao-il2cpp"]
 re-dotnet-runtime = ["re-dotnet", "dep:hao-runtime"]
 re-demangle       = ["dep:rekit"]
-re-unreal         = ["dep:unrealkit"]
+re-unreal         = []
 re                = ["re-image", "re-proc", "re-asm", "re-dotnet", "re-dotnet-il2cpp", "re-dotnet-runtime", "re-demangle", "re-unreal"]
 egui-widgets      = ["dep:egui"]
 gui               = ["dep:eframe", "dep:winit", "egui-widgets"]
@@ -55,7 +55,6 @@ sha2 = { version = "0.10", optional = true }
 md-5 = { version = "0.10", optional = true }
 crc32fast = { version = "1", optional = true }
 rekit = { workspace = true, features = ["demangle", "pattern"], optional = true }
-unrealkit = { workspace = true, optional = true }
 egui = { version = "0.37", optional = true }
 rust_decimal = { version = "1.43.0", optional = true }
 

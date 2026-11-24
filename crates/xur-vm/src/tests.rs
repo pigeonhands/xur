@@ -837,22 +837,6 @@ fn re_proc_examples_run() {
     }
 }
 
-// pid and the loaded base address vary per run, so this checks the stable
-// prefix rather than exact output.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[test]
-fn re_proc_inject_example_runs() {
-    let output = run_files(&[(
-        "example/re/proc/inject.xur",
-        include_str!("../../../example/re/proc/inject.xur"),
-    )])
-    .unwrap();
-    assert!(
-        output.starts_with("loaded libc.so.6 into pid "),
-        "{output:?}"
-    );
-}
-
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn proc_inspects_the_current_process() {

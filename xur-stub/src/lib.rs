@@ -87,8 +87,8 @@ unsafe extern "C" fn crash_signal_handler(
     );
     msg.push_str(&reg_dump);
 
-    if rip != 0 {
-        if let Ok(handle) = procodile::ProcessHandle::open_current() {
+    if rip != 0
+        && let Ok(handle) = procodile::ProcessHandle::open_current() {
             let addr: procodile::Address = (rip as usize).into();
             if let Ok(Some(region)) = handle.region_at(addr) {
                 let path = region
@@ -106,7 +106,6 @@ unsafe extern "C" fn crash_signal_handler(
                 msg.push_str("[xur-stub]   rip not in any mapped region (JIT code?)\n");
             }
         }
-    }
 
     let _ = std::fs::OpenOptions::new()
         .create(true)

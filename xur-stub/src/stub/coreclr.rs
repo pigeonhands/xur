@@ -41,7 +41,7 @@ static PROBE_FD: OnceLock<i32> = OnceLock::new();
 
 #[cfg(unix)]
 fn init_probe() {
-    let fd = unsafe { libc::open(b"/dev/null\0".as_ptr() as *const _, libc::O_WRONLY) };
+    let fd = unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_WRONLY) };
     if fd >= 0 {
         PROBE_FD.set(fd).ok();
     }
@@ -286,49 +286,42 @@ unsafe fn marshal_out(
         };
         match kind {
             ArgKind::Int => {
-                if changed {
-                    if let Some(Value::Int(n)) = rv {
+                if changed
+                    && let Some(Value::Int(n)) = rv {
                         write_int(int_i, *n as u64);
                     }
-                }
                 int_i += 1;
             }
             ArgKind::Float32 => {
-                if changed {
-                    if let Some(Value::Float(f)) = rv {
+                if changed
+                    && let Some(Value::Float(f)) = rv {
                         write_f32(sse_i, *f as f32);
                     }
-                }
                 sse_i += 1;
             }
             ArgKind::Float64 => {
-                if changed {
-                    if let Some(Value::Float(f)) = rv {
+                if changed
+                    && let Some(Value::Float(f)) = rv {
                         write_f64(sse_i, *f);
                     }
-                }
                 sse_i += 1;
             }
             ArgKind::Managed => {
-                if changed {
-                    if let Some(v) = rv {
-                        if let Ok(m) = from_value::<ManagedObject>(handle, v) {
+                if changed
+                    && let Some(v) = rv
+                        && let Ok(m) = from_value::<ManagedObject>(handle, v) {
                             write_int(int_i, m.0 as u64);
                         }
-                    }
-                }
                 int_i += 1;
             }
             ArgKind::Decimal => {
-                if changed {
-                    if let Some(v) = rv {
-                        if let Ok(d) = from_value::<XurDecimal>(handle, v) {
+                if changed
+                    && let Some(v) = rv
+                        && let Ok(d) = from_value::<XurDecimal>(handle, v) {
                             let r = d.to_dotnet_regs();
                             write_int(int_i, r[0]);
                             write_int(int_i + 1, r[1]);
                         }
-                    }
-                }
                 int_i += 2;
             }
         }

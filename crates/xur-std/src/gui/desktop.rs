@@ -72,6 +72,7 @@ fn run_native(
     unsafe impl Send for XurApp {}
 
     impl XurApp {
+        #[allow(clippy::mut_from_ref)]
         fn cx(&self) -> &mut dyn xur_runtime::Context {
             unsafe {
                 let fat: *mut dyn xur_runtime::Context = std::mem::transmute(self.cx_erased);
@@ -121,7 +122,7 @@ fn register_desktop_ui_methods(m: &mut ModuleBuilder<'_>) {
                 "`window` takes (title: str, body: fn(ui))",
             ));
         };
-        show_viewport(cx, this, &title, body, None)
+        show_viewport(cx, this, title, body, None)
     });
 
     ty.raw_function("dialog", |cx, args| {
@@ -130,7 +131,7 @@ fn register_desktop_ui_methods(m: &mut ModuleBuilder<'_>) {
                 "`dialog` takes (title: str, body: fn(ui))",
             ));
         };
-        show_viewport(cx, this, &title, body, Some(egui::X11WindowType::Dialog))
+        show_viewport(cx, this, title, body, Some(egui::X11WindowType::Dialog))
     });
 
     ty.raw_function("panel_left", |cx, args| {

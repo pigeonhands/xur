@@ -44,7 +44,7 @@ pub(super) fn register(m: &mut ModuleBuilder<'_>) {
         Ok(Value::Unit)
     });
 
-    m.function("shutdown", || hao_godot::lifecycle::shutdown());
+    m.function("shutdown", hao_godot::lifecycle::shutdown);
     m.function("is_shutting_down", || {
         hao_godot::lifecycle::is_shutting_down()
     });

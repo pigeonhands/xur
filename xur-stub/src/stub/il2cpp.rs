@@ -506,12 +506,11 @@ fn ensure_thread_attached() {
         static ATTACHED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
     ATTACHED.with(|a| {
-        if !a.get() {
-            if let Ok(il2cpp) = Il2Cpp::loaded() {
+        if !a.get()
+            && let Ok(il2cpp) = Il2Cpp::loaded() {
                 il2cpp.attach_thread();
                 a.set(true);
             }
-        }
     });
 }
 
@@ -672,7 +671,7 @@ fn marshal_arg(
                 element::I4 => Ok(Value::Int(raw as i32 as i64)),
                 element::U4 => Ok(Value::Int(raw as u32 as i64)),
                 element::I8 => Ok(Value::Int(raw as i64)),
-                element::U8 => Ok(Value::Int(raw as u64 as i64)),
+                element::U8 => Ok(Value::Int(raw as i64)),
                 element::R4 => Ok(Value::Float(f32::from_bits(raw as u32) as f64)),
                 element::R8 => Ok(Value::Float(f64::from_bits(raw))),
                 element::STRING
@@ -791,7 +790,7 @@ fn marshal_call_result(
         element::I4 | element::VALUETYPE => Value::Int(call_result.int_val as i32 as i64),
         element::U4 => Value::Int(call_result.int_val as u32 as i64),
         element::I8 => Value::Int(call_result.int_val as i64),
-        element::U8 => Value::Int(call_result.int_val as u64 as i64),
+        element::U8 => Value::Int(call_result.int_val as i64),
         element::R4 => Value::Float(call_result.float_val),
         element::R8 => Value::Float(call_result.float_val),
         element::STRING
@@ -1152,7 +1151,7 @@ pub(crate) fn register(registry: &Registry) {
                             Err(_) => return hooking::HookAction::Passthrough,
                         };
 
-                        let result = match handle.call_closure(&callback, &[ctx_val.clone()]) {
+                        let result = match handle.call_closure(&callback, std::slice::from_ref(&ctx_val)) {
                             Ok(v) => v,
                             Err(e) => {
                                 tracing::error!("hook error: {}", e.message);
@@ -1161,9 +1160,9 @@ pub(crate) fn register(registry: &Registry) {
                         };
 
                         // Write back modified args (unless ctx.call() already did).
-                        if !called.load(std::sync::atomic::Ordering::Relaxed) {
-                            if let Value::Native(ref n) = ctx_val {
-                                if let Some(mods) = n.with(|c: &XurHookContext| {
+                        if !called.load(std::sync::atomic::Ordering::Relaxed)
+                            && let Value::Native(ref n) = ctx_val
+                                && let Some(mods) = n.with(|c: &XurHookContext| {
                                     xur_runtime::lock(&c.modified).clone()
                                 }) {
                                     for (idx, val) in mods {
@@ -1172,8 +1171,6 @@ pub(crate) fn register(registry: &Registry) {
                                         }
                                     }
                                 }
-                            }
-                        }
 
                         let lang = handle.lang();
                         interpret_hook_result(result, return_element, lang)

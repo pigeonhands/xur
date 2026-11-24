@@ -168,7 +168,7 @@ pub(crate) fn register(registry: &Registry) {
         let mut ty = m.ty_existing::<EguiCtx>();
         ty.method("key", |_ctx: &EguiCtx, name: String| -> Result<bool, EguiError> {
             let code = parse_keycode(&name)
-                .ok_or_else(|| EguiError::UnknownKey(name))?;
+                .ok_or(EguiError::UnknownKey(name))?;
             Ok(input::key(code).unwrap_or(false))
         });
     });

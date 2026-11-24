@@ -783,7 +783,7 @@ fn register_method_body(dotnet: &mut ModuleBuilder<'_>) {
                                 Operand::String(s) => format!(" \"{s}\""),
                                 Operand::Sig(_) => " <sig>".into(),
                                 Operand::Token(token) => {
-                                    let desc = match token {
+                                    match token {
                                         MT::Method(m) => {
                                             let g = m.get();
                                             let ty = g.declaring_type.upgrade()
@@ -811,8 +811,7 @@ fn register_method_body(dotnet: &mut ModuleBuilder<'_>) {
                                         MT::TypeRef(t) => format!(" {}", t.get().full_name()),
                                         MT::TypeSpec(_) => " <typespec>".into(),
                                         MT::MethodSpec(_) => " <methodspec>".into(),
-                                    };
-                                    desc
+                                    }
                                 }
                             };
                             format!("IL_{i:04x}: {}{operand_str}", instr.opcode)

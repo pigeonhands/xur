@@ -37,13 +37,13 @@ pub(crate) fn register(registry: &Registry) {
                 let [Value::Native(object), value] = args else {
                     return Err(RuntimeError::new("`set` takes one argument"));
                 };
-                if let Some(&expected) = object.type_args().first() {
-                    if value.builtin_type() != Some(expected) {
-                        return Err(RuntimeError::new(format!(
-                            "Cell<{expected}> cannot hold a {}",
-                            value.kind(),
-                        )));
-                    }
+                if let Some(&expected) = object.type_args().first()
+                    && value.builtin_type() != Some(expected)
+                {
+                    return Err(RuntimeError::new(format!(
+                        "Cell<{expected}> cannot hold a {}",
+                        value.kind(),
+                    )));
                 }
                 let cell = object
                     .with(|c: &Cell| c.clone())

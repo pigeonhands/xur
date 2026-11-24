@@ -52,17 +52,15 @@ pub(crate) fn detect_lib_name() -> String {
         // where xur-stub was built.  A bare filename like "libxur_stub.so"
         // is searched by soname among already-loaded libraries — since
         // LD_PRELOAD already loaded us, dlopen finds us immediately.
-        if let Ok(preload) = std::env::var("LD_PRELOAD") {
-            if let Some(path) = preload.split(':').find(|p| p.contains("xur_stub")) {
-                if let Some(name) = path.rsplit('/').next() {
-                    if !name.is_empty() {
+        if let Ok(preload) = std::env::var("LD_PRELOAD")
+            && let Some(path) = preload.split(':').find(|p| p.contains("xur_stub")) {
+                if let Some(name) = path.rsplit('/').next()
+                    && !name.is_empty() {
                         return name.to_string();
                     }
-                }
                 return path.to_string();
             }
-        }
-        return "libxur_stub.so".into();
+        "libxur_stub.so".into()
     }
     #[cfg(windows)]
     return "xur_stub.dll".into();

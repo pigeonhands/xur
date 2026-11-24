@@ -37,6 +37,7 @@ impl EguiUi {
         Self(ui as *mut egui::Ui as usize)
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn ui(&self) -> &mut egui::Ui {
         unsafe { &mut *(self.0 as *mut egui::Ui) }
     }

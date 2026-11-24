@@ -55,7 +55,7 @@ pub(super) fn register(m: &mut ModuleBuilder<'_>) {
             if name_ptr.is_null() {
                 return Ok("?".into());
             }
-            coreclr::read_clr_string(name_ptr as usize).map_err(|e| GodotError::Failed(e))
+            coreclr::read_clr_string(name_ptr as usize).map_err(GodotError::Failed)
         },
     );
 }

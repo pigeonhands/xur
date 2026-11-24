@@ -40,11 +40,10 @@ pub fn run(command: StubCommand) -> Result<()> {
 /// library directories, then `LD_LIBRARY_PATH`.
 fn resolve_stub() -> Result<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent() {
             candidates.push(dir.join(STUB_SONAME));
         }
-    }
     for base in ["/usr/lib", "/usr/local/lib", "/usr/lib/xur"] {
         candidates.push(Path::new(base).join(STUB_SONAME));
     }

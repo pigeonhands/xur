@@ -168,11 +168,10 @@ impl InferredTy {
         registry: &Registry,
         resolutions: &Resolutions,
     ) -> Self {
-        if let Some(ty_id) = registry.type_of_shape(shape) {
-            if let Some(def) = def_of_native_type(ty_id, resolutions) {
+        if let Some(ty_id) = registry.type_of_shape(shape)
+            && let Some(def) = def_of_native_type(ty_id, resolutions) {
                 return Self::Def(def);
             }
-        }
         if let Ok(list) = shape.def.into_list() {
             let elem = Self::from_shape(list.t(), registry, resolutions);
             if matches!(elem, Self::Prim(PrimTy::U8)) {
@@ -535,11 +534,10 @@ pub fn infer_expr_type(
         ExprKind::MethodCall(mc) => {
             let receiver_ty = infer_expr_type(&mc.receiver, resolutions, items, registry, local_types)?;
             let method = mc.seg.ident.name.as_str();
-            if let Some(id) = resolve_method(&receiver_ty, method, resolutions, registry) {
-                if let Some(ty) = InferredTy::from_registry(id, registry, resolutions) {
+            if let Some(id) = resolve_method(&receiver_ty, method, resolutions, registry)
+                && let Some(ty) = InferredTy::from_registry(id, registry, resolutions) {
                     return Some(resolve_params(ty, &receiver_ty));
                 }
-            }
             if let Some(def) = receiver_ty.def_id() {
                 if let Some(ty) = user_method_return_type(
                     def, method, &mc.receiver, resolutions, items, registry,
@@ -701,11 +699,10 @@ pub fn infer_match_arm_type(
                 return Some(InferredTy::from_shape(r.e(), registry, resolutions));
             }
         }
-        if let Ok(o) = shape.def.into_option() {
-            if variant_def == lang.some {
+        if let Ok(o) = shape.def.into_option()
+            && variant_def == lang.some {
                 return Some(InferredTy::from_shape(o.t(), registry, resolutions));
             }
-        }
     }
     // XurType-based: for raw functions that declare Result/Option return hints.
     let id = resolve_callee_id(scrutinee, resolutions, items, registry, local_types)?;
@@ -719,15 +716,14 @@ pub fn infer_match_arm_type(
         } else {
             None
         };
-        if let Some(i) = index {
-            if let Some(&hint) = params.get(i) {
+        if let Some(i) = index
+            && let Some(&hint) = params.get(i) {
                 return Some(match hint {
                     ElemHint::Shape(s) => InferredTy::from_shape(s, registry, resolutions),
                     ElemHint::Name(n) => InferredTy::from_name(n),
                     ElemHint::Param(_) => InferredTy::Infer,
                 });
             }
-        }
     }
     None
 }
@@ -832,11 +828,10 @@ pub fn infer_iter_element_type(
         ExprKind::List(elems) => {
             let mut seen = Vec::new();
             for e in elems {
-                if let Some(ty) = infer_expr_type(e, resolutions, items, registry, local_types) {
-                    if !seen.contains(&ty) {
+                if let Some(ty) = infer_expr_type(e, resolutions, items, registry, local_types)
+                    && !seen.contains(&ty) {
                         seen.push(ty);
                     }
-                }
             }
             if seen.len() == 1 {
                 Some(seen.remove(0))
@@ -845,11 +840,10 @@ pub fn infer_iter_element_type(
             }
         }
         _ => {
-            if let Some(shape) = native_call_return_shape(iter, resolutions, registry) {
-                if let Ok(list) = shape.def.into_list() {
+            if let Some(shape) = native_call_return_shape(iter, resolutions, registry)
+                && let Ok(list) = shape.def.into_list() {
                     return Some(InferredTy::from_shape(list.t(), registry, resolutions));
                 }
-            }
             match infer_expr_type(iter, resolutions, items, registry, local_types) {
                 Some(InferredTy::List(Some(inner))) => return Some(*inner),
                 Some(InferredTy::Prim(PrimTy::Bytes)) => return Some(InferredTy::Prim(PrimTy::U8)),

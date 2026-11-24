@@ -275,7 +275,7 @@ impl Resolver<'_> {
             .filter_map(|(id, data)| {
                 let is_enum = match data.kind {
                     DefKind::Enum => true,
-                    DefKind::NativeType(_) => self.scopes.get(&id).map_or(false, |scope| {
+                    DefKind::NativeType(_) => self.scopes.get(&id).is_some_and(|scope| {
                         scope
                             .iter(Namespace::Value)
                             .any(|(_, b)| matches!(b.res, Res::Def(DefKind::NativeVariant(_), _)))

@@ -248,7 +248,7 @@ pub(crate) fn register(registry: &Registry) {
             let sdk = get_sdk()?;
             let objects: Result<Vec<Value>, _> = sdk
                 .objects()
-                .filter(|obj| obj.class().name() == &*class_name)
+                .filter(|obj| obj.class().name() == *class_name)
                 .map(|obj| into_value(cx, XurUnrealObject(obj.ptr())))
                 .collect();
 
@@ -339,7 +339,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = uobj.class();
                 let prop = ucls
                     .find_property(name)
-                    .ok_or_else(|| err(&format!("no property '{name}'")))?;
+                    .ok_or_else(|| err(format!("no property '{name}'")))?;
                 let pv = unsafe { prop.read(this.0) };
                 property_value_to_xur(cx, pv)
             })
@@ -356,7 +356,7 @@ pub(crate) fn register(registry: &Registry) {
                 let ucls = uobj.class();
                 let prop = ucls
                     .find_property(name)
-                    .ok_or_else(|| err(&format!("no property '{name}'")))?;
+                    .ok_or_else(|| err(format!("no property '{name}'")))?;
                 let pv = xur_to_property_value(&args[2])?;
                 unsafe { prop.write(this.0 as *mut u8, &pv) };
                 Ok(Value::Unit)

@@ -401,7 +401,7 @@ impl Registry {
             }
             XurType::Map(Some(k), None) => format!("map<{}, _>", self.shape_xur_name(k)),
             XurType::Map(None, Some(v)) => format!("map<_, {}>", self.shape_xur_name(v)),
-            XurType::Named(name, params) if params.is_empty() => (*name).into(),
+            XurType::Named(name, []) => (*name).into(),
             XurType::Named(name, params) => {
                 let args: Vec<_> = params.iter().map(|h| self.elem_hint_name(*h)).collect();
                 format!("{name}<{}>", args.join(", "))

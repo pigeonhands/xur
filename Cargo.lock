@@ -4969,7 +4969,6 @@ dependencies = [
  "sha2",
  "tracing",
  "tracing-subscriber",
- "unrealkit",
  "ureq",
  "winit",
  "xur-ast",
