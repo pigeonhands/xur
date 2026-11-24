@@ -382,7 +382,7 @@ fn build2(cx: &dyn Context, code: Code, op0: &Value, op1: &Value) -> RunResult<I
     let b = parse_operand(cx, op1)?;
     match (a, b) {
         (Operand::Reg(r0), Operand::Reg(r1)) => Instruction::with2(code, r0, r1),
-        (Operand::Reg(r), Operand::Imm(n)) => Instruction::with2::<_, i32>(code, r, n as i32),
+        (Operand::Reg(r), Operand::Imm(n)) => Instruction::with2::<_, i64>(code, r, n),
         (Operand::Reg(r), Operand::Mem(m)) => Instruction::with2(code, r, m),
         (Operand::Mem(m), Operand::Reg(r)) => Instruction::with2(code, m, r),
         (Operand::Mem(m), Operand::Imm(n)) => Instruction::with2::<_, i32>(code, m, n as i32),

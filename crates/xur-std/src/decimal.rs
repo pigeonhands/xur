@@ -77,13 +77,13 @@ pub(crate) fn register(registry: &Registry) {
         .method("round_dp", |d: &XurDecimal, dp: i64| -> XurDecimal {
             XurDecimal(d.0.round_dp(dp as u32))
         })
-        .method("to_int", |d: &XurDecimal| -> i64 {
+        .method("to_int", |d: &XurDecimal| -> Result<i64, String> {
             use rust_decimal::prelude::ToPrimitive;
-            d.0.to_i64().unwrap_or(0)
+            d.0.to_i64().ok_or_else(|| format!("{} does not fit in i64", d.0))
         })
-        .method("to_float", |d: &XurDecimal| -> f64 {
+        .method("to_float", |d: &XurDecimal| -> Result<f64, String> {
             use rust_decimal::prelude::ToPrimitive;
-            d.0.to_f64().unwrap_or(0.0)
+            d.0.to_f64().ok_or_else(|| format!("{} does not fit in f64", d.0))
         });
 
     m.named_function("from_int", &["value"], |value: i64| -> XurDecimal {

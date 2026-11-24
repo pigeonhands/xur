@@ -294,10 +294,10 @@ fn execute_request(rb: &RequestBuilder) -> RunResult<Response> {
         .build();
     let agent = ureq::Agent::new_with_config(config);
 
-    let has_body = rb.body.is_some()
+    let uses_body = rb.body.is_some()
         || matches!(rb.method.as_str(), "POST" | "PUT" | "PATCH");
 
-    let resp = if has_body {
+    let resp = if uses_body {
         let mut req = match rb.method.as_str() {
             "PUT" => agent.put(&rb.url),
             "PATCH" => agent.patch(&rb.url),
