@@ -126,16 +126,33 @@ references from methods you cannot call yourself, such as
 singleton accessors invoked by the game's own code.
 .TP
 .B hook(callback) -> ()
-Install a hook on the method. The callback receives the first
-argument (the
-.I this
-pointer) as an integer and returns
+Install a hook on the method. The callback's declared parameters are
+marshalled from the call's arguments by their xur types: an
+.B f32 / f64
+from the matching SSE register, a
+.B coreclr::ManagedObject
+or a
+.B decimal::Decimal
+from the integer registers, and anything else as an
+.BR int .
+So a hook on a method taking a creature and a decimal amount can be written
+.BR "|this: coreclr::ManagedObject, amount: decimal::Decimal|" .
+The callback returns
 .B Option<int>
 \(em
 .B None
 passes through to the original,
 .B Some(value)
 overrides the return value.
+.TP
+.B hook_args(callback) -> ()
+Like
+.BR hook ,
+but the callback returns the (possibly modified) arguments \(em a tuple with
+one entry per parameter, or a single value for one parameter \(em which are
+written back before the original runs. Arguments returned unchanged are left
+exactly as they were. Use this to rewrite a call's arguments (e.g. zero a
+damage amount) while letting the method run and return a valid result.
 .TP
 .B peek_bytes(count) -> str
 Read
@@ -170,6 +187,16 @@ The raw memory address.
 .TP
 .B is_null() -> bool
 Whether this is a null reference.
+.TP
+.B non_null() -> Option<ManagedObject>
+.B Some(self)
+when non-null,
+.B None
+otherwise. Prefer this over a null sentinel so callers get a compiler-checked
+.B Option
+instead of an easy-to-forget
+.B is_null()
+check.
 .TP
 .B read_i64(offset) -> Result<int>
 Read a 64-bit integer at the given byte offset.

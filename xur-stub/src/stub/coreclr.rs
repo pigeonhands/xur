@@ -21,9 +21,10 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use std::sync::{Arc, Mutex as StdMutex};
 
-use xur_runtime::convert::{into_value, ConvertCx};
+use xur_runtime::convert::{from_value, into_value, ConvertCx};
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
+use xur_std::decimal::XurDecimal;
 
 pub(crate) static RUNTIME: OnceLock<hao_runtime::Runtime> = OnceLock::new();
 
@@ -144,7 +145,194 @@ enum HookEntry {
     Callback {
         closure: Value,
         handle: xur_vm::SharedHandle,
+        arg_kinds: Vec<ArgKind>,
     },
+    // Argument-rewriting hook. The callback's declared parameter types drive
+    // marshalling: each argument is read from its ABI slot into a typed xur value,
+    // passed to the callback, and the (possibly modified) values it returns are
+    // written back before the original runs. `arg_kinds[i]` is how parameter i
+    // maps to the ABI. Fully generic: any arg rewrite lives in the callback.
+    RewriteArgs {
+        closure: Value,
+        handle: xur_vm::SharedHandle,
+        arg_kinds: Vec<ArgKind>,
+    },
+}
+
+/// How one hooked-method parameter maps to the x86-64 SysV ABI, picked from the
+/// callback parameter's declared xur type. Integer-class args consume the next
+/// integer register (`rdi, rsi, rdx, rcx, r8, r9`); float-class args the next SSE
+/// register (`xmm0..`); a `Decimal` is a 16-byte value spanning two int regs.
+#[derive(Clone, Copy)]
+enum ArgKind {
+    Int,     // int reg  <-> xur int / bool / pointer
+    Float32, // SSE reg  <-> xur f32
+    Float64, // SSE reg  <-> xur f64
+    Managed, // int reg  <-> coreclr::ManagedObject (a managed pointer)
+    Decimal, // 2 int regs <-> std::decimal (System.Decimal, by value)
+}
+
+/// Maps each declared parameter of `callback` to its ABI slot, from the xur type
+/// the parameter was written as. Native types are matched by registry id (robust
+/// vs the type's def-path string). Shared by `hook` and `hook_args`.
+fn classify_params(handle: &xur_vm::SharedHandle, callback: &Value) -> Vec<ArgKind> {
+    let managed_id = handle.registry().type_id_by_name("ManagedObject");
+    let decimal_id = handle.registry().type_id_by_name("Decimal");
+    handle
+        .callee_param_types(callback)
+        .map(|types| {
+            types
+                .iter()
+                .map(|t| match t {
+                    Some(xur_vm::RtType::Float { name: "f32" }) => ArgKind::Float32,
+                    Some(xur_vm::RtType::Float { .. }) => ArgKind::Float64,
+                    Some(xur_vm::RtType::Native { id, .. }) if Some(*id) == managed_id => {
+                        ArgKind::Managed
+                    }
+                    Some(xur_vm::RtType::Native { id, .. }) if Some(*id) == decimal_id => {
+                        ArgKind::Decimal
+                    }
+                    _ => ArgKind::Int,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Reads each hooked argument from its ABI register into a typed xur value.
+#[cfg(target_arch = "x86_64")]
+unsafe fn marshal_in(
+    arg_kinds: &[ArgKind],
+    int_regs: *mut u64,
+    sse_regs: *mut [u8; 16],
+    handle: &xur_vm::SharedHandle,
+) -> Vec<Value> {
+    let read_int = |i: usize| -> u64 { if i < 6 { unsafe { *int_regs.add(i) } } else { 0 } };
+    let read_f64 =
+        |i: usize| -> f64 { if i < 8 { unsafe { *(sse_regs.add(i) as *const f64) } } else { 0.0 } };
+    let read_f32 =
+        |i: usize| -> f32 { if i < 8 { unsafe { *(sse_regs.add(i) as *const f32) } } else { 0.0 } };
+    let mut int_i = 0usize;
+    let mut sse_i = 0usize;
+    let mut out = Vec::with_capacity(arg_kinds.len());
+    for &kind in arg_kinds {
+        match kind {
+            ArgKind::Int => {
+                out.push(Value::Int(read_int(int_i) as i64));
+                int_i += 1;
+            }
+            ArgKind::Float32 => {
+                out.push(Value::Float(read_f32(sse_i) as f64));
+                sse_i += 1;
+            }
+            ArgKind::Float64 => {
+                out.push(Value::Float(read_f64(sse_i)));
+                sse_i += 1;
+            }
+            ArgKind::Managed => {
+                let p = read_int(int_i) as usize;
+                out.push(into_value(handle, ManagedObject(p)).unwrap_or(Value::Int(p as i64)));
+                int_i += 1;
+            }
+            ArgKind::Decimal => {
+                let d = XurDecimal::from_dotnet_regs([read_int(int_i), read_int(int_i + 1)]);
+                out.push(into_value(handle, d).unwrap_or(Value::Unit));
+                int_i += 2;
+            }
+        }
+    }
+    out
+}
+
+/// Writes the callback's returned values back into the ABI argument registers.
+/// Only arguments the callback actually CHANGED are written; an argument returned
+/// unchanged (the same value it was given) is left untouched, so its register
+/// keeps its exact original bits rather than being round-tripped through a xur
+/// type (which can be lossy, e.g. a Decimal) and corrupting the original call.
+#[cfg(target_arch = "x86_64")]
+unsafe fn marshal_out(
+    arg_kinds: &[ArgKind],
+    inputs: &[Value],
+    rets: &[Value],
+    int_regs: *mut u64,
+    sse_regs: *mut [u8; 16],
+    handle: &xur_vm::SharedHandle,
+) {
+    let write_int = |i: usize, v: u64| {
+        if i < 6 {
+            unsafe { *int_regs.add(i) = v }
+        }
+    };
+    let write_f64 = |i: usize, v: f64| {
+        if i < 8 {
+            unsafe { *(sse_regs.add(i) as *mut f64) = v }
+        }
+    };
+    let write_f32 = |i: usize, v: f32| {
+        if i < 8 {
+            unsafe { *(sse_regs.add(i) as *mut f32) = v }
+        }
+    };
+    let mut int_i = 0usize;
+    let mut sse_i = 0usize;
+    for (i, &kind) in arg_kinds.iter().enumerate() {
+        let rv = rets.get(i);
+        // Unchanged (callback returned the same value it received) -> leave the
+        // register alone. Native values (ManagedObject/Decimal) compare by Arc
+        // identity, so an untouched arg is recognised and preserved exactly.
+        let changed = match (rv, inputs.get(i)) {
+            (Some(r), Some(inp)) => r != inp,
+            _ => false,
+        };
+        match kind {
+            ArgKind::Int => {
+                if changed {
+                    if let Some(Value::Int(n)) = rv {
+                        write_int(int_i, *n as u64);
+                    }
+                }
+                int_i += 1;
+            }
+            ArgKind::Float32 => {
+                if changed {
+                    if let Some(Value::Float(f)) = rv {
+                        write_f32(sse_i, *f as f32);
+                    }
+                }
+                sse_i += 1;
+            }
+            ArgKind::Float64 => {
+                if changed {
+                    if let Some(Value::Float(f)) = rv {
+                        write_f64(sse_i, *f);
+                    }
+                }
+                sse_i += 1;
+            }
+            ArgKind::Managed => {
+                if changed {
+                    if let Some(v) = rv {
+                        if let Ok(m) = from_value::<ManagedObject>(handle, v) {
+                            write_int(int_i, m.0 as u64);
+                        }
+                    }
+                }
+                int_i += 1;
+            }
+            ArgKind::Decimal => {
+                if changed {
+                    if let Some(v) = rv {
+                        if let Ok(d) = from_value::<XurDecimal>(handle, v) {
+                            let r = d.to_dotnet_regs();
+                            write_int(int_i, r[0]);
+                            write_int(int_i + 1, r[1]);
+                        }
+                    }
+                }
+                int_i += 2;
+            }
+        }
+    }
 }
 
 static HOOKS: OnceLock<Mutex<HashMap<usize, HookEntry>>> = OnceLock::new();
@@ -165,7 +353,7 @@ fn hooks() -> &'static Mutex<HashMap<usize, HookEntry>> {
 extern "C" fn coreclr_hook_dispatch(
     original: usize,
     int_regs: *mut u64,
-    _sse_regs: *mut [u8; 16],
+    sse_regs: *mut [u8; 16],
     result: *mut hooking::DispatchResult,
 ) {
     let entry = {
@@ -184,15 +372,39 @@ extern "C" fn coreclr_hook_dispatch(
             slot.store(this_ptr as usize, Ordering::Relaxed);
             hooking::DispatchResult::passthrough()
         }
-        HookEntry::Callback { closure, handle } => {
-            let this_addr = unsafe { *int_regs } as i64;
-            match handle.call_closure(closure, &[Value::Int(this_addr)]) {
+        HookEntry::Callback {
+            closure,
+            handle,
+            arg_kinds,
+        } => {
+            let args = unsafe { marshal_in(arg_kinds, int_regs, sse_regs, handle) };
+            match handle.call_closure(closure, &args) {
                 Ok(val) => interpret_hook_result(val, handle.lang(), int_regs),
                 Err(e) => {
                     tracing::error!("coreclr hook callback error: {}", e.message);
                     hooking::DispatchResult::passthrough()
                 }
             }
+        }
+        HookEntry::RewriteArgs {
+            closure,
+            handle,
+            arg_kinds,
+        } => {
+            let call_args = unsafe { marshal_in(arg_kinds, int_regs, sse_regs, handle) };
+            match handle.call_closure(closure, &call_args) {
+                Ok(ret) => {
+                    // The callback returns the (possibly modified) values: a tuple
+                    // for several params, or a single value for one.
+                    let rets: Vec<Value> = match ret {
+                        Value::Tuple(items) => items.to_vec(),
+                        other => vec![other],
+                    };
+                    unsafe { marshal_out(arg_kinds, &call_args, &rets, int_regs, sse_regs, handle) };
+                }
+                Err(e) => tracing::error!("coreclr hook_args callback error: {}", e.message),
+            }
+            hooking::DispatchResult::passthrough()
         }
     };
     unsafe {
@@ -517,6 +729,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
                 .and_then(|h| h.downcast().ok())
                 .ok_or_else(|| RuntimeError::new("hook requires VM support"))?;
             let handle = *handle;
+            let arg_kinds = classify_params(&handle, &callback);
 
             #[cfg(target_arch = "x86_64")]
             {
@@ -530,6 +743,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
                     HookEntry::Callback {
                         closure: callback,
                         handle,
+                        arg_kinds,
                     },
                 );
                 unsafe { hook.apply_hook() }
@@ -539,6 +753,50 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             }
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("hook only supported on x86_64"))
+        })
+        // Argument-rewriting hook. The callback receives the integer argument
+        // registers as a list `[rdi, rsi, rdx, rcx, r8, r9]` and returns the
+        // (possibly modified) list; the modified registers are written back before
+        // the original runs. Unlike `hook` (which overrides the RETURN value),
+        // this rewrites ARGUMENTS and lets the original run normally — so the
+        // method still returns a valid result. (A game can use it to e.g. zero a
+        // damage argument for godmode.)
+        .raw_function("hook_args", |cx, args| {
+            let [this, callback] = args else {
+                return Err(RuntimeError::new("`hook_args` takes a callback closure"));
+            };
+            let ptr = extract_ptr(this)?;
+            let callback = callback.clone();
+
+            let handle: Box<xur_vm::SharedHandle> = cx
+                .shared_handle()
+                .and_then(|h| h.downcast().ok())
+                .ok_or_else(|| RuntimeError::new("hook requires VM support"))?;
+            let handle = *handle;
+            let arg_kinds = classify_params(&handle, &callback);
+
+            #[cfg(target_arch = "x86_64")]
+            {
+                let mut hook = unsafe {
+                    hook_writer().create_save_registers(ptr.0 as *mut u8, coreclr_hook_dispatch)
+                }
+                .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
+                let orig = hook.original_function().as_ptr() as usize;
+                hooks().lock().unwrap_or_else(|e| e.into_inner()).insert(
+                    orig,
+                    HookEntry::RewriteArgs {
+                        closure: callback,
+                        handle,
+                        arg_kinds,
+                    },
+                );
+                unsafe { hook.apply_hook() }
+                    .map_err(|e| RuntimeError::new(format!("apply hook failed: {e:?}")))?;
+                std::mem::forget(hook);
+                Ok(Value::Unit)
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            Err(RuntimeError::new("hook_args only supported on x86_64"))
         })
         .method("address", |p: &MethodPtr| -> i64 { p.0 as i64 })
         .raw_function("resolve_jit", |cx, args| {
@@ -614,6 +872,13 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
     m.ty::<ManagedObject>("ManagedObject")
         .method("address", |o: &ManagedObject| -> i64 { o.0 as i64 })
         .method("is_null", |o: &ManagedObject| -> bool { o.0 == 0 })
+        // Null-safe accessor: `Some(obj)` when the pointer is non-null, `None`
+        // otherwise. Prefer this over returning a null ManagedObject sentinel so
+        // callers get a compiler-checked `Option` instead of an easy-to-forget
+        // `.is_null()` check.
+        .method("non_null", |o: &ManagedObject| -> Option<ManagedObject> {
+            if o.0 == 0 { None } else { Some(*o) }
+        })
         .method("read_i64", |o: &ManagedObject, offset: i64| -> Result<i64, String> {
             let addr = (o.0 as isize + offset as isize) as usize;
             check_readable(addr, 8)?;
