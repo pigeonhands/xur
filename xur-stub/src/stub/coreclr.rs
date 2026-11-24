@@ -356,17 +356,41 @@ extern "C" fn coreclr_hook_dispatch(
     sse_regs: *mut [u8; 16],
     result: *mut hooking::DispatchResult,
 ) {
+    // A panic must never unwind across this extern "C" boundary into the game's
+    // JIT code (that is UB and corrupts control flow). Any panic in the argument
+    // marshalling or the xur VM is caught here and turned into a safe passthrough,
+    // and logged so we can see what failed instead of crashing the game.
+    let dr = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        hook_dispatch_inner(original, int_regs, sse_regs)
+    }))
+    .unwrap_or_else(|e| {
+        let msg = e
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| e.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "<non-string panic>".to_string());
+        tracing::error!("coreclr hook dispatch panicked ({msg}); passing through");
+        hooking::DispatchResult::passthrough()
+    });
+    unsafe {
+        *result = dr;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+fn hook_dispatch_inner(
+    original: usize,
+    int_regs: *mut u64,
+    sse_regs: *mut [u8; 16],
+) -> hooking::DispatchResult {
     let entry = {
         let map = hooks().lock().unwrap_or_else(|e| e.into_inner());
         map.get(&original).cloned()
     };
     let Some(entry) = entry else {
-        unsafe {
-            *result = hooking::DispatchResult::passthrough();
-        }
-        return;
+        return hooking::DispatchResult::passthrough();
     };
-    let dr = match &entry {
+    match &entry {
         HookEntry::Capture(slot) => {
             let this_ptr = unsafe { *int_regs };
             slot.store(this_ptr as usize, Ordering::Relaxed);
@@ -406,9 +430,6 @@ extern "C" fn coreclr_hook_dispatch(
             }
             hooking::DispatchResult::passthrough()
         }
-    };
-    unsafe {
-        *result = dr;
     }
 }
 
@@ -799,6 +820,19 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             Err(RuntimeError::new("hook_args only supported on x86_64"))
         })
         .method("address", |p: &MethodPtr| -> i64 { p.0 as i64 })
+        // True when the code at this address looks like a real JIT'd method body
+        // (a normal prologue), not a precode or a shared CLR fixup thunk for a
+        // method that hasn't been compiled yet. Those start with a jump/call
+        // (e9/eb/e8/ff) or int3 padding (cc); hooking them is unsafe because the
+        // thunk is shared and fires for unrelated methods. Use this to gate hook
+        // installation until a method's JIT body actually exists.
+        .method("looks_jitted", |p: &MethodPtr| -> bool {
+            if p.0 == 0 {
+                return false;
+            }
+            let b = unsafe { *(p.0 as *const u8) };
+            !matches!(b, 0xe9 | 0xeb | 0xe8 | 0xff | 0xcc)
+        })
         .raw_function("resolve_jit", |cx, args| {
             let [this] = args else {
                 return Err(RuntimeError::new("`resolve_jit` takes no arguments"));
