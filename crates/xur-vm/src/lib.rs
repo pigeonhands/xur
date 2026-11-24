@@ -30,6 +30,10 @@ use xur_span::Symbol;
 
 use interp::Interp;
 
+/// Re-exported so callers of [`SharedHandle::callee_param_types`] can name the
+/// parameter types without depending on `xur-bytecode` directly.
+pub use xur_bytecode::RtType;
+
 /// The stack of threads a program spawns. Deep recursion in Xur recurses
 /// in the interpreter too.
 pub const THREAD_STACK_SIZE: usize = 64 << 20;
@@ -181,6 +185,20 @@ impl SharedHandle {
     pub fn call_closure(&self, callee: &Value, args: &[Value]) -> RunResult<Value> {
         let mut interp = Interp::new(&self.0);
         interp.call_value(callee, args, Vec::new(), xur_span::Span::default())
+    }
+
+    /// The declared parameter types of a xur closure or function `callee`, one
+    /// entry per parameter (`None` where the type was left to be inferred).
+    /// General reflection — a caller can inspect these for marshalling, checking,
+    /// or display. Returns `None` for a value that is not a callable, or whose
+    /// code is unavailable.
+    pub fn callee_param_types(&self, callee: &Value) -> Option<Vec<Option<xur_bytecode::RtType>>> {
+        let function = match callee {
+            Value::Closure(c) => Arc::clone(&c.code).downcast::<Function>().ok()?,
+            Value::Fn(def) => self.0.code(*def).ok()?,
+            _ => return None,
+        };
+        Some(function.param_types.clone())
     }
 }
 
