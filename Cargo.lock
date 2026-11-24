@@ -2953,9 +2953,9 @@ dependencies = [
 
 [[package]]
 name = "procodile"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e4e94e36254590f16e5b93c3ebd605cd4e47e73f32074c7e2b19d0c6a3b334"
+checksum = "3ff6474af0a042842ebb511074b74dd9515bd24dfb38ffd446d3b00e91c0a38d"
 dependencies = [
  "facet",
  "libc",
