@@ -1,9 +1,7 @@
 //! Methods of strings: plain Rust functions, with the receiver converted to
 //! a `String` by facet.
 
-use xur_runtime::{BuiltinType, Context, Registry, RunResult, RuntimeError, Value};
-
-use crate::option;
+use xur_runtime::{BuiltinType, Registry, XurStr};
 
 pub(crate) fn register(registry: &Registry) {
     registry
@@ -98,8 +96,12 @@ pub(crate) fn register(registry: &Registry) {
         .function("parse_float", |s: String| {
             s.trim().parse::<f64>().map_err(|e| e.to_string())
         })
-        .raw_function("find", find)
-        .raw_function("rfind", rfind);
+        .method("find", |s: &str, needle: XurStr| -> Option<i64> {
+            s.find(&*needle).map(|byte_offset| s[..byte_offset].chars().count() as i64)
+        })
+        .method("rfind", |s: &str, needle: XurStr| -> Option<i64> {
+            s.rfind(&*needle).map(|byte_offset| s[..byte_offset].chars().count() as i64)
+        });
 }
 
 /// Resolve a possibly-negative char index into a clamped `usize`.
@@ -125,27 +127,6 @@ fn pad_right(s: String, width: usize, fill: &str) -> String {
     s + &padding
 }
 
-/// `str.find(needle)` — returns the char index of the first occurrence, or `None`.
-fn find(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Str(s), Value::Str(needle)] = args else {
-        return Err(RuntimeError::new("`find` takes a string needle"));
-    };
-    let found = s.find(&**needle).map(|byte_offset| {
-        Value::int(s[..byte_offset].chars().count() as i64)
-    });
-    Ok(option(cx, found))
-}
-
-/// `str.rfind(needle)` — returns the char index of the last occurrence, or `None`.
-fn rfind(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [Value::Str(s), Value::Str(needle)] = args else {
-        return Err(RuntimeError::new("`rfind` takes a string needle"));
-    };
-    let found = s.rfind(&**needle).map(|byte_offset| {
-        Value::int(s[..byte_offset].chars().count() as i64)
-    });
-    Ok(option(cx, found))
-}
 
 #[cfg(test)]
 mod tests {

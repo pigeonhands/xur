@@ -13,7 +13,7 @@ use crate::convert::{self, ConvertCx};
 use crate::RunResult;
 use crate::Value;
 
-pub use wrappers::{XurBytes, XurList};
+pub use wrappers::{XurBytes, XurList, XurStr};
 
 /// Extract a Rust value from a Xur [`Value`].
 pub trait FromValue: Sized + Send + 'static {

@@ -1,4 +1,5 @@
-//! Shared mutable collection types for the typed function API.
+//! Wrapper types for the typed function API that extract from Value
+//! without copying.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,6 +23,31 @@ impl FromValue for XurList {
 impl IntoXurValue for XurList {
     fn into_xur_value(self, _cx: &dyn ConvertCx) -> RunResult<Value> {
         Ok(Value::List(self.0))
+    }
+}
+
+/// A string extracted from `Value::Str` without copying.
+pub struct XurStr(pub Arc<str>);
+
+impl std::ops::Deref for XurStr {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromValue for XurStr {
+    fn from_value(_cx: &dyn ConvertCx, value: &Value) -> RunResult<Self> {
+        match value {
+            Value::Str(arc) => Ok(XurStr(Arc::clone(arc))),
+            _ => Err(RuntimeError::new("expected a string")),
+        }
+    }
+}
+
+impl IntoXurValue for XurStr {
+    fn into_xur_value(self, _cx: &dyn ConvertCx) -> RunResult<Value> {
+        Ok(Value::Str(self.0))
     }
 }
 
