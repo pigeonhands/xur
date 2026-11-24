@@ -5,10 +5,15 @@
 //! both traits via blanket impls, while types like `Value`, `XurList`
 //! and `XurBytes` provide their own custom conversions.
 
+mod wrappers;
+
 use facet::{Facet, Shape};
 
 use crate::convert::{self, ConvertCx};
-use crate::{RunResult, Value};
+use crate::RunResult;
+use crate::Value;
+
+pub use wrappers::{XurBytes, XurList};
 
 /// Extract a Rust value from a Xur [`Value`].
 pub trait FromValue: Sized + Send + 'static {
@@ -21,8 +26,6 @@ pub trait IntoXurValue: Send + 'static {
     const SHAPE: Option<&'static Shape> = None;
     fn into_xur_value(self, cx: &dyn ConvertCx) -> RunResult<Value>;
 }
-
-// ---- Blanket impls over Facet ----
 
 impl<T: Facet<'static> + Send + 'static> FromValue for T {
     const SHAPE: Option<&'static Shape> = Some(T::SHAPE);

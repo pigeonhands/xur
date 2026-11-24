@@ -8,7 +8,7 @@ pub mod registry;
 mod value;
 
 pub use error::{RunResult, RuntimeError};
-pub use marshal::{FromValue, IntoXurValue};
+pub use marshal::{FromValue, IntoXurValue, XurBytes, XurList};
 pub use reflect::{AdtInfo, FieldInfo, FnInfo, TypeRef};
 pub use registry::{Context, Registry};
 pub use value::{
