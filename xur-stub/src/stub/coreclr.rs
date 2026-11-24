@@ -19,11 +19,58 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use facet::Facet;
+use std::sync::{Arc, Mutex as StdMutex};
+
 use xur_runtime::convert::{into_value, ConvertCx};
 use xur_runtime::registry::ModuleBuilder;
 use xur_runtime::{Registry, RuntimeError, Value};
 
 pub(crate) static RUNTIME: OnceLock<hao_runtime::Runtime> = OnceLock::new();
+
+// ---------------------------------------------------------------------------
+// Game-thread dispatch — managed calls must run on the CLR-registered thread
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Memory probe — validate pointers before dereferencing
+// ---------------------------------------------------------------------------
+
+#[cfg(unix)]
+static PROBE_FD: OnceLock<i32> = OnceLock::new();
+
+#[cfg(unix)]
+fn init_probe() {
+    let fd = unsafe { libc::open(b"/dev/null\0".as_ptr() as *const _, libc::O_WRONLY) };
+    if fd >= 0 {
+        PROBE_FD.set(fd).ok();
+    }
+}
+
+#[cfg(not(unix))]
+fn init_probe() {}
+
+fn probe_readable(addr: usize, len: usize) -> bool {
+    if addr < 0x1000 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        if let Some(&fd) = PROBE_FD.get() {
+            return unsafe { libc::write(fd, addr as *const libc::c_void, len) } == len as isize;
+        }
+    }
+    true
+}
+
+fn check_readable(addr: usize, len: usize) -> Result<(), String> {
+    if addr == 0 {
+        return Err("null pointer".into());
+    }
+    if !probe_readable(addr, len) {
+        return Err(format!("stale reference at 0x{addr:x} ({len} bytes)"));
+    }
+    Ok(())
+}
 
 // ---------------------------------------------------------------------------
 // Opaque wrappers
@@ -191,7 +238,12 @@ fn marshal_int_args(args: &[Value]) -> Result<Vec<u64>, RuntimeError> {
                     out.extend_from_slice(&regs);
                     continue;
                 }
-                out.push(n.with(|o: &ManagedObject| o.0 as u64).unwrap_or(0));
+                let addr = n.with(|o: &ManagedObject| o.0 as u64).unwrap_or(0);
+                if addr != 0 {
+                    check_readable(addr as usize, 8)
+                        .map_err(|e| RuntimeError::new(format!("call arg: {e}")))?;
+                }
+                out.push(addr);
             }
             Value::Unit => out.push(0),
             _ => return Err(RuntimeError::new("unsupported argument type for call")),
@@ -203,17 +255,35 @@ fn marshal_int_args(args: &[Value]) -> Result<Vec<u64>, RuntimeError> {
 #[cfg(target_arch = "x86_64")]
 use hao_runtime::jit::{call_native, call_native_float};
 
+#[cfg(target_arch = "x86_64")]
+fn safe_call_native(ptr: usize, args: &[u64]) -> Result<u64, RuntimeError> {
+    // TODO: route through rt.invoke() once the SuppressGCTransition calli
+    // is confirmed working.  Currently the [UnmanagedCallersOnly] trampoline
+    // triggers SIGABRT on unregistered threads.
+    Ok(unsafe { call_native(ptr, args) })
+}
+
+#[cfg(target_arch = "x86_64")]
+fn safe_call_native_float(ptr: usize, args: &[u64]) -> Result<f64, RuntimeError> {
+    Ok(unsafe { call_native_float(ptr, args) })
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
 pub(crate) fn register(registry: &Registry) {
+    init_probe();
     registry.lazy_module("std::stub::coreclr", |m| {
         m.raw_function("null", |cx, args| {
             if !args.is_empty() {
                 return Err(RuntimeError::new("`null` takes no arguments"));
             }
             into_value(cx, ManagedObject(0))
+        });
+
+        m.named_function("from_address", &["addr"], |addr: i64| -> ManagedObject {
+            ManagedObject(addr as usize)
         });
 
         register_runtime(m);
@@ -279,6 +349,46 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
                 Ok(()) => Ok(Value::adt(lang.ok, vec![Value::Unit])),
                 Err(e) => Ok(Value::adt(lang.err, vec![Value::str(&e.to_string())])),
             }
+        })
+        .raw_function("type_names", |cx, args| {
+            let [_this, Value::Str(assembly)] = args else {
+                return Err(RuntimeError::new("`type_names` takes (assembly)"));
+            };
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
+            let lang = cx.lang();
+            match rt.type_names(assembly) {
+                Ok(names) => {
+                    let list: Vec<Value> = names.into_iter().map(|n| Value::str(&n)).collect();
+                    Ok(Value::adt(
+                        lang.ok,
+                        vec![Value::List(Arc::new(StdMutex::new(list)))],
+                    ))
+                }
+                Err(e) => Ok(Value::adt(lang.err, vec![Value::str(&e.to_string())])),
+            }
+        })
+        .raw_function("method_names", |cx, args| {
+            let [_this, Value::Str(assembly), Value::Str(type_name)] = args else {
+                return Err(RuntimeError::new(
+                    "`method_names` takes (assembly, type_name)",
+                ));
+            };
+            let rt = RUNTIME
+                .get()
+                .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
+            let lang = cx.lang();
+            match rt.method_names(assembly, type_name) {
+                Ok(names) => {
+                    let list: Vec<Value> = names.into_iter().map(|n| Value::str(&n)).collect();
+                    Ok(Value::adt(
+                        lang.ok,
+                        vec![Value::List(Arc::new(StdMutex::new(list)))],
+                    ))
+                }
+                Err(e) => Ok(Value::adt(lang.err, vec![Value::str(&e.to_string())])),
+            }
         });
 }
 
@@ -292,7 +402,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             let call_args = marshal_int_args(&args[1..])?;
             #[cfg(target_arch = "x86_64")]
             {
-                let result = unsafe { call_native(ptr.0, &call_args) };
+                let result = safe_call_native(ptr.0, &call_args)?;
                 Ok(Value::Int(result as i64))
             }
             #[cfg(not(target_arch = "x86_64"))]
@@ -306,7 +416,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             let call_args = marshal_int_args(&args[1..])?;
             #[cfg(target_arch = "x86_64")]
             {
-                let result = unsafe { call_native(ptr.0, &call_args) };
+                let result = safe_call_native(ptr.0, &call_args)?;
                 into_value(cx, ManagedObject(result as usize))
             }
             #[cfg(not(target_arch = "x86_64"))]
@@ -320,7 +430,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             let call_args = marshal_int_args(&args[1..])?;
             #[cfg(target_arch = "x86_64")]
             {
-                let result = unsafe { call_native_float(ptr.0, &call_args) };
+                let result = safe_call_native_float(ptr.0, &call_args)?;
                 Ok(Value::Float(result))
             }
             #[cfg(not(target_arch = "x86_64"))]
@@ -395,6 +505,9 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(target_arch = "x86_64")]
             {
                 let resolved = unsafe { hao_runtime::jit::resolve_jit(ptr.0) };
+                if resolved == 0 {
+                    return Err(RuntimeError::new("resolve_jit returned null"));
+                }
                 into_value(cx, MethodPtr(resolved))
             }
             #[cfg(not(target_arch = "x86_64"))]
@@ -429,19 +542,27 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             let call_args = marshal_int_args(&args[1..])?;
             #[cfg(target_arch = "x86_64")]
             {
-                let result = unsafe { call_native(ptr.0, &call_args) };
-                Ok(Value::str(&read_clr_string(result as usize)))
+                let result = safe_call_native(ptr.0, &call_args)?;
+                let s = read_clr_string(result as usize)
+                    .map_err(|e| RuntimeError::new(format!("call_string: {e}")))?;
+                Ok(Value::str(&s))
             }
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("call_string only supported on x86_64"))
         })
-        .method("peek_bytes", |p: &MethodPtr, count: i64| -> String {
+        .method("peek_bytes", |p: &MethodPtr, count: i64| -> Result<String, String> {
+            if p.0 == 0 {
+                return Err("peek_bytes on null MethodPtr".into());
+            }
             let n = count.max(0) as usize;
-            unsafe { hao_runtime::jit::peek_bytes(p.0, n) }
+            Ok(unsafe { hao_runtime::jit::peek_bytes(p.0, n) })
         })
-        .method("read_bytes", |p: &MethodPtr, count: i64| -> Vec<u8> {
+        .method("read_bytes", |p: &MethodPtr, count: i64| -> Result<Vec<u8>, String> {
+            if p.0 == 0 {
+                return Err("read_bytes on null MethodPtr".into());
+            }
             let n = count.max(0) as usize;
-            unsafe { std::slice::from_raw_parts(p.0 as *const u8, n).to_vec() }
+            Ok(unsafe { std::slice::from_raw_parts(p.0 as *const u8, n).to_vec() })
         });
 }
 
@@ -449,10 +570,10 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
     m.ty::<ManagedObject>("ManagedObject")
         .method("address", |o: &ManagedObject| -> i64 { o.0 as i64 })
         .method("is_null", |o: &ManagedObject| -> bool { o.0 == 0 })
-        .method("read_i64", |o: &ManagedObject, offset: i64| -> i64 {
-            assert!(o.0 != 0, "null pointer");
-            let ptr = (o.0 as isize + offset as isize) as *const i64;
-            unsafe { std::ptr::read_unaligned(ptr) }
+        .method("read_i64", |o: &ManagedObject, offset: i64| -> Result<i64, String> {
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, 8)?;
+            Ok(unsafe { std::ptr::read_unaligned(addr as *const i64) })
         })
         .raw_function("deref", |cx, args| {
             let [this, Value::Int(offset)] = args else {
@@ -461,39 +582,39 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
             let Value::Native(obj) = this else {
                 return Err(RuntimeError::new("expected a ManagedObject"));
             };
-            let addr = obj
+            let base = obj
                 .with(|o: &ManagedObject| o.0)
                 .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
-            if addr == 0 {
-                return Err(RuntimeError::new("null pointer"));
-            }
-            let ptr = (addr as isize + *offset as isize) as *const usize;
-            let val = unsafe { std::ptr::read_unaligned(ptr) };
+            let addr = (base as isize + *offset as isize) as usize;
+            check_readable(addr, 8)
+                .map_err(|e| RuntimeError::new(format!("deref: {e}")))?;
+            let val = unsafe { std::ptr::read_unaligned(addr as *const usize) };
             into_value(cx, ManagedObject(val))
         })
-        .method("read_u8", |o: &ManagedObject, offset: i64| -> i64 {
-            assert!(o.0 != 0, "null pointer");
-            let ptr = (o.0 as isize + offset as isize) as *const u8;
-            (unsafe { std::ptr::read(ptr) }) as i64
+        .method("read_u8", |o: &ManagedObject, offset: i64| -> Result<i64, String> {
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, 1)?;
+            Ok(unsafe { std::ptr::read(addr as *const u8) } as i64)
         })
-        .method("read_i32", |o: &ManagedObject, offset: i64| -> i64 {
-            assert!(o.0 != 0, "null pointer");
-            let ptr = (o.0 as isize + offset as isize) as *const i32;
-            (unsafe { std::ptr::read_unaligned(ptr) }) as i64
+        .method("read_i32", |o: &ManagedObject, offset: i64| -> Result<i64, String> {
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, 4)?;
+            Ok(unsafe { std::ptr::read_unaligned(addr as *const i32) } as i64)
         })
-        .method("write_i32", |o: &ManagedObject, offset: i64, value: i64| {
-            assert!(o.0 != 0, "null pointer");
-            let ptr = (o.0 as isize + offset as isize) as *mut i32;
-            unsafe { std::ptr::write(ptr, value as i32) };
+        .method("write_i32", |o: &ManagedObject, offset: i64, value: i64| -> Result<(), String> {
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, 4)?;
+            unsafe { std::ptr::write(addr as *mut i32, value as i32) };
+            Ok(())
         })
-        .method("read_string", |o: &ManagedObject| -> String {
+        .method("read_string", |o: &ManagedObject| -> Result<String, String> {
             read_clr_string(o.0)
         })
-        .method("read_bytes", |o: &ManagedObject, offset: i64, count: i64| -> Vec<u8> {
-            assert!(o.0 != 0, "null pointer");
+        .method("read_bytes", |o: &ManagedObject, offset: i64, count: i64| -> Result<Vec<u8>, String> {
             let n = count.max(0) as usize;
-            let ptr = (o.0 as isize + offset as isize) as *const u8;
-            unsafe { std::slice::from_raw_parts(ptr, n).to_vec() }
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, n.max(1))?;
+            Ok(unsafe { std::slice::from_raw_parts(addr as *const u8, n).to_vec() })
         });
 }
 
@@ -518,17 +639,20 @@ fn register_captured_ref(m: &mut ModuleBuilder<'_>) {
 // ---------------------------------------------------------------------------
 
 /// Reads a CoreCLR System.String object: `[MethodTable:8][length:i32][UTF-16 chars...]`
-pub(crate) fn read_clr_string(addr: usize) -> String {
+pub(crate) fn read_clr_string(addr: usize) -> Result<String, String> {
     if addr == 0 {
-        return String::new();
+        return Err("read_string on null".into());
     }
+    check_readable(addr + 8, 4)?;
     let len = unsafe { std::ptr::read_unaligned((addr + 8) as *const i32) };
-    if len <= 0 {
-        return String::new();
+    if len <= 0 || len > 1_000_000 {
+        return Ok(String::new());
     }
-    let chars_ptr = (addr + 12) as *const u16;
-    let slice = unsafe { std::slice::from_raw_parts(chars_ptr, len as usize) };
-    String::from_utf16_lossy(slice)
+    let chars_addr = addr + 12;
+    let byte_len = len as usize * 2;
+    check_readable(chars_addr, byte_len)?;
+    let slice = unsafe { std::slice::from_raw_parts(chars_addr as *const u16, len as usize) };
+    Ok(String::from_utf16_lossy(slice))
 }
 
 pub(crate) fn managed_object_value(
@@ -542,6 +666,11 @@ fn extract_ptr(val: &Value) -> Result<MethodPtr, RuntimeError> {
     let Value::Native(obj) = val else {
         return Err(RuntimeError::new("expected a MethodPtr"));
     };
-    obj.with(|p: &MethodPtr| *p)
-        .ok_or_else(|| RuntimeError::new("expected a MethodPtr"))
+    let ptr = obj
+        .with(|p: &MethodPtr| *p)
+        .ok_or_else(|| RuntimeError::new("expected a MethodPtr"))?;
+    if ptr.0 == 0 {
+        return Err(RuntimeError::new("null MethodPtr"));
+    }
+    Ok(ptr)
 }

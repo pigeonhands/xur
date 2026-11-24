@@ -1,0 +1,287 @@
+.TH XUR.STD.STUB.CORECLR 7 "2026-11-23" "xur 0.1.3" "Xur Manual"
+.SH NAME
+xur.std.stub.coreclr \- interact with a live CoreCLR (.NET) game
+.SH SYNOPSIS
+.B use std::stub::coreclr;
+.SH DESCRIPTION
+.B std::stub::coreclr
+provides runtime access to a CoreCLR (.NET) game's methods and objects
+from inside the injected process. It is the primary module for writing
+mods and trainers for Godot/.NET and other CoreCLR-based games.
+.PP
+Methods are resolved by assembly, type, and name, then invoked as raw
+native calls. Objects are read and written at known field offsets.
+Methods can be hooked with closures or captured-this references.
+.PP
+The runtime is not created directly; it is attached by an
+engine-specific module such as
+.BR std::stub::godot .
+Once attached, all types in this module operate on the live process.
+.SH FUNCTIONS
+.TP
+.B null() -> ManagedObject
+Return a null managed object reference.
+.TP
+.B from_address(addr: int) -> ManagedObject
+Wrap a raw memory address as a ManagedObject. No validation is
+performed; the address is trusted.
+.SH Runtime METHODS
+The Runtime handle is obtained from the engine module (e.g.
+.BR godot::init() ).
+.TP
+.B method(assembly, type, name) -> Result<MethodPtr>
+Resolve a managed method by assembly name, fully qualified type name,
+and method name. Searches loaded assemblies first, then falls back to
+metadata resolution. Fails if the method is not found.
+.TP
+.B find_method(assembly, type, name, param_count) -> Result<MethodPtr>
+Like
+.B method
+but disambiguates overloads by parameter count.
+Use this when a type has multiple methods with the same name.
+.TP
+.B load_assembly(path) -> Result<()>
+Load a .NET assembly from a file path into the runtime.
+.TP
+.B type_names(assembly) -> Result<[str]>
+List all type names in a loaded assembly.
+.TP
+.B method_names(assembly, type) -> Result<[str]>
+List all method names on a type in a loaded assembly.
+.SH MethodPtr METHODS
+A MethodPtr is a resolved native function pointer to a managed method.
+All call variants marshal arguments as integers (pointers) using the
+System V AMD64 ABI and are only supported on x86_64.
+.TP
+.B call(args...) -> int
+Call the method and return the raw integer result.
+Arguments are marshalled as 64-bit integers.
+ManagedObject arguments are passed as their address.
+.TP
+.B call_ptr(args...) -> ManagedObject
+Call the method and wrap the result as a ManagedObject.
+Use this when the method returns a managed reference.
+.TP
+.B call_float(args...) -> float
+Call the method and return a floating-point result from the
+XMM0 register.
+.TP
+.B call_string(args...) -> str
+Call the method and read the return value as a System.String.
+Equivalent to calling
+.B call_ptr
+followed by
+.BR read_string() .
+.TP
+.B address() -> int
+The raw native code address of the method.
+.TP
+.B resolve_jit() -> MethodPtr
+Follow the JIT precode stub to the actual compiled method body.
+Returns a new MethodPtr pointing to the resolved code.
+Fails if the precode cannot be resolved (e.g. the method has
+not been JIT-compiled yet).
+.TP
+.B patch_precode_target(new_target: MethodPtr) -> ()
+Redirect the JIT precode stub to point at a different method.
+This is a low-level operation for method replacement; prefer
+.B hook
+for most use cases.
+.TP
+.B capture_this() -> CapturedRef
+Install a lightweight hook that saves the first argument (the
+.I this
+pointer) of every call into an atomic slot. The hook passes
+through to the original method. Use this to capture object
+references from methods you cannot call yourself, such as
+singleton accessors invoked by the game's own code.
+.TP
+.B hook(callback) -> ()
+Install a hook on the method. The callback receives the first
+argument (the
+.I this
+pointer) as an integer and returns
+.B Option<int>
+\(em
+.B None
+passes through to the original,
+.B Some(value)
+overrides the return value.
+.TP
+.B peek_bytes(count) -> str
+Read
+.I count
+bytes at the method address, returning a hex dump string.
+Useful for inspecting JIT precode stubs.
+.TP
+.B read_bytes(count) -> [int]
+Read
+.I count
+raw bytes at the method address as a byte array.
+.SH ManagedObject METHODS
+A ManagedObject is a reference to a live .NET object in the game's
+managed heap. Field access uses explicit offsets derived from static
+analysis of the game's assemblies.
+.PP
+.B CoreCLR object layout:
+at offset +0 is the MethodTable pointer, followed by instance fields
+in declaration order. Reference fields are 8-byte pointers; value
+fields are packed at their natural size. Use
+.BR std::re::dotnet " to discover field order from the game's DLLs."
+.PP
+.B System.String layout:
++0 MethodTable, +8 length (int32), +12 UTF-16 characters.
+.PP
+.B List<T> layout:
++0 MethodTable, +8 _items (T[] array reference), +16 _size (int32).
+The backing array has: +0 MethodTable, +8 length (nint), +16 elements.
+.TP
+.B address() -> int
+The raw memory address.
+.TP
+.B is_null() -> bool
+Whether this is a null reference.
+.TP
+.B read_i64(offset) -> Result<int>
+Read a 64-bit integer at the given byte offset.
+.TP
+.B read_i32(offset) -> Result<int>
+Read a 32-bit integer at the given byte offset (sign-extended).
+.TP
+.B write_i32(offset, value) -> Result<()>
+Write a 32-bit integer at the given byte offset.
+.TP
+.B read_u8(offset) -> Result<int>
+Read a single unsigned byte at the given byte offset.
+.TP
+.B deref(offset) -> ManagedObject
+Read a pointer at the given byte offset and return it as a
+ManagedObject. This is the primary way to follow reference fields.
+.TP
+.B read_string() -> Result<str>
+Read this object as a System.String. The object must point to a
+valid .NET string (+8 = length, +12 = UTF-16 chars).
+.TP
+.B read_bytes(offset, count) -> Result<[int]>
+Read
+.I count
+raw bytes starting at the given offset.
+.SH CapturedRef METHODS
+A CapturedRef is an atomic slot that holds the most recently
+captured
+.I this
+pointer from a
+.BR capture_this() " hook."
+.TP
+.B get() -> ManagedObject
+Read the current captured reference. Returns a null ManagedObject
+if no call has been intercepted yet.
+.SH ARGUMENT MARSHALLING
+.B call
+and
+.B call_ptr
+marshal xur values to 64-bit integers for the System V AMD64 calling
+convention:
+.TP
+.B int
+Passed directly.
+.TP
+.B bool
+0 or 1.
+.TP
+.B float
+Cast to integer (truncated).
+.TP
+.B ManagedObject
+Passed as its address.
+.TP
+.B ()
+Passed as 0 (used for null arguments).
+.PP
+Return values are always raw 64-bit integers;
+.B call_ptr
+wraps the result as a ManagedObject, and
+.B call_float
+reads the XMM0 register.
+.PP
+Static methods take no implicit
+.I this
+argument. Instance methods take the object as the first argument:
+.PP
+.nf
+// Static: ModelDb::get_AllRelics()
+let relics = get_all_relics.call_ptr();
+
+// Instance: player.get_Relics()
+let list = get_relics.call_ptr(player);
+.fi
+.SH MEMORY SAFETY
+All pointer reads are validated before access using a
+.B /dev/null
+write probe. Stale or invalid references return an error rather
+than crashing the process. However, the GC can relocate objects
+between reads, so long-lived ManagedObject values should be
+refreshed each frame.
+.SH EXAMPLES
+.SS Basic method resolution and invocation
+.nf
+use std::stub::coreclr;
+use std::stub::godot;
+
+fn stub_main() {
+    let rt = godot::init(9).unwrap();
+
+    // Resolve methods
+    let get_instance = rt.method("sts2", "Some.Manager", "get_Instance").unwrap();
+    let get_name = rt.method("sts2", "Some.Entity", "get_Name").unwrap();
+
+    // Static call (no this arg)
+    let mgr = get_instance.call_ptr();
+
+    // Instance call
+    let name = get_name.call_string(mgr);
+}
+.fi
+.SS Reading List<T> objects
+.nf
+// List<T> layout: +8 = _items (T[]), +16 = _size (int32)
+// Array layout:   +8 = length (nint), +16 = elements (8 bytes each)
+fn read_list(list: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
+    let result = [];
+    if list.is_null() { return result; }
+    let count = match list.read_i32(16) { Ok(c) => c, Err(_) => 0 };
+    if count <= 0 { return result; }
+    let items = list.deref(8);
+    if items.is_null() { return result; }
+    let i = 0;
+    while i < count {
+        let obj = items.deref(16 + i * 8);
+        if !obj.is_null() { result.push(obj); }
+        i += 1;
+    }
+    result
+}
+.fi
+.SS Hooking with capture_this
+.nf
+// Capture a singleton reference from the game's own calls
+let get_state = rt.method("asm", "GameState", "get_Instance").unwrap();
+let captured = get_state.capture_this();
+
+// Later, read the captured reference
+let state = captured.get();
+if !state.is_null() {
+    let hp = state.read_i32(24).unwrap();
+}
+.fi
+.SS Hooking with a callback
+.nf
+let damage = rt.method("asm", "Player", "TakeDamage").unwrap();
+damage.hook(|this_addr| {
+    // Skip damage entirely
+    Some(0)
+});
+.fi
+.SH SEE ALSO
+.BR xur.std.stub.hooking (7),
+.BR xur.std.stub.il2cpp (7)

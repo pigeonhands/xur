@@ -71,7 +71,7 @@ pub(super) fn register(m: &mut ModuleBuilder<'_>) {
             if name_ptr.is_null() {
                 return Ok("?".into());
             }
-            Ok(coreclr::read_clr_string(name_ptr as usize))
+            coreclr::read_clr_string(name_ptr as usize)
         },
     );
 }
