@@ -56,10 +56,10 @@ fn typed_functions_convert_arguments_and_results() {
     let registry = registry();
     let mut cx = TestCx::new(&registry, TEST_PRELUDE);
     let double = fn_id(&registry, "geo::shapes::double");
-    assert_eq!(cx.call(double, &[Value::Int(21)]), Ok(Value::Int(42)));
+    assert_eq!(cx.call(double, &[Value::int(21)]), Ok(Value::int(42)));
     let describe = fn_id(&registry, "geo::shapes::describe");
     assert_eq!(
-        cx.call(describe, &[Value::str("p"), Value::Int(3)]),
+        cx.call(describe, &[Value::str("p"), Value::int(3)]),
         Ok(Value::str("p#3"))
     );
 }
@@ -78,7 +78,7 @@ fn signatures_record_shapes() {
 
 fn new_point(cx: &mut TestCx<'_>, x: f64, y: f64) -> Value {
     let new = fn_id(cx.registry, "geo::Point::new");
-    cx.call(new, &[Value::Float(x), Value::Float(y)]).unwrap()
+    cx.call(new, &[Value::float(x), Value::float(y)]).unwrap()
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn registered_types_are_native_objects() {
     assert_eq!(object.with(Point::clone), Some(Point { x: 3.0, y: 4.0 }));
     assert_eq!(
         cx.call(fn_id(&registry, "geo::Point::norm"), &[point]),
-        Ok(Value::Float(5.0))
+        Ok(Value::float(5.0))
     );
 }
 
@@ -103,7 +103,7 @@ fn mutating_methods_change_the_object_in_place() {
     let point = new_point(&mut cx, 1.0, 2.0);
     let alias = point.clone();
     let scale = fn_id(&registry, "geo::Point::scale");
-    assert_eq!(cx.call(scale, &[point, Value::Float(3.0)]), Ok(Value::Unit));
+    assert_eq!(cx.call(scale, &[point, Value::float(3.0)]), Ok(Value::Unit));
     let Value::Native(object) = &alias else {
         unreachable!()
     };
@@ -119,7 +119,7 @@ fn native_fields_display_and_equality() {
     else {
         unreachable!()
     };
-    assert_eq!(registry.field(&cx, &a, "y"), Some(Ok(Value::Float(2.0))));
+    assert_eq!(registry.field(&cx, &a, "y"), Some(Ok(Value::float(2.0))));
     assert_eq!(registry.field(&cx, &a, "z"), None);
     assert_eq!(registry.display(&a), "Point { x: 1.0, y: 2.0 }");
     assert!(registry.native_eq(&a, &b));

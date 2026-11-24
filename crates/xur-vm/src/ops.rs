@@ -8,16 +8,16 @@
 use std::cmp::Ordering;
 
 use xur_ast::{BinOpKind, UnOp};
-use xur_runtime::{MapKey, Range, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{IntValue, MapKey, Range, RunResult, RuntimeError, Value, lock};
 
 use crate::interp::Interp;
 
 pub(crate) fn unary(op: UnOp, value: &Value) -> RunResult<Value> {
     match (op, value) {
         (UnOp::Neg, Value::Int(i)) => i.checked_neg().map(Value::Int).ok_or_else(overflow),
-        (UnOp::Neg, Value::Float(f)) => Ok(Value::Float(-f)),
+        (UnOp::Neg, Value::Float(f)) => Ok(Value::Float((-f.as_f64()).into())),
         (UnOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
-        (UnOp::BitNot, Value::Int(i)) => Ok(Value::Int(!i)),
+        (UnOp::BitNot, Value::Int(i)) => Ok(Value::Int(i.bit_not())),
         _ => Err(RuntimeError::new(format!(
             "cannot apply `{}` to {}",
             op.as_str(),
@@ -36,14 +36,13 @@ impl Interp<'_> {
                 .resolutions()
                 .repr_values
                 .get(&adt.ctor)
-                .map(|&v| Value::Int(v));
+                .map(|&v| Value::int(v));
         }
         None
     }
 
     pub(crate) fn binary(&self, op: BinOpKind, lhs: &Value, rhs: &Value) -> RunResult<Value> {
         use BinOpKind::*;
-        // Equality uses original values so enum identity is preserved.
         if op == Eq {
             return Ok(Value::Bool(self.values_eq(lhs, rhs)));
         }
@@ -56,21 +55,22 @@ impl Interp<'_> {
         let rhs = rhs_c.as_ref().unwrap_or(rhs);
         let result = match (op, lhs, rhs) {
             (Add | Sub | Mul | Div | Rem, Value::Int(a), Value::Int(b)) => {
-                Some(int_op(op, *a, *b)?)
+                Some(int_arith(op, *a, *b)?)
             }
-            (BitAnd, Value::Int(a), Value::Int(b)) => Some(Value::Int(a & b)),
-            (BitOr, Value::Int(a), Value::Int(b)) => Some(Value::Int(a | b)),
-            (BitXor, Value::Int(a), Value::Int(b)) => Some(Value::Int(a ^ b)),
+            (BitAnd, Value::Int(a), Value::Int(b)) => Some(int_bitwise(*a, *b, |x, y| x & y)),
+            (BitOr, Value::Int(a), Value::Int(b)) => Some(int_bitwise(*a, *b, |x, y| x | y)),
+            (BitXor, Value::Int(a), Value::Int(b)) => Some(int_bitwise(*a, *b, |x, y| x ^ y)),
             (Shl, Value::Int(a), Value::Int(b)) => Some(shift_left(*a, *b)?),
             (Shr, Value::Int(a), Value::Int(b)) => Some(shift_right(*a, *b)?),
             (Add | Sub | Mul | Div | Rem, Value::Float(a), Value::Float(b)) => {
+                let (a, b) = (a.as_f64(), b.as_f64());
                 Some(Value::Float(match op {
                     Add => a + b,
                     Sub => a - b,
                     Mul => a * b,
                     Div => a / b,
                     _ => a % b,
-                }))
+                }.into()))
             }
             (Add, Value::Str(a), Value::Str(b)) => Some(Value::str(&format!("{a}{b}"))),
             (Add, Value::List(a), Value::List(b)) => {
@@ -79,11 +79,19 @@ impl Interp<'_> {
             (Add, Value::Bytes(a), Value::Bytes(b)) => {
                 Some(Value::bytes([lock(a).clone(), lock(b).clone()].concat()))
             }
-            (Add, Value::Ptr(p), Value::Int(n)) => Some(Value::Ptr(p.wrapping_add(*n as u64))),
-            (Sub, Value::Ptr(p), Value::Int(n)) => Some(Value::Ptr(p.wrapping_sub(*n as u64))),
-            (Sub, Value::Ptr(a), Value::Ptr(b)) => Some(Value::Int((*a as i64).wrapping_sub(*b as i64))),
-            (BitAnd, Value::Ptr(p), Value::Int(m)) => Some(Value::Ptr(p & *m as u64)),
-            (BitOr, Value::Ptr(p), Value::Int(m)) => Some(Value::Ptr(p | *m as u64)),
+            (Add, Value::Ptr(p), Value::Int(n)) => {
+                Some(Value::Ptr(p.wrapping_add(n.to_i128() as u64)))
+            }
+            (Sub, Value::Ptr(p), Value::Int(n)) => {
+                Some(Value::Ptr(p.wrapping_sub(n.to_i128() as u64)))
+            }
+            (Sub, Value::Ptr(a), Value::Ptr(b)) => Some(Value::int((*a as i64).wrapping_sub(*b as i64))),
+            (BitAnd, Value::Ptr(p), Value::Int(m)) => {
+                Some(Value::Ptr(p & m.to_i128() as u64))
+            }
+            (BitOr, Value::Ptr(p), Value::Int(m)) => {
+                Some(Value::Ptr(p | m.to_i128() as u64))
+            }
             (Lt | Le | Gt | Ge, _, _) => compare(lhs, rhs).map(|ordering| {
                 Value::Bool(match op {
                     Lt => ordering.is_lt(),
@@ -128,32 +136,58 @@ impl Interp<'_> {
     }
 }
 
-fn int_op(op: BinOpKind, a: i64, b: i64) -> RunResult<Value> {
+fn int_arith(op: BinOpKind, a: IntValue, b: IntValue) -> RunResult<Value> {
+    let (ai, bi) = (a.to_i128(), b.to_i128());
     let result = match op {
-        BinOpKind::Add => a.checked_add(b),
-        BinOpKind::Sub => a.checked_sub(b),
-        BinOpKind::Mul => a.checked_mul(b),
-        BinOpKind::Div | BinOpKind::Rem if b == 0 => {
+        BinOpKind::Add => ai.checked_add(bi),
+        BinOpKind::Sub => ai.checked_sub(bi),
+        BinOpKind::Mul => ai.checked_mul(bi),
+        BinOpKind::Div | BinOpKind::Rem if bi == 0 => {
             return Err(RuntimeError::new("attempt to divide by zero"));
         }
-        BinOpKind::Div => a.checked_div(b),
-        _ => a.checked_rem(b),
+        BinOpKind::Div => ai.checked_div(bi),
+        _ => ai.checked_rem(bi),
     };
-    result.map(Value::Int).ok_or_else(overflow)
-}
-
-fn shift_left(a: i64, b: i64) -> RunResult<Value> {
-    let shift = u32::try_from(b)
-        .map_err(|_| RuntimeError::new(format!("invalid shift amount: {b}")))?;
-    a.checked_shl(shift)
+    let result = result.ok_or_else(overflow)?;
+    IntValue::promote(a, b, result)
         .map(Value::Int)
         .ok_or_else(overflow)
 }
 
-fn shift_right(a: i64, b: i64) -> RunResult<Value> {
-    let shift = u32::try_from(b)
-        .map_err(|_| RuntimeError::new(format!("invalid shift amount: {b}")))?;
-    a.checked_shr(shift)
+fn int_bitwise(a: IntValue, b: IntValue, op: impl FnOnce(i128, i128) -> i128) -> Value {
+    let result = op(a.to_i128(), b.to_i128());
+    let signed = a.is_signed() && b.is_signed();
+    let width = a.width().max(b.width());
+    // Mask the result to the target width to avoid i128 sign-extension artifacts.
+    let result = match width {
+        1 if !signed => result & 0xFF,
+        2 if !signed => result & 0xFFFF,
+        4 if !signed => result & 0xFFFF_FFFF,
+        8 if !signed => result & (u64::MAX as i128),
+        _ => result,
+    };
+    IntValue::narrow(result, signed, width)
+        .or_else(|| IntValue::narrow(result, signed, 8))
+        .map(Value::Int)
+        .unwrap_or_else(|| Value::int(result as i64))
+}
+
+fn shift_left(a: IntValue, b: IntValue) -> RunResult<Value> {
+    let shift = b.to_u32().ok_or_else(|| {
+        RuntimeError::new(format!("invalid shift amount: {b}"))
+    })?;
+    let result = a.to_i128().checked_shl(shift).ok_or_else(overflow)?;
+    IntValue::promote(a, b, result)
+        .map(Value::Int)
+        .ok_or_else(overflow)
+}
+
+fn shift_right(a: IntValue, b: IntValue) -> RunResult<Value> {
+    let shift = b.to_u32().ok_or_else(|| {
+        RuntimeError::new(format!("invalid shift amount: {b}"))
+    })?;
+    let result = a.to_i128().checked_shr(shift).ok_or_else(overflow)?;
+    IntValue::promote(a, b, result)
         .map(Value::Int)
         .ok_or_else(overflow)
 }
@@ -165,7 +199,7 @@ fn overflow() -> RuntimeError {
 fn compare(lhs: &Value, rhs: &Value) -> Option<Ordering> {
     match (lhs, rhs) {
         (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
-        (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+        (Value::Float(a), Value::Float(b)) => a.as_f64().partial_cmp(&b.as_f64()),
         (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
         (Value::Ptr(a), Value::Ptr(b)) => Some(a.cmp(b)),
         _ => None,
@@ -176,13 +210,18 @@ pub(crate) fn index(base: &Value, index: &Value) -> RunResult<Value> {
     match (base, index) {
         (Value::List(items), Value::Int(i)) => {
             let items = lock(items);
-            position(*i, items.len()).map(|i| items[i].clone())
+            let idx = i.to_i64().ok_or_else(|| out_of_range(*i, items.len()))?;
+            position(idx, items.len()).map(|i| items[i].clone())
         }
         (Value::Bytes(bytes), Value::Int(i)) => {
             let bytes = lock(bytes);
-            position(*i, bytes.len()).map(|i| Value::Int(bytes[i].into()))
+            let idx = i.to_i64().ok_or_else(|| out_of_range(*i, bytes.len()))?;
+            position(idx, bytes.len()).map(|i| Value::Int(IntValue::U8(bytes[i])))
         }
-        (Value::Tuple(items), Value::Int(i)) => position(*i, items.len()).map(|i| items[i].clone()),
+        (Value::Tuple(items), Value::Int(i)) => {
+            let idx = i.to_i64().ok_or_else(|| out_of_range(*i, items.len()))?;
+            position(idx, items.len()).map(|i| items[i].clone())
+        }
         (Value::List(items), Value::Range(range)) => {
             let items = lock(items);
             Ok(Value::list(items[slice(range, items.len())?].to_vec()))
@@ -195,7 +234,6 @@ pub(crate) fn index(base: &Value, index: &Value) -> RunResult<Value> {
             Ok(Value::tuple(items[slice(range, items.len())?].to_vec()))
         }
         (Value::Str(s), Value::Range(range)) => {
-            // Strings are sliced by character, not byte.
             let chars: Vec<char> = s.chars().collect();
             let text: String = chars[slice(range, chars.len())?].iter().collect();
             Ok(Value::str(&text))
@@ -218,14 +256,15 @@ pub(crate) fn set_index(base: &Value, index: &Value, value: Value) -> RunResult<
     match (base, index) {
         (Value::List(items), Value::Int(i)) => {
             let mut items = lock(items);
-            let i = position(*i, items.len())?;
+            let idx = i.to_i64().ok_or_else(|| out_of_range(*i, items.len()))?;
+            let i = position(idx, items.len())?;
             items[i] = value;
             Ok(())
         }
         (Value::Bytes(bytes), Value::Int(i)) => {
             let byte = match value {
-                Value::Int(byte) => u8::try_from(byte)
-                    .map_err(|_| RuntimeError::new(format!("{byte} is not a byte (0 to 255)")))?,
+                Value::Int(n) => u8::try_from(n.to_i128())
+                    .map_err(|_| RuntimeError::new(format!("{n} is not a byte (0 to 255)")))?,
                 other => {
                     return Err(RuntimeError::new(format!(
                         "expected a byte, found {}",
@@ -234,7 +273,8 @@ pub(crate) fn set_index(base: &Value, index: &Value, value: Value) -> RunResult<
                 }
             };
             let mut bytes = lock(bytes);
-            let i = position(*i, bytes.len())?;
+            let idx = i.to_i64().ok_or_else(|| out_of_range(*i, bytes.len()))?;
+            let i = position(idx, bytes.len())?;
             bytes[i] = byte;
             Ok(())
         }
@@ -273,4 +313,8 @@ fn position(index: i64, len: usize) -> RunResult<usize> {
         .ok()
         .filter(|&i| i < len)
         .ok_or_else(|| RuntimeError::new(format!("index {index} is out of range for length {len}")))
+}
+
+fn out_of_range(index: IntValue, len: usize) -> RuntimeError {
+    RuntimeError::new(format!("index {index} is out of range for length {len}"))
 }

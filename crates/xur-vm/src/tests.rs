@@ -1134,7 +1134,7 @@ fn test_all_examples() {
 
     let value = result.unwrap_or_else(|e| panic!("test_all failed: {}\n{printed}", e.message));
     let passed = match value {
-        xur_runtime::Value::Int(n) => n,
+        xur_runtime::Value::Int(n) => n.to_i64().expect("test_all returned an int that doesn't fit i64"),
         other => panic!("test_all returned {other:?}, expected i64"),
     };
     assert!(passed > 10, "test_all only ran {passed} examples, expected >10");

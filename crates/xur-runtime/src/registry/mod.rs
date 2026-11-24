@@ -835,7 +835,7 @@ fn enum_len(cx: &mut dyn Context, enum_def: DefId, args: &[Value]) -> RunResult<
     if !args.is_empty() {
         return Err(RuntimeError::new("`len` takes no arguments"));
     }
-    Ok(Value::Int(cx.enum_variants(enum_def).len() as i64))
+    Ok(Value::int(cx.enum_variants(enum_def).len() as i64))
 }
 
 fn enum_values(cx: &mut dyn Context, enum_def: DefId, args: &[Value]) -> RunResult<Value> {

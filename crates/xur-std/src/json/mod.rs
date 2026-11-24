@@ -196,7 +196,7 @@ mod tests {
         let value = unwrap_ok(&cx, &result);
 
         assert_eq!(field(&value, "name"), Value::str("Alice"));
-        assert_eq!(field(&value, "age"), Value::Int(30));
+        assert_eq!(field(&value, "age"), Value::int(30));
     }
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
             panic!("expected list");
         };
         let scores = lock(&scores);
-        assert_eq!(*scores, vec![Value::Int(10), Value::Int(20)]);
+        assert_eq!(*scores, vec![Value::int(10), Value::int(20)]);
     }
 
     #[test]
@@ -240,7 +240,7 @@ mod tests {
             panic!("expected list, got {value:?}");
         };
         let items = lock(items);
-        assert_eq!(items[0], Value::Int(1));
+        assert_eq!(items[0], Value::int(1));
         assert_eq!(items[1], Value::str("two"));
         assert_eq!(items[2], Value::Bool(true));
     }
@@ -251,10 +251,10 @@ mod tests {
         let mut cx = TestCx::new(&reg, crate::PRELUDE);
 
         let r = call_parse(&mut cx, "42");
-        assert_eq!(unwrap_ok(&cx, &r), Value::Int(42));
+        assert_eq!(unwrap_ok(&cx, &r), Value::int(42));
 
         let r = call_parse(&mut cx, "2.75");
-        assert_eq!(unwrap_ok(&cx, &r), Value::Float(2.75));
+        assert_eq!(unwrap_ok(&cx, &r), Value::float(2.75));
 
         let r = call_parse(&mut cx, "true");
         assert_eq!(unwrap_ok(&cx, &r), Value::Bool(true));
@@ -278,7 +278,7 @@ mod tests {
         let mut cx = TestCx::new(&reg, crate::PRELUDE);
         let record = Value::Record(
             Record::new(vec![
-                (Symbol::intern("a"), Value::Int(1)),
+                (Symbol::intern("a"), Value::int(1)),
                 (Symbol::intern("b"), Value::str("two")),
             ])
             .into(),
@@ -297,7 +297,7 @@ mod tests {
     fn stringify_list() {
         let reg = registry();
         let mut cx = TestCx::new(&reg, crate::PRELUDE);
-        let list = Value::list(vec![Value::Int(1), Value::Bool(false)]);
+        let list = Value::list(vec![Value::int(1), Value::Bool(false)]);
         let result = call_stringify(&mut cx, list);
         let json = unwrap_ok(&cx, &result);
         assert_eq!(json, Value::str("[1,false]"));

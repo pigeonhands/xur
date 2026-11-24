@@ -64,7 +64,7 @@ fn access_from_int(v: i64) -> RunResult<Access> {
 fn access_arg(cx: &mut dyn xur_runtime::Context, val: &Value) -> RunResult<Access> {
     match val {
         Value::Str(s) => access_from_str(s),
-        Value::Int(v) => access_from_int(*v),
+        Value::Int(v) => access_from_int(v.to_i64().ok_or_else(|| RuntimeError::new("access value out of range"))?),
         Value::Adt(adt) => {
             let v = cx.repr_value(adt.ctor)
                 .ok_or_else(|| RuntimeError::new("expected an Access enum value"))?;
@@ -132,7 +132,7 @@ fn register_in(registry: &Registry, proc: &mut ModuleBuilder<'_>) {
     registry.converter(Module::SHAPE, module_record);
     registry.converter(Address::SHAPE, |_, peek| {
         let address: &Address = peek.get().map_err(reflect_error)?;
-        Ok(Value::Int(address.get() as i64))
+        Ok(Value::Int((address.get()).into()))
     });
 
     proc.repr_enum("Access", &[
@@ -254,7 +254,7 @@ fn open(cx: &mut dyn xur_runtime::Context, args: &[Value]) -> RunResult<Value> {
         [Value::Int(pid), val] => (*pid, val),
         _ => return Err(RuntimeError::new("`open` takes (pid, access)")),
     };
-    let pid = u32::try_from(pid).map_err(|_| RuntimeError::new("invalid pid"))?;
+    let pid = pid.to_u32().ok_or_else(|| RuntimeError::new("invalid pid"))?;
     let access = access_arg(cx, access_val)?;
     handle_result(cx, ProcessHandle::open(pid, access))
 }
@@ -296,8 +296,8 @@ fn region_record(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value
     };
     let fields = [
         ("base", Value::Ptr(region.base.get() as u64)),
-        ("size", Value::Int(region.size as i64)),
-        ("protection", Value::Int(region.protection.bits().into())),
+        ("size", Value::Int((region.size as u64).into())),
+        ("protection", Value::int(region.protection.bits().into())),
         ("kind", to_value(cx, &region.kind)?),
         ("path", path),
     ];
@@ -319,7 +319,7 @@ fn module_record(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<Value
         ("name", Value::str(&module.name.to_string_lossy())),
         ("path", Value::str(&module.path.display().to_string())),
         ("base", Value::Ptr(module.base.get() as u64)),
-        ("size", Value::Int(module.size as i64)),
+        ("size", Value::Int((module.size as u64).into())),
     ];
     let record = Record {
         ty: cx.registry().record_type_of_shape(peek.shape()),

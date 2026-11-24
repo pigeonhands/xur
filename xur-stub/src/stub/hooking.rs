@@ -74,9 +74,9 @@ pub(crate) fn register(registry: &Registry) {
 
         m.raw_function("by_name", |_cx, args| {
             let (module, symbol, dest) = match args {
-                [Value::Str(symbol), Value::Int(dest)] => (None, symbol.clone(), *dest),
+                [Value::Str(symbol), Value::Int(dest)] => (None, symbol.clone(), dest.to_usize().ok_or_else(|| RuntimeError::new("dest out of range"))?),
                 [Value::Str(module), Value::Str(symbol), Value::Int(dest)] => {
-                    (Some(module.clone()), symbol.clone(), *dest)
+                    (Some(module.clone()), symbol.clone(), dest.to_usize().ok_or_else(|| RuntimeError::new("dest out of range"))?)
                 }
                 _ => {
                     return Err(RuntimeError::new(

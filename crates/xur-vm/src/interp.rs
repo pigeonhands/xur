@@ -415,8 +415,8 @@ impl<'s> Interp<'s> {
                 let value = match value {
                     Constant::Unit => Value::Unit,
                     Constant::Bool(b) => Value::Bool(*b),
-                    Constant::Int(i) => Value::Int(*i),
-                    Constant::Float(f) => Value::Float(*f),
+                    Constant::Int(i) => Value::int(*i),
+                    Constant::Float(f) => Value::float(*f),
                     Constant::Str(s) => Value::Str(Arc::clone(s)),
                     // Each evaluation makes a new buffer, so changing one
                     // doesn't change the literal.
@@ -580,7 +580,9 @@ impl<'s> Interp<'s> {
                 let bound = |reg: &Option<Reg>| -> RunResult<Option<i64>> {
                     match reg.map(|reg| frame.get(reg)) {
                         None => Ok(None),
-                        Some(Value::Int(i)) => Ok(Some(*i)),
+                        Some(Value::Int(i)) => i.to_i64().map(Some).ok_or_else(|| {
+                            RuntimeError::new(format!("{i} does not fit in a range bound"))
+                        }),
                         Some(other) => Err(RuntimeError::new(format!(
                             "range bounds must be integers, found {}",
                             other.kind()
@@ -733,7 +735,7 @@ impl<'s> Interp<'s> {
                         frame.get(*ptr).kind()
                     )));
                 };
-                frame.set(*dst, Value::Int(*addr as i64));
+                frame.set(*dst, Value::Int((*addr).into()));
             }
             InstKind::Error { message } => return Err(RuntimeError::new(message.clone())),
         }
@@ -843,9 +845,9 @@ fn iterate(value: &Value) -> RunResult<Arc<ValueIter>> {
             let start =
                 start.ok_or_else(|| RuntimeError::new("cannot iterate a range without a start"))?;
             match (end, inclusive) {
-                (Some(end), false) => ValueIter::new((start..*end).map(Value::Int)),
-                (Some(end), true) => ValueIter::new((start..=*end).map(Value::Int)),
-                (None, _) => ValueIter::new((start..).map(Value::Int)),
+                (Some(end), false) => ValueIter::new((start..*end).map(Value::int)),
+                (Some(end), true) => ValueIter::new((start..=*end).map(Value::int)),
+                (None, _) => ValueIter::new((start..).map(Value::int)),
             }
         }
         other => {
@@ -862,8 +864,8 @@ fn constant_to_value(c: &Constant) -> Value {
     match c {
         Constant::Unit => Value::Unit,
         Constant::Bool(b) => Value::Bool(*b),
-        Constant::Int(i) => Value::Int(*i),
-        Constant::Float(f) => Value::Float(*f),
+        Constant::Int(i) => Value::int(*i),
+        Constant::Float(f) => Value::float(*f),
         Constant::Str(s) => Value::Str(Arc::clone(s)),
         Constant::Bytes(b) => Value::bytes(b.to_vec()),
     }

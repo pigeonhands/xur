@@ -156,7 +156,7 @@ fn write(bytes: &mut [u8], offset: &Value, raw: &[u8]) -> RunResult<Value> {
 fn offset_of(offset: &Value) -> RunResult<usize> {
     match offset {
         Value::Int(i) => {
-            usize::try_from(*i).map_err(|_| RuntimeError::new(format!("{i} is not a valid offset")))
+            i.to_usize().ok_or_else(|| RuntimeError::new(format!("{i} is not a valid offset")))
         }
         other => Err(RuntimeError::new(format!(
             "expected an integer offset, found {}",
@@ -175,17 +175,17 @@ fn out_of_range(start: usize, len: usize, total: usize) -> RuntimeError {
 fn number_value<T: Into<Number>>(value: T) -> RunResult<Value> {
     match value.into() {
         Number::Int(i) => i64::try_from(i)
-            .map(Value::Int)
+            .map(Value::int)
             .map_err(|_| RuntimeError::new(format!("{i} does not fit in a Xur integer"))),
-        Number::Float(f) => Ok(Value::Float(f)),
+        Number::Float(f) => Ok(Value::float(f)),
     }
 }
 
 /// A Xur value as a number of type `T`, named `name` in errors.
 fn number_from<T: TryFrom<Number>>(value: &Value, name: &str) -> RunResult<T> {
     let (number, shown) = match value {
-        Value::Int(i) => (Number::Int((*i).into()), i.to_string()),
-        Value::Float(f) => (Number::Float(*f), f.to_string()),
+        Value::Int(i) => (Number::Int(i.to_i128()), i.to_string()),
+        Value::Float(f) => (Number::Float(f.as_f64()), f.to_string()),
         other => {
             return Err(RuntimeError::new(format!(
                 "expected a number, found {}",

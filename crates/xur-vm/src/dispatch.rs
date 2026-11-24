@@ -34,11 +34,11 @@ impl Interp<'_> {
                     0 => {
                         let f: unsafe extern "C" fn() -> u64 =
                             unsafe { std::mem::transmute(addr) };
-                        Ok(Value::Int(unsafe { f() } as i64))
+                        Ok(Value::Int((unsafe { f() }).into()))
                     }
                     1 => {
                         let arg = match &args[0] {
-                            Value::Int(n) => *n as u64,
+                            Value::Int(n) => n.to_i128() as u64,
                             Value::Ptr(p) => *p,
                             _ => {
                                 return Err(RuntimeError::new(
@@ -48,7 +48,7 @@ impl Interp<'_> {
                         };
                         let f: unsafe extern "C" fn(u64) -> u64 =
                             unsafe { std::mem::transmute(addr) };
-                        Ok(Value::Int(unsafe { f(arg) } as i64))
+                        Ok(Value::Int((unsafe { f(arg) }).into()))
                     }
                     _ => Err(RuntimeError::new(
                         "function pointer calls support 0 or 1 arguments",
@@ -225,7 +225,7 @@ impl Interp<'_> {
     fn module_get_method(&mut self, module: DefId, args: &[Value]) -> RunResult<Value> {
         let (name_str, expected_params, expected_sig) = match args {
             [Value::Str(name)] => (name.as_ref(), None, None),
-            [Value::Str(name), Value::Int(n)] => (name.as_ref(), Some(*n as usize), None),
+            [Value::Str(name), Value::Int(n)] => (name.as_ref(), n.to_usize(), None),
             [Value::Str(name), Value::Type(ty)] => (name.as_ref(), None, Some(ty.as_ref())),
             _ => return Err(RuntimeError::new(
                 "`get_method` takes a name and an optional param count or type: `mod.get_method(\"name\")`, `mod.get_method(\"name\", 2)`, or `mod.get_method(\"name\", fn(u32) -> str)`",

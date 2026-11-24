@@ -79,8 +79,8 @@ fn register_enums(x86: &mut ModuleBuilder<'_>) {
 /// `bitness` is 16, 32 or 64. `ip` defaults to 0.
 fn decode(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let (bitness, data, ip) = match args {
-        [Value::Int(b), Value::Bytes(data)] => (*b, data, 0u64),
-        [Value::Int(b), Value::Bytes(data), Value::Int(ip)] => (*b, data, *ip as u64),
+        [Value::Int(b), Value::Bytes(data)] => (b.to_i64().ok_or_else(|| RuntimeError::new(format!("{b} is not a valid bitness")))?, data, 0u64),
+        [Value::Int(b), Value::Bytes(data), Value::Int(ip)] => (b.to_i64().ok_or_else(|| RuntimeError::new(format!("{b} is not a valid bitness")))?, data, ip.to_u64().ok_or_else(|| RuntimeError::new(format!("{ip} is not a valid address")))?),
         _ => {
             return Err(RuntimeError::new(
                 "`decode` takes (bitness, bytes) or (bitness, bytes, ip)",
@@ -104,8 +104,8 @@ fn decode(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 /// Re-encodes the instructions at the given `ip` (default 0).
 fn encode(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let (bitness, list, ip) = match args {
-        [Value::Int(b), Value::List(list)] => (*b, list, 0u64),
-        [Value::Int(b), Value::List(list), Value::Int(ip)] => (*b, list, *ip as u64),
+        [Value::Int(b), Value::List(list)] => (b.to_i64().ok_or_else(|| RuntimeError::new(format!("{b} is not a valid bitness")))?, list, 0u64),
+        [Value::Int(b), Value::List(list), Value::Int(ip)] => (b.to_i64().ok_or_else(|| RuntimeError::new(format!("{b} is not a valid bitness")))?, list, ip.to_u64().ok_or_else(|| RuntimeError::new(format!("{ip} is not a valid address")))?),
         _ => {
             return Err(RuntimeError::new(
                 "`encode` takes (bitness, instructions) or (bitness, instructions, ip)",
@@ -259,7 +259,7 @@ fn register_insn(x86: &mut ModuleBuilder<'_>) {
 fn create_insn(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let (code, ops) = match args.split_first() {
         Some((Value::Str(name), rest)) => (parse_code(name)?, rest),
-        Some((Value::Int(n), rest)) => (int_to_code(*n)?, rest),
+        Some((Value::Int(n), rest)) => (int_to_code(n.to_i64().ok_or_else(|| RuntimeError::new(format!("{n} is not a valid Code")))?)?, rest),
         Some((Value::Adt(adt), rest)) => {
             let v = cx.repr_value(adt.ctor)
                 .ok_or_else(|| RuntimeError::new("expected a Code enum value"))?;
@@ -315,7 +315,7 @@ fn create_mem(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let mem = match args {
         [Value::Str(base)] => MemoryOperand::with_base(parse_reg(base)?),
         [Value::Str(base), Value::Int(disp)] => {
-            MemoryOperand::with_base_displ(parse_reg(base)?, *disp)
+            MemoryOperand::with_base_displ(parse_reg(base)?, disp.to_i64().ok_or_else(|| RuntimeError::new(format!("{disp} does not fit in an i64 displacement")))?)
         }
         [
             Value::Str(base),
@@ -325,8 +325,8 @@ fn create_mem(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         ] => MemoryOperand::with_base_index_scale_displ_size(
             parse_reg(base)?,
             parse_reg(index)?,
-            *scale as u32,
-            *disp,
+            scale.to_u32().ok_or_else(|| RuntimeError::new(format!("{scale} is not a valid scale")))?,
+            disp.to_i64().ok_or_else(|| RuntimeError::new(format!("{disp} does not fit in an i64 displacement")))?,
             1,
         ),
         _ => {
@@ -348,7 +348,7 @@ enum Operand {
 fn parse_operand(cx: &dyn Context, value: &Value) -> RunResult<Operand> {
     match value {
         Value::Str(s) => Ok(Operand::Reg(parse_reg(s)?)),
-        Value::Int(n) => Ok(Operand::Imm(*n)),
+        Value::Int(n) => Ok(Operand::Imm(n.to_i64().ok_or_else(|| RuntimeError::new(format!("{n} does not fit in an i64 immediate")))?)),
         Value::Adt(adt) => {
             let v = cx.repr_value(adt.ctor)
                 .ok_or_else(|| RuntimeError::new("enum operand has no repr value"))?;

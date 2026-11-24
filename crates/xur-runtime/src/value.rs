@@ -23,13 +23,244 @@ pub fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// An integer value that preserves its original width.
+#[derive(Debug, Clone, Copy)]
+pub enum IntValue {
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+}
+
+impl IntValue {
+    pub fn to_i128(self) -> i128 {
+        match self {
+            Self::I8(v) => v as i128,
+            Self::I16(v) => v as i128,
+            Self::I32(v) => v as i128,
+            Self::I64(v) => v as i128,
+            Self::U8(v) => v as i128,
+            Self::U16(v) => v as i128,
+            Self::U32(v) => v as i128,
+            Self::U64(v) => v as i128,
+        }
+    }
+
+    pub fn to_i64(self) -> Option<i64> {
+        i64::try_from(self.to_i128()).ok()
+    }
+
+    pub fn to_u64(self) -> Option<u64> {
+        u64::try_from(self.to_i128()).ok()
+    }
+
+    pub fn to_u32(self) -> Option<u32> {
+        u32::try_from(self.to_i128()).ok()
+    }
+
+    pub fn to_usize(self) -> Option<usize> {
+        usize::try_from(self.to_i128()).ok()
+    }
+
+    pub fn as_f64(self) -> f64 {
+        self.to_i128() as f64
+    }
+
+    pub fn is_signed(self) -> bool {
+        matches!(self, Self::I8(_) | Self::I16(_) | Self::I32(_) | Self::I64(_))
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.to_i128() == 0
+    }
+
+    pub fn width(self) -> u8 {
+        match self {
+            Self::I8(_) | Self::U8(_) => 1,
+            Self::I16(_) | Self::U16(_) => 2,
+            Self::I32(_) | Self::U32(_) => 4,
+            Self::I64(_) | Self::U64(_) => 8,
+        }
+    }
+
+    /// Try to narrow `result` into an IntValue of the given signedness and width.
+    pub fn narrow(result: i128, signed: bool, width: u8) -> Option<Self> {
+        if signed {
+            match width {
+                1 => i8::try_from(result).ok().map(Self::I8),
+                2 => i16::try_from(result).ok().map(Self::I16),
+                4 => i32::try_from(result).ok().map(Self::I32),
+                _ => i64::try_from(result).ok().map(Self::I64),
+            }
+        } else {
+            match width {
+                1 => u8::try_from(result).ok().map(Self::U8),
+                2 => u16::try_from(result).ok().map(Self::U16),
+                4 => u32::try_from(result).ok().map(Self::U32),
+                _ => u64::try_from(result).ok().map(Self::U64),
+            }
+        }
+    }
+
+    /// Narrow `result` to the common promoted type of two operands. Tries the
+    /// natural type first, then widens, then flips signedness as a last resort.
+    pub fn promote(a: Self, b: Self, result: i128) -> Option<Self> {
+        let signed = a.is_signed() || b.is_signed();
+        let width = a.width().max(b.width());
+        Self::narrow(result, signed, width)
+            .or_else(|| Self::narrow(result, signed, 8))
+            .or_else(|| Self::narrow(result, !signed, 8))
+    }
+
+    pub fn checked_neg(self) -> Option<Self> {
+        let result = self.to_i128().checked_neg()?;
+        let width = self.width();
+        Self::narrow(result, true, width)
+            .or_else(|| Self::narrow(result, true, 8))
+    }
+
+    pub fn bit_not(self) -> Self {
+        match self {
+            Self::I8(v) => Self::I8(!v),
+            Self::I16(v) => Self::I16(!v),
+            Self::I32(v) => Self::I32(!v),
+            Self::I64(v) => Self::I64(!v),
+            Self::U8(v) => Self::U8(!v),
+            Self::U16(v) => Self::U16(!v),
+            Self::U32(v) => Self::U32(!v),
+            Self::U64(v) => Self::U64(!v),
+        }
+    }
+}
+
+impl PartialEq for IntValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_i128() == other.to_i128()
+    }
+}
+
+impl Eq for IntValue {}
+
+impl PartialOrd for IntValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IntValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_i128().cmp(&other.to_i128())
+    }
+}
+
+impl Hash for IntValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_i128().hash(state);
+    }
+}
+
+impl fmt::Display for IntValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::I8(v) => write!(f, "{v}"),
+            Self::I16(v) => write!(f, "{v}"),
+            Self::I32(v) => write!(f, "{v}"),
+            Self::I64(v) => write!(f, "{v}"),
+            Self::U8(v) => write!(f, "{v}"),
+            Self::U16(v) => write!(f, "{v}"),
+            Self::U32(v) => write!(f, "{v}"),
+            Self::U64(v) => write!(f, "{v}"),
+        }
+    }
+}
+
+impl From<i8> for IntValue {
+    fn from(v: i8) -> Self { Self::I8(v) }
+}
+impl From<i16> for IntValue {
+    fn from(v: i16) -> Self { Self::I16(v) }
+}
+impl From<i32> for IntValue {
+    fn from(v: i32) -> Self { Self::I32(v) }
+}
+impl From<i64> for IntValue {
+    fn from(v: i64) -> Self { Self::I64(v) }
+}
+impl From<u8> for IntValue {
+    fn from(v: u8) -> Self { Self::U8(v) }
+}
+impl From<u16> for IntValue {
+    fn from(v: u16) -> Self { Self::U16(v) }
+}
+impl From<u32> for IntValue {
+    fn from(v: u32) -> Self { Self::U32(v) }
+}
+impl From<u64> for IntValue {
+    fn from(v: u64) -> Self { Self::U64(v) }
+}
+impl From<usize> for IntValue {
+    fn from(v: usize) -> Self { Self::U64(v as u64) }
+}
+impl From<bool> for IntValue {
+    fn from(v: bool) -> Self { Self::U8(v as u8) }
+}
+
+/// A float value that preserves its original width.
+#[derive(Debug, Clone, Copy)]
+pub enum FloatValue {
+    F32(f32),
+    F64(f64),
+}
+
+impl FloatValue {
+    pub fn as_f64(self) -> f64 {
+        match self {
+            Self::F32(v) => v as f64,
+            Self::F64(v) => v,
+        }
+    }
+
+    pub fn as_f32(self) -> f32 {
+        match self {
+            Self::F32(v) => v,
+            Self::F64(v) => v as f32,
+        }
+    }
+}
+
+impl PartialEq for FloatValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_f64() == other.as_f64()
+    }
+}
+
+impl fmt::Display for FloatValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::F32(v) => write!(f, "{v}"),
+            Self::F64(v) => write!(f, "{v}"),
+        }
+    }
+}
+
+impl From<f32> for FloatValue {
+    fn from(v: f32) -> Self { Self::F32(v) }
+}
+impl From<f64> for FloatValue {
+    fn from(v: f64) -> Self { Self::F64(v) }
+}
+
 #[derive(Debug, Clone)]
 pub enum Value {
     /// `()`, the value of expressions that produce nothing.
     Unit,
     Bool(bool),
-    Int(i64),
-    Float(f64),
+    Int(IntValue),
+    Float(FloatValue),
     Str(Arc<str>),
     Tuple(Arc<[Value]>),
     List(Arc<Mutex<Vec<Value>>>),
@@ -271,6 +502,15 @@ pub struct Range {
 }
 
 impl Value {
+    /// Convenience: `Value::int(42)` creates `Value::Int(IntValue::I64(42))`.
+    pub fn int(v: i64) -> Self {
+        Self::Int(IntValue::I64(v))
+    }
+
+    pub fn float(v: f64) -> Self {
+        Self::Float(FloatValue::F64(v))
+    }
+
     pub fn str(s: &str) -> Self {
         Self::Str(s.into())
     }
@@ -470,11 +710,37 @@ mod tests {
     #[test]
     fn equality_is_structural_and_kind_strict() {
         assert_eq!(
-            Value::list(vec![Value::Int(1)]),
-            Value::list(vec![Value::Int(1)])
+            Value::list(vec![Value::int(1)]),
+            Value::list(vec![Value::int(1)])
         );
-        assert_ne!(Value::Int(1), Value::Float(1.0));
+        assert_ne!(Value::int(1), Value::float(1.0));
         assert_eq!(Value::str("a"), Value::str("a"));
         assert_eq!(Value::tuple(vec![]), Value::Unit);
+    }
+
+    #[test]
+    fn int_value_cross_width_equality() {
+        assert_eq!(IntValue::I64(42), IntValue::U8(42));
+        assert_eq!(IntValue::U32(0), IntValue::I8(0));
+        assert_ne!(IntValue::I64(-1), IntValue::U64(u64::MAX));
+    }
+
+    #[test]
+    fn int_value_ordering() {
+        assert!(IntValue::I64(-1) < IntValue::U8(0));
+        assert!(IntValue::U64(u64::MAX) > IntValue::I64(i64::MAX));
+    }
+
+    #[test]
+    fn int_value_conversions() {
+        assert_eq!(IntValue::U64(u64::MAX).to_i64(), None);
+        assert_eq!(IntValue::U64(42).to_i64(), Some(42));
+        assert_eq!(IntValue::I64(-1).to_u64(), None);
+        assert_eq!(IntValue::U8(255).to_u64(), Some(255));
+    }
+
+    #[test]
+    fn float_value_cross_width_equality() {
+        assert_eq!(FloatValue::F32(1.0), FloatValue::F64(1.0));
     }
 }

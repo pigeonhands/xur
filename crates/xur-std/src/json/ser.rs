@@ -18,8 +18,16 @@ fn serialize_value<S: ser::Serializer>(value: &Value, serializer: S) -> Result<S
     match value {
         Value::Unit => serializer.serialize_unit(),
         Value::Bool(b) => serializer.serialize_bool(*b),
-        Value::Int(i) => serializer.serialize_i64(*i),
-        Value::Float(f) => serializer.serialize_f64(*f),
+        Value::Int(i) => {
+            if let Some(v) = i.to_i64() {
+                serializer.serialize_i64(v)
+            } else if let Some(v) = i.to_u64() {
+                serializer.serialize_u64(v)
+            } else {
+                serializer.serialize_i128(i.to_i128())
+            }
+        }
+        Value::Float(f) => serializer.serialize_f64(f.as_f64()),
         Value::Str(s) => serializer.serialize_str(s),
         Value::Tuple(items) => {
             let mut seq = serializer.serialize_seq(Some(items.len()))?;

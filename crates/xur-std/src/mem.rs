@@ -17,11 +17,11 @@ pub(crate) fn register(registry: &Registry) {
         ])
         .named_raw_function_returns::<i64>("size_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "size_of")?;
-            Ok(Value::Int(layout.byte_size() as i64))
+            Ok(Value::int(layout.byte_size() as i64))
         })
         .named_raw_function_returns::<i64>("align_of", &[], |cx, args| {
             let layout = type_arg_layout(cx, args, "align_of")?;
-            Ok(Value::Int(layout.alignment() as i64))
+            Ok(Value::int(layout.alignment() as i64))
         })
         .named_raw_function("from_bytes", &["data"], |cx, args| {
             let [Value::Bytes(data)] = args else {
@@ -36,7 +36,7 @@ pub(crate) fn register(registry: &Registry) {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`size_of_val` takes a struct"));
             };
-            Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
+            Ok(Value::int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
         })
         .named_raw_function_returns::<Vec<u8>>("to_bytes", &["value"], struct_to_bytes)
         .named_raw_function_returns_xur("alloc_page", &["size"], XurType::ptr::<u8>(), alloc_page)
@@ -56,7 +56,7 @@ pub(crate) fn register(registry: &Registry) {
             let [Value::Adt(adt)] = args else {
                 return Err(RuntimeError::new("`byte_size` takes no arguments"));
             };
-            Ok(Value::Int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
+            Ok(Value::int(layout_of_def(cx, adt.ctor, 0)?.byte_size() as i64))
         })
         .raw_function_returns::<String>("to_str", |cx, args| {
             let [Value::Adt(adt)] = args else {
@@ -74,7 +74,7 @@ fn alloc_page(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [Value::Int(size)] = args else {
         return Err(RuntimeError::new("`alloc_page` takes a size in bytes"));
     };
-    let size = *size as usize;
+    let size = size.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?;
     let addr = platform::alloc_rw(size).map_err(RuntimeError::new)?;
     Ok(Value::Ptr(addr as u64))
 }
@@ -82,15 +82,15 @@ fn alloc_page(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 fn protect_page(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let (addr, size, prot) = match args {
         [Value::Ptr(a), Value::Int(s), Value::Str(mode)] => {
-            (*a, *s, mode_to_prot(mode)?)
+            (*a, s.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?, mode_to_prot(mode)?)
         }
         [Value::Ptr(a), Value::Int(s), Value::Int(flags)] => {
-            (*a, *s, *flags as i32)
+            (*a, s.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?, flags.to_i64().ok_or_else(|| RuntimeError::new("flags out of range"))? as i32)
         }
         [Value::Ptr(a), Value::Int(s), Value::Adt(adt)] => {
             let v = cx.repr_value(adt.ctor)
                 .ok_or_else(|| RuntimeError::new("expected a Protection enum value"))?;
-            (*a, *s, v as i32)
+            (*a, s.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?, v as i32)
         }
         _ => {
             return Err(RuntimeError::new(
@@ -98,7 +98,7 @@ fn protect_page(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             ));
         }
     };
-    platform::protect(addr as usize, size as usize, prot)
+    platform::protect(addr as usize, size, prot)
         .map_err(RuntimeError::new)?;
     Ok(Value::Unit)
 }
@@ -131,7 +131,7 @@ fn free_page(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [Value::Ptr(addr), Value::Int(size)] = args else {
         return Err(RuntimeError::new("`free_page` takes (ptr, size)"));
     };
-    platform::free(*addr as usize, *size as usize).map_err(RuntimeError::new)?;
+    platform::free(*addr as usize, size.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?).map_err(RuntimeError::new)?;
     Ok(Value::Unit)
 }
 
@@ -236,13 +236,10 @@ fn read_bytes(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [Value::Ptr(addr), Value::Int(len)] = args else {
         return Err(RuntimeError::new("`read_bytes` takes (ptr, len)"));
     };
-    if *len < 0 {
-        return Err(RuntimeError::new(format!(
-            "`read_bytes`: length must be non-negative, got {len}"
-        )));
-    }
+    let len = len.to_usize().ok_or_else(|| RuntimeError::new(format!(
+        "`read_bytes`: length must be a non-negative integer, got {len}"
+    )))?;
     let src = *addr as usize as *const u8;
-    let len = *len as usize;
     let mut buf = vec![0u8; len];
     unsafe {
         std::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), len);
@@ -265,14 +262,14 @@ fn scan_first(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             let pat = parse_pattern(pattern)?;
             let base = *addr as usize;
             let slice =
-                unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+                unsafe { std::slice::from_raw_parts(base as *const u8, size.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?) };
             let result = pat.find_first(slice).map(|off| Value::Ptr((base + off) as u64));
             Ok(crate::option(cx, result))
         }
         [Value::Bytes(data), Value::Str(pattern)] => {
             let pat = parse_pattern(pattern)?;
             let data = lock(data);
-            let result = pat.find_first(&data).map(|off| Value::Int(off as i64));
+            let result = pat.find_first(&data).map(|off| Value::int(off as i64));
             Ok(crate::option(cx, result))
         }
         _ => Err(RuntimeError::new(
@@ -290,7 +287,7 @@ fn scan_all(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             let pat = parse_pattern(pattern)?;
             let base = *addr as usize;
             let slice =
-                unsafe { std::slice::from_raw_parts(base as *const u8, *size as usize) };
+                unsafe { std::slice::from_raw_parts(base as *const u8, size.to_usize().ok_or_else(|| RuntimeError::new("invalid size"))?) };
             let results: Vec<Value> = pat
                 .find_all(slice)
                 .into_iter()
@@ -304,7 +301,7 @@ fn scan_all(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
             let results: Vec<Value> = pat
                 .find_all(&data)
                 .into_iter()
-                .map(|off| Value::Int(off as i64))
+                .map(|off| Value::int(off as i64))
                 .collect();
             Ok(Value::list(results))
         }

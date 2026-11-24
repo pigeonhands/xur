@@ -39,12 +39,10 @@ pub(crate) fn register(registry: &Registry) {
             let [Value::Int(len)] = args else {
                 return Err(RuntimeError::new("`bytes` takes (len: int)"));
             };
-            if *len < 0 {
-                return Err(RuntimeError::new(format!(
-                    "`bytes`: length must be non-negative, got {len}"
-                )));
-            }
-            let mut buf = vec![0u8; *len as usize];
+            let len_usize = len.to_usize().ok_or_else(|| {
+                RuntimeError::new(format!("`bytes`: length must be non-negative, got {len}"))
+            })?;
+            let mut buf = vec![0u8; len_usize];
             rand::rng().fill(&mut buf[..]);
             Ok(Value::Bytes(std::sync::Arc::new(buf.into())))
         });

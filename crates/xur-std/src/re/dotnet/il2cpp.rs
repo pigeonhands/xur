@@ -249,8 +249,10 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
             let Value::Native(obj) = this else {
                 return Err(RuntimeError::new("expected a `Game`"));
             };
+            let v = vaddr.to_u64().ok_or_else(|| RuntimeError::new("vaddr out of u64 range"))?;
+            let l = len.to_usize().ok_or_else(|| RuntimeError::new("len out of range"))?;
             let result = obj
-                .with(|g: &Il2CppGame| g.0.bytes_at(*vaddr as u64, *len as usize))
+                .with(|g: &Il2CppGame| g.0.bytes_at(v, l))
                 .ok_or_else(|| RuntimeError::new("expected a `Game`"))?;
             Ok(option(cx, result.map(Value::bytes)))
         });

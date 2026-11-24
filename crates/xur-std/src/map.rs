@@ -17,7 +17,7 @@ pub(crate) fn register(registry: &Registry) {
             let (map, []) = receiver(args)? else {
                 return arity(0);
             };
-            Ok(Value::Int(map.len() as i64))
+            Ok(Value::int(map.len() as i64))
         })
         .raw_function_returns::<bool>("is_empty", |_, args| {
             let (map, []) = receiver(args)? else {

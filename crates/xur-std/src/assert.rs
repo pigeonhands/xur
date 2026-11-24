@@ -17,7 +17,7 @@ fn coerce_repr(cx: &dyn Context, value: &Value) -> Option<Value> {
     if let Value::Adt(adt) = value
         && adt.fields.is_empty()
     {
-        return cx.repr_value(adt.ctor).map(Value::Int);
+        return cx.repr_value(adt.ctor).map(Value::int);
     }
     None
 }

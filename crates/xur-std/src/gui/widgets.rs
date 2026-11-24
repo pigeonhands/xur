@@ -59,7 +59,7 @@ pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'
         }
         let body = body.clone();
         let title = title.clone();
-        let w = *width as f32;
+        let w = width.as_f32();
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ctx(this, |ctx| {
             let frame = Frame::window(&ctx.style_of(ctx.theme())).fill(Color32::from_rgb(24, 24, 28));
@@ -194,9 +194,9 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
             ));
         };
         with_ui(this, |ui| {
-            let mut val = *value as f32;
-            ui.add(Slider::new(&mut val, (*min as f32)..=(*max as f32)).text(label.as_ref()));
-            Ok(Value::Float(val as f64))
+            let mut val = value.as_f32();
+            ui.add(Slider::new(&mut val, min.as_f32()..=max.as_f32()).text(label.as_ref()));
+            Ok(Value::float(val as f64))
         })
     });
 
@@ -208,9 +208,11 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
             ));
         };
         with_ui(this, |ui| {
-            let mut val = *value;
-            ui.add(Slider::new(&mut val, *min..=*max).text(label.as_ref()));
-            Ok(Value::Int(val))
+            let mut val = value.to_i64().ok_or_else(|| RuntimeError::new("slider value out of i64 range"))?;
+            let lo = min.to_i64().ok_or_else(|| RuntimeError::new("slider min out of i64 range"))?;
+            let hi = max.to_i64().ok_or_else(|| RuntimeError::new("slider max out of i64 range"))?;
+            ui.add(Slider::new(&mut val, lo..=hi).text(label.as_ref()));
+            Ok(Value::int(val))
         })
     });
 
@@ -345,13 +347,13 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         let (this_val, id_salt, max_height, body_fn) = match args {
             [this_val, Value::Str(id), Value::Float(h), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
-                (this_val, Some(id.clone()), Some(*h as f32), b.clone())
+                (this_val, Some(id.clone()), Some(h.as_f32()), b.clone())
             }
             [this_val, Value::Str(id), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
                 (this_val, Some(id.clone()), None, b.clone())
             }
             [this_val, Value::Float(h), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
-                (this_val, None, Some(*h as f32), b.clone())
+                (this_val, None, Some(h.as_f32()), b.clone())
             }
             [this_val, b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
                 (this_val, None, None, b.clone())
@@ -393,7 +395,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
             return Err(RuntimeError::new("body must be a function"));
         }
         let id = id.clone();
-        let cols = *cols as usize;
+        let cols = cols.to_usize().unwrap_or(1);
         let body = body.clone();
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         with_ui(this, |ui| {
@@ -446,7 +448,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         };
         with_ui(this, |ui| {
             ui.colored_label(
-                Color32::from_rgb(*r as u8, *g as u8, *b as u8),
+                Color32::from_rgb(r.to_i128() as u8, g.to_i128() as u8, b.to_i128() as u8),
                 text.as_ref(),
             );
             Ok(Value::Unit)
@@ -458,7 +460,7 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
             return Err(RuntimeError::new("`add_space` takes a float"));
         };
         with_ui(this, |ui| {
-            ui.add_space(*amount as f32);
+            ui.add_space(amount.as_f32());
             Ok(Value::Unit)
         })
     });

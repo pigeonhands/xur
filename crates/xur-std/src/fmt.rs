@@ -42,7 +42,7 @@ pub(crate) fn format(cx: &dyn Context, template: &str, args: &[Value]) -> RunRes
                 })?;
                 match spec {
                     'x' => match arg {
-                        Value::Int(n) => write!(out, "{n:x}").unwrap(),
+                        Value::Int(n) => write!(out, "{:x}", n.to_i128()).unwrap(),
                         _ => {
                             return Err(RuntimeError::new(
                                 "format spec `:x` requires an integer argument",
@@ -50,7 +50,7 @@ pub(crate) fn format(cx: &dyn Context, template: &str, args: &[Value]) -> RunRes
                         }
                     },
                     'X' => match arg {
-                        Value::Int(n) => write!(out, "{n:X}").unwrap(),
+                        Value::Int(n) => write!(out, "{:X}", n.to_i128()).unwrap(),
                         _ => {
                             return Err(RuntimeError::new(
                                 "format spec `:X` requires an integer argument",
@@ -94,7 +94,7 @@ mod tests {
         let print = fn_id(&registry, "std::io::print");
         let error = |cx: &mut TestCx<'_>, args: &[Value]| cx.call(print, args).unwrap_err().message;
         assert_eq!(
-            error(&mut cx, &[Value::str("x"), Value::Int(1)]),
+            error(&mut cx, &[Value::str("x"), Value::int(1)]),
             "more arguments than `{}` in the format string"
         );
     }
@@ -103,12 +103,12 @@ mod tests {
     fn hex_format() {
         let registry = registry();
         let cx = TestCx::new(&registry, crate::PRELUDE);
-        let result = super::format(&cx, "addr: {:x}", &[Value::Int(0xDEAD)]).unwrap();
+        let result = super::format(&cx, "addr: {:x}", &[Value::int(0xDEAD)]).unwrap();
         assert_eq!(result, "addr: dead");
-        let result = super::format(&cx, "ADDR: {:X}", &[Value::Int(0xBEEF)]).unwrap();
+        let result = super::format(&cx, "ADDR: {:X}", &[Value::int(0xBEEF)]).unwrap();
         assert_eq!(result, "ADDR: BEEF");
         let result =
-            super::format(&cx, "{} at {:x}", &[Value::str("foo"), Value::Int(255)]).unwrap();
+            super::format(&cx, "{} at {:x}", &[Value::str("foo"), Value::int(255)]).unwrap();
         assert_eq!(result, "foo at ff");
     }
 

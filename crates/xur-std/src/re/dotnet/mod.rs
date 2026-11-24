@@ -566,7 +566,7 @@ macro_rules! flags_converter {
         $(
             $registry.converter(<$ty as Facet>::SHAPE, |_, peek: Peek<'_, 'static>| {
                 let flags: &$ty = peek.get().map_err(reflect_error)?;
-                Ok(Value::Int(flags.bits() as i64))
+                Ok(Value::int(flags.bits() as i64))
             });
         )*
     }

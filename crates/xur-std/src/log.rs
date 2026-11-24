@@ -136,7 +136,10 @@ fn level_string(cx: &mut dyn Context, args: &[Value], pos: usize) -> RunResult<S
             parse_level(s)?;
             Ok(s.to_string())
         }
-        Some(Value::Int(v)) => Ok(parse_level_int(*v)?.to_string()),
+        Some(Value::Int(v)) => {
+            let n = v.to_i64().ok_or_else(|| RuntimeError::new("level out of range"))?;
+            Ok(parse_level_int(n)?.to_string())
+        }
         Some(Value::Adt(adt)) => {
             let v = cx
                 .repr_value(adt.ctor)

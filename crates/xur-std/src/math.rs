@@ -65,57 +65,57 @@ mod tests {
         let registry = registry();
         let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let sqrt = fn_id(&registry, "std::math::sqrt");
-        assert_eq!(cx.call(sqrt, &[Value::Float(9.0)]), Ok(Value::Float(3.0)));
+        assert_eq!(cx.call(sqrt, &[Value::float(9.0)]), Ok(Value::float(3.0)));
         let max = fn_id(&registry, "std::math::max");
         assert_eq!(
-            cx.call(max, &[Value::Int(2), Value::Int(5)]),
-            Ok(Value::Int(5))
+            cx.call(max, &[Value::int(2), Value::int(5)]),
+            Ok(Value::int(5))
         );
     }
 
     #[test]
     fn trig_functions() {
         let pi = std::f64::consts::PI;
-        let Value::Float(sin_half_pi) = call("sin", &[Value::Float(pi / 2.0)]) else {
+        let Value::Float(sin_half_pi) = call("sin", &[Value::float(pi / 2.0)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(sin_half_pi, 1.0));
+        assert!(approx_eq(sin_half_pi.as_f64(), 1.0));
 
-        let Value::Float(cos_zero) = call("cos", &[Value::Float(0.0)]) else {
+        let Value::Float(cos_zero) = call("cos", &[Value::float(0.0)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(cos_zero, 1.0));
+        assert!(approx_eq(cos_zero.as_f64(), 1.0));
 
-        let Value::Float(atan2_val) = call("atan2", &[Value::Float(1.0), Value::Float(1.0)]) else {
+        let Value::Float(atan2_val) = call("atan2", &[Value::float(1.0), Value::float(1.0)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(atan2_val, pi / 4.0));
+        assert!(approx_eq(atan2_val.as_f64(), pi / 4.0));
     }
 
     #[test]
     fn log_functions() {
         let e = std::f64::consts::E;
-        let Value::Float(ln_e) = call("ln", &[Value::Float(e)]) else {
+        let Value::Float(ln_e) = call("ln", &[Value::float(e)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(ln_e, 1.0));
+        assert!(approx_eq(ln_e.as_f64(), 1.0));
 
-        let Value::Float(log2_8) = call("log2", &[Value::Float(8.0)]) else {
+        let Value::Float(log2_8) = call("log2", &[Value::float(8.0)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(log2_8, 3.0));
+        assert!(approx_eq(log2_8.as_f64(), 3.0));
 
-        let Value::Float(exp_1) = call("exp", &[Value::Float(1.0)]) else {
+        let Value::Float(exp_1) = call("exp", &[Value::float(1.0)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(exp_1, e));
+        assert!(approx_eq(exp_1.as_f64(), e));
     }
 
     #[test]
     fn rounding_functions() {
-        assert_eq!(call("floor", &[Value::Float(2.7)]), Value::Float(2.0));
-        assert_eq!(call("ceil", &[Value::Float(2.1)]), Value::Float(3.0));
-        assert_eq!(call("round", &[Value::Float(2.5)]), Value::Float(3.0));
+        assert_eq!(call("floor", &[Value::float(2.7)]), Value::float(2.0));
+        assert_eq!(call("ceil", &[Value::float(2.1)]), Value::float(3.0));
+        assert_eq!(call("round", &[Value::float(2.5)]), Value::float(3.0));
     }
 
     #[test]
@@ -123,48 +123,48 @@ mod tests {
         let Value::Float(pi) = call("PI", &[]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(pi, std::f64::consts::PI));
+        assert!(approx_eq(pi.as_f64(), std::f64::consts::PI));
 
         let Value::Float(e) = call("E", &[]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(e, std::f64::consts::E));
+        assert!(approx_eq(e.as_f64(), std::f64::consts::E));
 
         let Value::Float(tau) = call("TAU", &[]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(tau, std::f64::consts::TAU));
+        assert!(approx_eq(tau.as_f64(), std::f64::consts::TAU));
 
         let Value::Float(inf) = call("INFINITY", &[]) else {
             panic!("expected float");
         };
-        assert!(inf.is_infinite() && inf.is_sign_positive());
+        assert!(inf.as_f64().is_infinite() && inf.as_f64().is_sign_positive());
 
         let Value::Float(nan) = call("NAN", &[]) else {
             panic!("expected float");
         };
-        assert!(nan.is_nan());
+        assert!(nan.as_f64().is_nan());
     }
 
     #[test]
     fn utility_functions() {
         assert_eq!(
-            call("clamp", &[Value::Float(5.0), Value::Float(0.0), Value::Float(3.0)]),
-            Value::Float(3.0)
+            call("clamp", &[Value::float(5.0), Value::float(0.0), Value::float(3.0)]),
+            Value::float(3.0)
         );
 
-        let Value::Float(lerp_val) = call("lerp", &[Value::Float(0.0), Value::Float(10.0), Value::Float(0.5)]) else {
+        let Value::Float(lerp_val) = call("lerp", &[Value::float(0.0), Value::float(10.0), Value::float(0.5)]) else {
             panic!("expected float");
         };
-        assert!(approx_eq(lerp_val, 5.0));
+        assert!(approx_eq(lerp_val.as_f64(), 5.0));
 
         assert_eq!(
-            call("fmin", &[Value::Float(3.0), Value::Float(1.0)]),
-            Value::Float(1.0)
+            call("fmin", &[Value::float(3.0), Value::float(1.0)]),
+            Value::float(1.0)
         );
         assert_eq!(
-            call("fmax", &[Value::Float(3.0), Value::Float(1.0)]),
-            Value::Float(3.0)
+            call("fmax", &[Value::float(3.0), Value::float(1.0)]),
+            Value::float(3.0)
         );
     }
 }

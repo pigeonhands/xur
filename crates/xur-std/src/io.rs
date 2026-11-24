@@ -76,9 +76,9 @@ mod tests {
         let println = fn_id(&registry, "std::io::println");
         let args = [
             Value::str("{} + {} = {{{}}}"),
-            Value::Int(1),
-            Value::Int(2),
-            Value::Int(3),
+            Value::int(1),
+            Value::int(2),
+            Value::int(3),
         ];
         assert_eq!(cx.call(println, &args), Ok(Value::Unit));
         assert_eq!(cx.output(), "1 + 2 = {3}\n");

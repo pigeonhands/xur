@@ -65,8 +65,8 @@ impl std::fmt::Display for Duration {
 
 fn dur_from_secs(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let secs = match args {
-        [Value::Int(n)] => time::Duration::from_secs(*n as u64),
-        [Value::Float(f)] => time::Duration::from_secs_f64(*f),
+        [Value::Int(n)] => time::Duration::from_secs(n.to_u64().ok_or_else(|| RuntimeError::new(format!("{n} is not a valid duration")))?),
+        [Value::Float(f)] => time::Duration::from_secs_f64(f.as_f64()),
         _ => return Err(RuntimeError::new("`from_secs` takes a number")),
     };
     into_value(cx, Duration(secs))
@@ -76,7 +76,7 @@ fn dur_from_secs(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
 fn time_sleep(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     match args {
         [Value::Int(ms)] => {
-            std::thread::sleep(time::Duration::from_millis(*ms as u64));
+            std::thread::sleep(time::Duration::from_millis(ms.to_u64().ok_or_else(|| RuntimeError::new(format!("{ms} is not a valid duration")))?));
         }
         [Value::Native(obj)] => {
             let dur = obj

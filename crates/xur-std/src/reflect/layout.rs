@@ -29,7 +29,7 @@ use xur_ast::{Attribute, LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use xur_resolve::DefId;
 use xur_runtime::convert::into_value;
 use xur_runtime::{
-    AdtInfo, Context, Record, RunResult, RuntimeError, TypeRef, Value, lock,
+    AdtInfo, Context, IntValue, Record, RunResult, RuntimeError, TypeRef, Value, lock,
 };
 use xur_span::Symbol;
 
@@ -256,18 +256,12 @@ impl Layout {
                 let mut buf = [0u8; 8];
                 let value = if self.0.big_endian {
                     buf[8 - raw.len()..].copy_from_slice(raw);
-                    let value = u64::from_be_bytes(buf);
-                    sign_extend(value, raw.len(), *signed)
+                    u64::from_be_bytes(buf)
                 } else {
                     buf[..raw.len()].copy_from_slice(raw);
-                    sign_extend(u64::from_le_bytes(buf), raw.len(), *signed)
+                    u64::from_le_bytes(buf)
                 };
-                Value::Int(value.ok_or_else(|| {
-                    RuntimeError::new(format!(
-                        "field `{}` does not fit in a Xur integer",
-                        field.name
-                    ))
-                })?)
+                Value::Int(read_int(value, raw.len(), *signed))
             }
             Kind::Float { size } => {
                 let mut raw = raw.to_vec();
@@ -275,8 +269,8 @@ impl Layout {
                     raw.reverse();
                 }
                 Value::Float(match size {
-                    4 => f32::from_le_bytes(raw.try_into().unwrap_or_default()).into(),
-                    _ => f64::from_le_bytes(raw.try_into().unwrap_or_default()),
+                    4 => xur_runtime::FloatValue::F32(f32::from_le_bytes(raw.try_into().unwrap_or_default())),
+                    _ => xur_runtime::FloatValue::F64(f64::from_le_bytes(raw.try_into().unwrap_or_default())),
                 })
             }
             Kind::Bool => Value::Bool(raw[0] != 0),
@@ -309,20 +303,21 @@ impl Layout {
             let size = field.kind.size();
             let raw = match (&field.kind, &field_value) {
                 (Kind::Int { size, signed }, Value::Int(i)) => {
-                    if !int_fits(*i, *size, *signed) {
+                    if !int_fits(i, *size, *signed) {
                         return Err(RuntimeError::new(format!(
                             "{i} does not fit in field `{}` ({})",
                             field.name,
                             field.kind.name()
                         )));
                     }
-                    let bytes = i.to_le_bytes();
+                    let v = i.to_i128();
+                    let bytes = (v as i64).to_le_bytes();
                     self.ordered(&bytes[..*size])
                 }
-                (Kind::Float { size: 4 }, &Value::Float(f)) => {
-                    self.ordered(&(f as f32).to_le_bytes())
+                (Kind::Float { size: 4 }, Value::Float(f)) => {
+                    self.ordered(&f.as_f32().to_le_bytes())
                 }
-                (Kind::Float { .. }, &Value::Float(f)) => self.ordered(&f.to_le_bytes()),
+                (Kind::Float { .. }, Value::Float(f)) => self.ordered(&f.as_f64().to_le_bytes()),
                 (Kind::Bool, &Value::Bool(b)) => vec![b.into()],
                 (Kind::Bytes(len), Value::Bytes(bytes)) => {
                     let mut bytes = lock(bytes).clone();
@@ -373,8 +368,8 @@ impl Layout {
                 let entries = [
                     ("name", Value::str(&field.name)),
                     ("ty", Value::Type(Box::new(field.kind.to_rt_type()))),
-                    ("offset", Value::Int(field.offset as i64)),
-                    ("size", Value::Int(field.kind.size() as i64)),
+                    ("offset", Value::int(field.offset as i64)),
+                    ("size", Value::int(field.kind.size() as i64)),
                 ];
                 let fields = entries
                     .into_iter()
@@ -410,25 +405,34 @@ impl std::fmt::Display for Layout {
 }
 
 /// `value`, the low `size` bytes of an integer, as an `i64`.
-fn sign_extend(value: u64, size: usize, signed: bool) -> Option<i64> {
-    let bits = size as u32 * 8;
-    if signed && bits < 64 {
-        let shift = 64 - bits;
-        Some(((value << shift) as i64) >> shift)
-    } else if signed {
-        Some(value as i64)
+fn read_int(value: u64, size: usize, signed: bool) -> xur_runtime::IntValue {
+    use xur_runtime::IntValue;
+    let bytes = value.to_le_bytes();
+    if signed {
+        match size {
+            1 => IntValue::I8(bytes[0] as i8),
+            2 => IntValue::I16(i16::from_le_bytes([bytes[0], bytes[1]])),
+            4 => IntValue::I32(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
+            _ => IntValue::I64(i64::from_le_bytes(bytes)),
+        }
     } else {
-        i64::try_from(value).ok()
+        match size {
+            1 => IntValue::U8(bytes[0]),
+            2 => IntValue::U16(u16::from_le_bytes([bytes[0], bytes[1]])),
+            4 => IntValue::U32(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
+            _ => IntValue::U64(value),
+        }
     }
 }
 
-fn int_fits(i: i64, size: usize, signed: bool) -> bool {
+fn int_fits(i: &xur_runtime::IntValue, size: usize, signed: bool) -> bool {
+    let v = i.to_i128();
     let bits = size as u32 * 8;
     match (signed, bits) {
-        (true, 64) => true,
-        (true, _) => (-(1i64 << (bits - 1))..1i64 << (bits - 1)).contains(&i),
-        (false, 64) => i >= 0,
-        (false, _) => (0..1i64 << bits).contains(&i),
+        (true, 64) => v >= i64::MIN as i128 && v <= i64::MAX as i128,
+        (true, _) => v >= -(1i128 << (bits - 1)) && v < (1i128 << (bits - 1)),
+        (false, 64) => v >= 0 && v <= u64::MAX as i128,
+        (false, _) => v >= 0 && v < (1i128 << bits),
     }
 }
 
@@ -610,7 +614,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             let [_, Value::Str(name)] = args else {
                 return Err(RuntimeError::new("`offset_of` takes a field name"));
             };
-            Ok(Value::Int(layout_arg(args)?.field(name)?.offset as i64))
+            Ok(Value::int(layout_arg(args)?.field(name)?.offset as i64))
         })
         .raw_function_returns::<Layout>("field", |_, args| {
             let (name, kind) = match args {
@@ -737,8 +741,8 @@ fn layout_arg(args: &[Value]) -> RunResult<Layout> {
     .ok_or_else(|| RuntimeError::new("expected a `Layout`"))
 }
 
-fn usize_arg(i: i64) -> RunResult<usize> {
-    usize::try_from(i).map_err(|_| RuntimeError::new(format!("{i} is not a valid size or offset")))
+fn usize_arg(i: IntValue) -> RunResult<usize> {
+    i.to_usize().ok_or_else(|| RuntimeError::new(format!("{i} is not a valid size or offset")))
 }
 
 /// A copy of the layout with `name` added.

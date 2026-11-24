@@ -143,7 +143,11 @@ pub(crate) fn register(registry: &Registry) {
         // init(version: int, text_base: ptr, text_size: int) -> Result<UnrealSdk>
         m.raw_function_returns::<XurUnrealSdk>("init", |cx, args| {
             let (version_int, text_base, text_size) = match args {
-                [Value::Int(v), Value::Ptr(base), Value::Int(size)] => (*v, *base, *size),
+                [Value::Int(v), Value::Ptr(base), Value::Int(size)] => {
+                    let v = v.to_i64().ok_or_else(|| err("version out of range"))?;
+                    let s = size.to_usize().ok_or_else(|| err("text_size out of range"))?;
+                    (v, *base, s)
+                }
                 _ => {
                     return Err(err(
                         "`init` takes (version: int, text_base: ptr, text_size: int)",
@@ -162,7 +166,7 @@ pub(crate) fn register(registry: &Registry) {
             };
 
             match unsafe {
-                unrealkit::discovery::discover(text_base as *const u8, text_size as usize, version)
+                unrealkit::discovery::discover(text_base as *const u8, text_size, version)
             } {
                 Ok(sdk) => {
                     SDK.set(sdk)
@@ -177,7 +181,10 @@ pub(crate) fn register(registry: &Registry) {
         // init_from_pointers(version: int, gnames: ptr, gobjects: ptr) -> Result<UnrealSdk>
         m.raw_function_returns::<XurUnrealSdk>("init_from_pointers", |cx, args| {
             let (version_int, gnames_ptr, gobjects_ptr) = match args {
-                [Value::Int(v), Value::Ptr(gn), Value::Ptr(go)] => (*v, *gn, *go),
+                [Value::Int(v), Value::Ptr(gn), Value::Ptr(go)] => {
+                    let v = v.to_i64().ok_or_else(|| err("version out of range"))?;
+                    (v, *gn, *go)
+                }
                 _ => {
                     return Err(err(
                         "`init_from_pointers` takes (version, gnames_ptr, gobjects_ptr)",
@@ -260,7 +267,8 @@ pub(crate) fn register(registry: &Registry) {
             let [Value::Int(addr)] = args else {
                 return Err(err("`set_process_event` takes (addr: int)"));
             };
-            let fn_ptr: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(*addr as usize) };
+            let addr = addr.to_usize().ok_or_else(|| err("address out of range"))?;
+            let fn_ptr: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(addr) };
             PROCESS_EVENT
                 .set(fn_ptr)
                 .map_err(|_| err("ProcessEvent already set"))?;
@@ -278,7 +286,8 @@ pub(crate) fn register(registry: &Registry) {
                 .next()
                 .ok_or_else(|| err("no UObjects found for vtable read"))?;
             let vtable_ptr = unsafe { *(obj.ptr() as *const *const *const u8) };
-            let fn_ptr = unsafe { *vtable_ptr.add(*index as usize) };
+            let idx = index.to_usize().ok_or_else(|| err("index out of range"))?;
+            let fn_ptr = unsafe { *vtable_ptr.add(idx) };
             let pe: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(fn_ptr) };
             PROCESS_EVENT
                 .set(pe)
@@ -583,6 +592,7 @@ pub(crate) fn register(registry: &Registry) {
                 let Value::Int(detour_addr) = &args[1] else {
                     return Err(err("`hook` takes (detour_addr: int)"));
                 };
+                let detour = detour_addr.to_usize().ok_or_else(|| err("detour_addr out of range"))?;
                 let sdk = get_sdk()?;
                 let func = unrealkit::UFunction::new(this.0, &sdk.names);
                 let native = func.native_func_ptr();
@@ -590,12 +600,12 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(err("UFunction has no native pointer"));
                 }
                 let mut hook =
-                    unsafe { hooking::Hook::create(native as *mut u8, *detour_addr as *mut u8) }
+                    unsafe { hooking::Hook::create(native as *mut u8, detour as *mut u8) }
                         .map_err(|e| err(format!("{e}")))?;
                 unsafe { hook.apply_hook() }.map_err(|e| err(format!("{e}")))?;
-                let original = hook.original_function().as_ptr() as i64;
+                let original = hook.original_function().as_ptr() as usize;
                 std::mem::forget(hook);
-                Ok(Value::Int(original))
+                Ok(Value::Int(original.into()))
             })
             .raw_function("invoke", |cx, args| {
                 if args.len() < 2 {
@@ -673,8 +683,8 @@ fn property_value_to_xur(
 ) -> Result<Value, RuntimeError> {
     match pv {
         unrealkit::PropertyValue::Bool(v) => Ok(Value::Bool(v)),
-        unrealkit::PropertyValue::Int(v) => Ok(Value::Int(v)),
-        unrealkit::PropertyValue::Float(v) => Ok(Value::Float(v)),
+        unrealkit::PropertyValue::Int(v) => Ok(Value::int(v)),
+        unrealkit::PropertyValue::Float(v) => Ok(Value::float(v)),
         unrealkit::PropertyValue::Name(s) | unrealkit::PropertyValue::Str(s) => Ok(Value::str(&s)),
         unrealkit::PropertyValue::Object(ptr) => {
             if ptr.is_null() {
@@ -691,8 +701,10 @@ fn property_value_to_xur(
 fn xur_to_property_value(val: &Value) -> Result<unrealkit::PropertyValue, RuntimeError> {
     match val {
         Value::Bool(v) => Ok(unrealkit::PropertyValue::Bool(*v)),
-        Value::Int(v) => Ok(unrealkit::PropertyValue::Int(*v)),
-        Value::Float(v) => Ok(unrealkit::PropertyValue::Float(*v)),
+        Value::Int(v) => Ok(unrealkit::PropertyValue::Int(
+            v.to_i64().ok_or_else(|| err("integer out of i64 range"))?,
+        )),
+        Value::Float(v) => Ok(unrealkit::PropertyValue::Float(v.as_f64())),
         Value::Str(s) => Ok(unrealkit::PropertyValue::Str(s.to_string())),
         Value::Bytes(b) => {
             let bytes = b.lock().map_err(|e| err(e.to_string()))?.clone();

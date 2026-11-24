@@ -18,7 +18,7 @@ pub(crate) fn register(registry: &Registry) {
             let (list, []) = receiver(args)? else {
                 return arity(0);
             };
-            Ok(Value::Int(lock(list).len() as i64))
+            Ok(Value::int(lock(list).len() as i64))
         })
         .raw_function_returns::<bool>("is_empty", |_, args| {
             let (list, []) = receiver(args)? else {
@@ -163,9 +163,10 @@ pub(crate) fn register(registry: &Registry) {
                 }
                 match cx.call(f, &[a.clone(), b.clone()]) {
                     Ok(Value::Int(n)) => {
-                        if n < 0 {
+                        let v = n.to_i128();
+                        if v < 0 {
                             std::cmp::Ordering::Less
-                        } else if n > 0 {
+                        } else if v > 0 {
                             std::cmp::Ordering::Greater
                         } else {
                             std::cmp::Ordering::Equal
@@ -217,7 +218,7 @@ pub(crate) fn register(registry: &Registry) {
             for (i, item) in items.into_iter().enumerate() {
                 match cx.call(f, std::slice::from_ref(&item))? {
                     Value::Bool(true) => {
-                        found = Some(Value::Int(i as i64));
+                        found = Some(Value::int(i as i64));
                         break;
                     }
                     Value::Bool(false) => {}
@@ -321,7 +322,7 @@ pub(crate) fn register(registry: &Registry) {
             let result = items
                 .into_iter()
                 .enumerate()
-                .map(|(i, item)| Value::list(vec![Value::Int(i as i64), item]))
+                .map(|(i, item)| Value::list(vec![Value::int(i as i64), item]))
                 .collect();
             Ok(Value::list(result))
         })
@@ -375,10 +376,10 @@ pub(crate) fn register(registry: &Registry) {
             };
             match first {
                 Value::Int(_) => {
-                    let mut total: i64 = 0;
+                    let mut total: i128 = 0;
                     for item in &items {
                         match item {
-                            Value::Int(n) => total += n,
+                            Value::Int(n) => total += n.to_i128(),
                             _ => {
                                 return Err(RuntimeError::new(
                                     "sum: mixed types (expected all Int)",
@@ -386,13 +387,15 @@ pub(crate) fn register(registry: &Registry) {
                             }
                         }
                     }
-                    Ok(Value::Int(total))
+                    Ok(Value::int(i64::try_from(total).map_err(|_| {
+                        RuntimeError::new("sum: integer overflow")
+                    })?))
                 }
                 Value::Float(_) => {
                     let mut total: f64 = 0.0;
                     for item in &items {
                         match item {
-                            Value::Float(n) => total += n,
+                            Value::Float(n) => total += n.as_f64(),
                             _ => {
                                 return Err(RuntimeError::new(
                                     "sum: mixed types (expected all Float)",
@@ -400,7 +403,7 @@ pub(crate) fn register(registry: &Registry) {
                             }
                         }
                     }
-                    Ok(Value::Float(total))
+                    Ok(Value::float(total))
                 }
                 _ => Err(RuntimeError::new(
                     "sum: elements must be Int or Float",
@@ -469,7 +472,7 @@ pub(crate) fn register(registry: &Registry) {
 fn compare(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
     match (a, b) {
         (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
-        (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+        (Value::Float(a), Value::Float(b)) => a.as_f64().partial_cmp(&b.as_f64()),
         (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
         _ => None,
     }
@@ -499,7 +502,9 @@ fn arity(expected: usize) -> RunResult<Value> {
 
 fn int(value: &Value) -> RunResult<i64> {
     match value {
-        Value::Int(i) => Ok(*i),
+        Value::Int(i) => i.to_i64().ok_or_else(|| {
+            RuntimeError::new(format!("{i} does not fit in i64"))
+        }),
         other => Err(RuntimeError::new(format!(
             "expected an integer index, found {}",
             other.kind()
@@ -546,11 +551,11 @@ mod tests {
     fn push_changes_the_list_in_place() {
         let registry = registry();
         let mut cx = TestCx::new(&registry, crate::PRELUDE);
-        let xs = Value::list(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let xs = Value::list(vec![Value::int(1), Value::int(2), Value::int(3)]);
         let alias = xs.clone();
-        call(&mut cx, "push", &[xs, Value::Int(4)]).unwrap();
+        call(&mut cx, "push", &[xs, Value::int(4)]).unwrap();
         assert_eq!(items(&alias).len(), 4);
-        assert_eq!(call(&mut cx, "len", &[alias]), Ok(Value::Int(4)));
+        assert_eq!(call(&mut cx, "len", &[alias]), Ok(Value::int(4)));
     }
 
     #[test]
@@ -558,14 +563,14 @@ mod tests {
         let registry = registry();
         let mut cx = TestCx::new(&registry, crate::PRELUDE);
         let lang = cx.lang;
-        let xs = Value::list(vec![Value::Int(1)]);
+        let xs = Value::list(vec![Value::int(1)]);
         assert_eq!(
-            call(&mut cx, "get", &[xs.clone(), Value::Int(5)]),
+            call(&mut cx, "get", &[xs.clone(), Value::int(5)]),
             Ok(Value::adt(lang.none, vec![]))
         );
         assert_eq!(
             call(&mut cx, "pop", std::slice::from_ref(&xs)),
-            Ok(Value::adt(lang.some, vec![Value::Int(1)]))
+            Ok(Value::adt(lang.some, vec![Value::int(1)]))
         );
         assert_eq!(
             call(&mut cx, "pop", &[xs]),
@@ -577,20 +582,20 @@ mod tests {
     fn insert_remove_and_bounds() {
         let registry = registry();
         let mut cx = TestCx::new(&registry, crate::PRELUDE);
-        let xs = Value::list(vec![Value::Int(1), Value::Int(3)]);
+        let xs = Value::list(vec![Value::int(1), Value::int(3)]);
         call(
             &mut cx,
             "insert",
-            &[xs.clone(), Value::Int(1), Value::Int(2)],
+            &[xs.clone(), Value::int(1), Value::int(2)],
         )
         .unwrap();
-        assert_eq!(items(&xs), [Value::Int(1), Value::Int(2), Value::Int(3)]);
+        assert_eq!(items(&xs), [Value::int(1), Value::int(2), Value::int(3)]);
         assert_eq!(
-            call(&mut cx, "remove", &[xs.clone(), Value::Int(0)]),
-            Ok(Value::Int(1))
+            call(&mut cx, "remove", &[xs.clone(), Value::int(0)]),
+            Ok(Value::int(1))
         );
         assert_eq!(
-            call(&mut cx, "remove", &[xs, Value::Int(9)]),
+            call(&mut cx, "remove", &[xs, Value::int(9)]),
             Err("index 9 is out of range for a list of length 2".to_owned())
         );
     }
@@ -599,7 +604,7 @@ mod tests {
     fn extend_with_itself_and_join() {
         let registry = registry();
         let mut cx = TestCx::new(&registry, crate::PRELUDE);
-        let xs = Value::list(vec![Value::Int(1), Value::str("a")]);
+        let xs = Value::list(vec![Value::int(1), Value::str("a")]);
         call(&mut cx, "extend", &[xs.clone(), xs.clone()]).unwrap();
         assert_eq!(
             call(&mut cx, "join", &[xs, Value::str("-")]),

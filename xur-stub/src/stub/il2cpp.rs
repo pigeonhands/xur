@@ -16,7 +16,7 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use hao_il2cpp_runtime::{self as rt, Il2Cpp};
 use xur_runtime::convert::{into_value, ConvertCx};
-use xur_runtime::{Registry, RuntimeError, Value};
+use xur_runtime::{FloatValue, Registry, RuntimeError, Value};
 
 // ---------------------------------------------------------------------------
 // Static-field API — not in hao's Api struct, loaded from the game binary.
@@ -269,43 +269,43 @@ fn read_instance_field(
         }
         ElementType::I1 => {
             let v: i8 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::U1 => {
             let v: u8 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::I2 => {
             let v: i16 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::U2 => {
             let v: u16 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::I4 => {
             let v: i32 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::U4 => {
             let v: u32 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::I8 => {
             let v: i64 = unsafe { field.read(object) };
-            Ok(Value::Int(v))
+            Ok(Value::Int(v.into()))
         }
         ElementType::U8 => {
             let v: u64 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::R4 => {
             let v: f32 = unsafe { field.read(object) };
-            Ok(Value::Float(v as f64))
+            Ok(Value::Float(v.into()))
         }
         ElementType::R8 => {
             let v: f64 = unsafe { field.read(object) };
-            Ok(Value::Float(v))
+            Ok(Value::Float(v.into()))
         }
         ElementType::String
         | ElementType::Class
@@ -326,7 +326,7 @@ fn read_instance_field(
                 return read_instance_field_by_elem(field, object, ElementType::from(base_elem));
             }
             let v: i32 = unsafe { field.read(object) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         _ => Err(RuntimeError::new(format!(
             "unsupported field type (element {elem})",
@@ -340,15 +340,15 @@ fn read_instance_field_by_elem(
     elem: ElementType,
 ) -> Result<Value, RuntimeError> {
     match elem {
-        ElementType::I1 => Ok(Value::Int(unsafe { field.read::<i8>(object) } as i64)),
-        ElementType::U1 => Ok(Value::Int(unsafe { field.read::<u8>(object) } as i64)),
-        ElementType::I2 => Ok(Value::Int(unsafe { field.read::<i16>(object) } as i64)),
-        ElementType::U2 => Ok(Value::Int(unsafe { field.read::<u16>(object) } as i64)),
-        ElementType::I4 => Ok(Value::Int(unsafe { field.read::<i32>(object) } as i64)),
-        ElementType::U4 => Ok(Value::Int(unsafe { field.read::<u32>(object) } as i64)),
-        ElementType::I8 => Ok(Value::Int(unsafe { field.read::<i64>(object) })),
-        ElementType::U8 => Ok(Value::Int(unsafe { field.read::<u64>(object) } as i64)),
-        _ => Ok(Value::Int(unsafe { field.read::<i32>(object) } as i64)),
+        ElementType::I1 => Ok(Value::Int(unsafe { field.read::<i8>(object) }.into())),
+        ElementType::U1 => Ok(Value::Int(unsafe { field.read::<u8>(object) }.into())),
+        ElementType::I2 => Ok(Value::Int(unsafe { field.read::<i16>(object) }.into())),
+        ElementType::U2 => Ok(Value::Int(unsafe { field.read::<u16>(object) }.into())),
+        ElementType::I4 => Ok(Value::Int(unsafe { field.read::<i32>(object) }.into())),
+        ElementType::U4 => Ok(Value::Int(unsafe { field.read::<u32>(object) }.into())),
+        ElementType::I8 => Ok(Value::Int(unsafe { field.read::<i64>(object) }.into())),
+        ElementType::U8 => Ok(Value::Int(unsafe { field.read::<u64>(object) }.into())),
+        _ => Ok(Value::Int(unsafe { field.read::<i32>(object) }.into())),
     }
 }
 
@@ -360,19 +360,19 @@ fn write_instance_field(
     let elem = field.element_type();
     match (elem, value) {
         (ElementType::Boolean, Value::Bool(v)) => unsafe { field.write(object, *v) },
-        (ElementType::I1, Value::Int(v)) => unsafe { field.write(object, *v as i8) },
-        (ElementType::U1, Value::Int(v)) => unsafe { field.write(object, *v as u8) },
-        (ElementType::I2, Value::Int(v)) => unsafe { field.write(object, *v as i16) },
-        (ElementType::U2, Value::Int(v)) => unsafe { field.write(object, *v as u16) },
-        (ElementType::I4, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
-        (ElementType::U4, Value::Int(v)) => unsafe { field.write(object, *v as u32) },
-        (ElementType::I8, Value::Int(v)) => unsafe { field.write(object, *v) },
-        (ElementType::U8, Value::Int(v)) => unsafe { field.write(object, *v as u64) },
-        (ElementType::R4, Value::Float(v)) => unsafe { field.write(object, *v as f32) },
-        (ElementType::R4, Value::Int(v)) => unsafe { field.write(object, *v as f32) },
-        (ElementType::R8, Value::Float(v)) => unsafe { field.write(object, *v) },
-        (ElementType::R8, Value::Int(v)) => unsafe { field.write(object, *v as f64) },
-        (ElementType::Boolean, Value::Int(v)) => unsafe { field.write(object, *v != 0) },
+        (ElementType::I1, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as i8) },
+        (ElementType::U1, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as u8) },
+        (ElementType::I2, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as i16) },
+        (ElementType::U2, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as u16) },
+        (ElementType::I4, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as i32) },
+        (ElementType::U4, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as u32) },
+        (ElementType::I8, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as i64) },
+        (ElementType::U8, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as u64) },
+        (ElementType::R4, Value::Float(v)) => unsafe { field.write(object, v.as_f32()) },
+        (ElementType::R4, Value::Int(v)) => unsafe { field.write(object, v.as_f64() as f32) },
+        (ElementType::R8, Value::Float(v)) => unsafe { field.write(object, v.as_f64()) },
+        (ElementType::R8, Value::Int(v)) => unsafe { field.write(object, v.as_f64()) },
+        (ElementType::Boolean, Value::Int(v)) => unsafe { field.write(object, !v.is_zero()) },
         (
             ElementType::String
             | ElementType::Class
@@ -387,7 +387,7 @@ fn write_instance_field(
                 return Err(RuntimeError::new("expected an Object"));
             }
         }
-        (ElementType::ValueType, Value::Int(v)) => unsafe { field.write(object, *v as i32) },
+        (ElementType::ValueType, Value::Int(v)) => unsafe { field.write(object, v.to_i128() as i32) },
         _ => {
             return Err(RuntimeError::new(format!(
                 "cannot write value to field with element type {elem}",
@@ -414,27 +414,27 @@ fn read_static_field(
         ElementType::I4 | ElementType::ValueType => {
             let mut v: i32 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut i32 as *mut c_void) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::U4 => {
             let mut v: u32 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut u32 as *mut c_void) };
-            Ok(Value::Int(v as i64))
+            Ok(Value::Int(v.into()))
         }
         ElementType::I8 => {
             let mut v: i64 = 0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut i64 as *mut c_void) };
-            Ok(Value::Int(v))
+            Ok(Value::Int(v.into()))
         }
         ElementType::R4 => {
             let mut v: f32 = 0.0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut f32 as *mut c_void) };
-            Ok(Value::Float(v as f64))
+            Ok(Value::Float(v.into()))
         }
         ElementType::R8 => {
             let mut v: f64 = 0.0;
             unsafe { (api.get)(field.as_ptr(), &mut v as *mut f64 as *mut c_void) };
-            Ok(Value::Float(v))
+            Ok(Value::Float(v.into()))
         }
         ElementType::String
         | ElementType::Class
@@ -463,16 +463,17 @@ fn write_static_field(field: &rt::Field, value: &Value) -> Result<(), RuntimeErr
             (api.set)(field.as_ptr(), v as *const bool as *const c_void);
         },
         (ElementType::I4 | ElementType::ValueType, Value::Int(v)) => {
-            let v = *v as i32;
+            let v = v.to_i128() as i32;
             unsafe { (api.set)(field.as_ptr(), &v as *const i32 as *const c_void) };
         }
         (ElementType::R4, Value::Float(v)) => {
-            let v = *v as f32;
+            let v = v.as_f32();
             unsafe { (api.set)(field.as_ptr(), &v as *const f32 as *const c_void) };
         }
-        (ElementType::R8, Value::Float(v)) => unsafe {
-            (api.set)(field.as_ptr(), v as *const f64 as *const c_void);
-        },
+        (ElementType::R8, Value::Float(v)) => {
+            let v = v.as_f64();
+            unsafe { (api.set)(field.as_ptr(), &v as *const f64 as *const c_void) };
+        }
         (
             ElementType::String
             | ElementType::Class
@@ -545,11 +546,11 @@ fn do_invoke(
     for arg in call_args {
         match arg {
             Value::Int(v) => {
-                arg_storage.push(*v);
+                arg_storage.push(v.to_i64().unwrap_or(v.to_i128() as i64));
                 invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Float(v) => {
-                arg_storage.push(v.to_bits() as i64);
+                arg_storage.push(v.as_f64().to_bits() as i64);
                 invoke_args.push(arg_storage.last().unwrap() as *const i64 as *mut c_void);
             }
             Value::Bool(v) => {
@@ -605,43 +606,43 @@ fn unmarshal_invoke_result(
         }
         ElementType::I1 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const i8) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const i8) }.into()))
         }
         ElementType::U1 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const u8) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const u8) }.into()))
         }
         ElementType::I2 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const i16) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const i16) }.into()))
         }
         ElementType::U2 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const u16) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const u16) }.into()))
         }
         ElementType::I4 | ElementType::ValueType => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const i32) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const i32) }.into()))
         }
         ElementType::U4 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const u32) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const u32) }.into()))
         }
         ElementType::I8 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const i64) }))
+            Ok(Value::Int(unsafe { *(ptr as *const i64) }.into()))
         }
         ElementType::U8 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Int(unsafe { *(ptr as *const u64) } as i64))
+            Ok(Value::Int(unsafe { *(ptr as *const u64) }.into()))
         }
         ElementType::R4 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Float(unsafe { *(ptr as *const f32) } as f64))
+            Ok(Value::Float(unsafe { *(ptr as *const f32) }.into()))
         }
         ElementType::R8 => {
             let ptr = unsafe { (api.il2cpp_object_unbox)(result) };
-            Ok(Value::Float(unsafe { *(ptr as *const f64) }))
+            Ok(Value::Float(unsafe { *(ptr as *const f64) }.into()))
         }
         _ => into_value(cx, XurUnityObject::from_obj(rt::Object(result))),
     }
@@ -664,28 +665,28 @@ fn marshal_arg(
             match param.type_info.element {
                 element::VOID => Ok(Value::Unit),
                 element::BOOLEAN => Ok(Value::Bool(raw != 0)),
-                element::I1 => Ok(Value::Int(raw as i8 as i64)),
-                element::U1 => Ok(Value::Int(raw as u8 as i64)),
-                element::I2 => Ok(Value::Int(raw as i16 as i64)),
-                element::U2 => Ok(Value::Int(raw as u16 as i64)),
-                element::I4 => Ok(Value::Int(raw as i32 as i64)),
-                element::U4 => Ok(Value::Int(raw as u32 as i64)),
-                element::I8 => Ok(Value::Int(raw as i64)),
-                element::U8 => Ok(Value::Int(raw as i64)),
-                element::R4 => Ok(Value::Float(f32::from_bits(raw as u32) as f64)),
-                element::R8 => Ok(Value::Float(f64::from_bits(raw))),
+                element::I1 => Ok(Value::Int((raw as i8).into())),
+                element::U1 => Ok(Value::Int((raw as u8).into())),
+                element::I2 => Ok(Value::Int((raw as i16).into())),
+                element::U2 => Ok(Value::Int((raw as u16).into())),
+                element::I4 => Ok(Value::Int((raw as i32).into())),
+                element::U4 => Ok(Value::Int((raw as u32).into())),
+                element::I8 => Ok(Value::Int((raw as i64).into())),
+                element::U8 => Ok(Value::Int(raw.into())),
+                element::R4 => Ok(Value::Float(f32::from_bits(raw as u32).into())),
+                element::R8 => Ok(Value::Float(f64::from_bits(raw).into())),
                 element::STRING
                 | element::CLASS
                 | element::OBJECT
                 | element::GENERICINST
                 | element::SZARRAY
                 | element::ARRAY => into_value(cx, XurUnityObject(raw as usize)),
-                _ => Ok(Value::Int(raw as i64)),
+                _ => Ok(Value::int(raw as i64)),
             }
         }
         rt::ParamSlot::FloatReg(i) => match param.type_info.element {
-            element::R4 => Ok(Value::Float(regs.read_f32(i) as f64)),
-            _ => Ok(Value::Float(regs.read_f64(i))),
+            element::R4 => Ok(Value::Float(regs.read_f32(i).into())),
+            _ => Ok(Value::Float(regs.read_f64(i).into())),
         },
     }
 }
@@ -696,8 +697,8 @@ fn write_arg_to_regs(regs: &mut hooking::SavedRegs, param: &rt::GenericParam, va
         rt::ParamSlot::IntReg(i) => {
             let raw: u64 = match val {
                 Value::Bool(b) => *b as u64,
-                Value::Int(n) => *n as u64,
-                Value::Float(f) => *f as u64,
+                Value::Int(n) => n.to_i128() as u64,
+                Value::Float(f) => f.as_f64() as u64,
                 Value::Native(n) => n.with(|o: &XurUnityObject| o.0 as u64).unwrap_or(0),
                 _ => return,
             };
@@ -706,16 +707,16 @@ fn write_arg_to_regs(regs: &mut hooking::SavedRegs, param: &rt::GenericParam, va
         rt::ParamSlot::FloatReg(i) => match val {
             Value::Float(f) => {
                 if param.type_info.element == rt::element::R4 {
-                    regs.write_f32(i, *f as f32);
+                    regs.write_f32(i, f.as_f32());
                 } else {
-                    regs.write_f64(i, *f);
+                    regs.write_f64(i, f.as_f64());
                 }
             }
             Value::Int(n) => {
                 if param.type_info.element == rt::element::R4 {
-                    regs.write_f32(i, *n as f32);
+                    regs.write_f32(i, n.as_f64() as f32);
                 } else {
-                    regs.write_f64(i, *n as f64);
+                    regs.write_f64(i, n.as_f64());
                 }
             }
             _ => {}
@@ -730,11 +731,11 @@ fn value_to_override(val: Value, return_element: i32) -> hooking::HookAction {
         Value::Unit => hooking::HookAction::OverrideInt(0),
         Value::Bool(b) => hooking::HookAction::OverrideInt(b as u64),
         Value::Int(i) => match return_element {
-            element::R4 => hooking::HookAction::OverrideFloat((i as f32) as f64),
-            element::R8 => hooking::HookAction::OverrideFloat(i as f64),
-            _ => hooking::HookAction::OverrideInt(i as u64),
+            element::R4 => hooking::HookAction::OverrideFloat((i.as_f64() as f32) as f64),
+            element::R8 => hooking::HookAction::OverrideFloat(i.as_f64()),
+            _ => hooking::HookAction::OverrideInt(i.to_i128() as u64),
         },
-        Value::Float(f) => hooking::HookAction::OverrideFloat(f),
+        Value::Float(f) => hooking::HookAction::OverrideFloat(f.as_f64()),
         Value::Native(ref n) => {
             if n.with(|_: &XurSkip| ()).is_some() {
                 hooking::HookAction::OverrideInt(0)
@@ -783,24 +784,24 @@ fn marshal_call_result(
     match return_element {
         0x01 => Value::Unit, // void
         element::BOOLEAN => Value::Bool(call_result.int_val != 0),
-        element::I1 => Value::Int(call_result.int_val as i8 as i64),
-        element::U1 => Value::Int(call_result.int_val as u8 as i64),
-        element::I2 => Value::Int(call_result.int_val as i16 as i64),
-        element::U2 => Value::Int(call_result.int_val as u16 as i64),
-        element::I4 | element::VALUETYPE => Value::Int(call_result.int_val as i32 as i64),
-        element::U4 => Value::Int(call_result.int_val as u32 as i64),
-        element::I8 => Value::Int(call_result.int_val as i64),
-        element::U8 => Value::Int(call_result.int_val as i64),
-        element::R4 => Value::Float(call_result.float_val),
-        element::R8 => Value::Float(call_result.float_val),
+        element::I1 => Value::Int((call_result.int_val as i8).into()),
+        element::U1 => Value::Int((call_result.int_val as u8).into()),
+        element::I2 => Value::Int((call_result.int_val as i16).into()),
+        element::U2 => Value::Int((call_result.int_val as u16).into()),
+        element::I4 | element::VALUETYPE => Value::Int((call_result.int_val as i32).into()),
+        element::U4 => Value::Int((call_result.int_val as u32).into()),
+        element::I8 => Value::Int((call_result.int_val as i64).into()),
+        element::U8 => Value::Int(call_result.int_val.into()),
+        element::R4 => Value::Float(FloatValue::F32(call_result.float_val as f32)),
+        element::R8 => Value::Float(FloatValue::F64(call_result.float_val)),
         element::STRING
         | element::CLASS
         | element::OBJECT
         | element::GENERICINST
         | element::SZARRAY
         | element::ARRAY => into_value(cx, XurUnityObject(call_result.int_val as usize))
-            .unwrap_or_else(|_| Value::Int(call_result.int_val as i64)),
-        _ => Value::Int(call_result.int_val as i64),
+            .unwrap_or_else(|_| Value::int(call_result.int_val as i64)),
+        _ => Value::int(call_result.int_val as i64),
     }
 }
 
@@ -903,13 +904,16 @@ pub(crate) fn register(registry: &Registry) {
                 let [this, Value::Str(name), Value::Int(param_count)] = args else {
                     return Err(RuntimeError::new("`method` takes (name, parameter_count)"));
                 };
+                let pc = param_count
+                    .to_i64()
+                    .ok_or_else(|| RuntimeError::new("param_count out of range"))? as i32;
                 let Value::Native(obj) = this else {
                     return Err(RuntimeError::new("expected a `Class`"));
                 };
                 let result = obj
                     .with(|c: &XurUnityClass| -> Result<Value, RuntimeError> {
                         let cls = c.class();
-                        match cls.method(name, *param_count as i32) {
+                        match cls.method(name, pc) {
                             Ok(m) => {
                                 let v = into_value(cx, XurUnityMethod::new(&m))?;
                                 Ok(xur_result(cx, Ok(v)))
@@ -1088,7 +1092,7 @@ pub(crate) fn register(registry: &Registry) {
                     return Err(RuntimeError::new("`code_address` takes no arguments"));
                 };
                 let method = extract_method(this)?;
-                Ok(Value::Int(method.code() as usize as i64))
+                Ok(Value::Int((method.code() as usize).into()))
             })
             .raw_function("hook_void_block", |cx, args| {
                 let [this] = args else {
@@ -1194,7 +1198,9 @@ pub(crate) fn register(registry: &Registry) {
                 obj.with(|ctx: &XurHookContext| -> Result<Value, RuntimeError> {
                     match key {
                         Value::Int(i) => {
-                            let idx = *i as usize;
+                            let idx = i.to_usize().ok_or_else(|| {
+                                RuntimeError::new(format!("arg index {} out of range", i))
+                            })?;
                             ctx.args.get(idx).map(|(_, v)| v.clone()).ok_or_else(|| {
                                 RuntimeError::new(format!("arg index {} out of range", idx))
                             })
@@ -1231,7 +1237,9 @@ pub(crate) fn register(registry: &Registry) {
                 };
                 obj.with(|ctx: &XurHookContext| -> Result<(), RuntimeError> {
                     let idx = match key {
-                        Value::Int(i) => *i as usize,
+                        Value::Int(i) => i.to_usize().ok_or_else(|| {
+                            RuntimeError::new(format!("set_arg index {} out of range", i))
+                        })?,
                         Value::Str(name) => ctx
                             .args
                             .iter()
@@ -1369,7 +1377,7 @@ pub(crate) fn register(registry: &Registry) {
                 let count = obj
                     .with(|i: &XurUnityImage| i.image().class_count())
                     .ok_or_else(|| RuntimeError::new("expected an `Image`"))?;
-                Ok(Value::Int(count as i64))
+                Ok(Value::Int((count as i64).into()))
             });
 
         // --- Object methods ---

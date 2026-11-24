@@ -21,7 +21,7 @@ use facet::{
 };
 use xur_span::Symbol;
 
-use crate::value::{Adt, NativeObject, Record, lock};
+use crate::value::{Adt, FloatValue, IntValue, NativeObject, Record, lock};
 use crate::{LangItems, Registry, RunResult, RuntimeError, Value};
 
 /// What conversions need to know about the running program.
@@ -210,26 +210,28 @@ fn opaque_bits(peek: Peek<'_, 'static>) -> Option<Value> {
     let ShapeLayout::Sized(layout) = peek.shape().layout else {
         return None;
     };
-    if !matches!(layout.size(), 1 | 2 | 4 | 8) {
+    let size = layout.size();
+    if !matches!(size, 1 | 2 | 4 | 8) {
         return None;
     }
     let mut bits = [0u8; 8];
     // SAFETY: the value is `layout.size()` initialised bytes; a type this
     // small with no visible fields is a plain integer, like bitflags.
-    let raw = unsafe { std::slice::from_raw_parts(peek.data().as_byte_ptr(), layout.size()) };
+    let raw = unsafe { std::slice::from_raw_parts(peek.data().as_byte_ptr(), size) };
     bits[..raw.len()].copy_from_slice(raw);
-    i64::try_from(u64::from_ne_bytes(bits)).ok().map(Value::Int)
+    let int = match size {
+        1 => IntValue::U8(bits[0]),
+        2 => IntValue::U16(u16::from_ne_bytes([bits[0], bits[1]])),
+        4 => IntValue::U32(u32::from_ne_bytes([bits[0], bits[1], bits[2], bits[3]])),
+        8 => IntValue::U64(u64::from_ne_bytes(bits)),
+        _ => return None,
+    };
+    Some(Value::Int(int))
 }
 
 fn scalar_to_value(peek: Peek<'_, 'static>, scalar: ScalarType) -> RunResult<Value> {
     fn get<T: Facet<'static> + Copy>(peek: Peek<'_, 'static>) -> RunResult<T> {
         peek.get::<T>().copied().map_err(reflect_error)
-    }
-    fn int<T: TryInto<i64> + std::fmt::Display + Copy>(value: T) -> RunResult<Value> {
-        value
-            .try_into()
-            .map(Value::Int)
-            .map_err(|_| RuntimeError::new(format!("{value} does not fit in a Xur integer")))
     }
     Ok(match scalar {
         ScalarType::Unit => Value::Unit,
@@ -238,20 +240,30 @@ fn scalar_to_value(peek: Peek<'_, 'static>, scalar: ScalarType) -> RunResult<Val
         ScalarType::Str | ScalarType::String | ScalarType::CowStr => {
             Value::str(peek.as_str().ok_or_else(|| unsupported(peek.shape()))?)
         }
-        ScalarType::F32 => Value::Float(get::<f32>(peek)?.into()),
-        ScalarType::F64 => Value::Float(get(peek)?),
-        ScalarType::U8 => int(get::<u8>(peek)?)?,
-        ScalarType::U16 => int(get::<u16>(peek)?)?,
-        ScalarType::U32 => int(get::<u32>(peek)?)?,
-        ScalarType::U64 => int(get::<u64>(peek)?)?,
-        ScalarType::U128 => int(get::<u128>(peek)?)?,
-        ScalarType::USize => int(get::<usize>(peek)?)?,
-        ScalarType::I8 => int(get::<i8>(peek)?)?,
-        ScalarType::I16 => int(get::<i16>(peek)?)?,
-        ScalarType::I32 => int(get::<i32>(peek)?)?,
-        ScalarType::I64 => int(get::<i64>(peek)?)?,
-        ScalarType::I128 => int(get::<i128>(peek)?)?,
-        ScalarType::ISize => int(get::<isize>(peek)?)?,
+        ScalarType::F32 => Value::Float(FloatValue::F32(get(peek)?)),
+        ScalarType::F64 => Value::Float(FloatValue::F64(get(peek)?)),
+        ScalarType::U8 => Value::Int(IntValue::U8(get(peek)?)),
+        ScalarType::U16 => Value::Int(IntValue::U16(get(peek)?)),
+        ScalarType::U32 => Value::Int(IntValue::U32(get(peek)?)),
+        ScalarType::U64 => Value::Int(IntValue::U64(get(peek)?)),
+        ScalarType::U128 => {
+            let v = get::<u128>(peek)?;
+            let v = u64::try_from(v)
+                .map_err(|_| RuntimeError::new(format!("{v} does not fit in a Xur integer")))?;
+            Value::Int(IntValue::U64(v))
+        }
+        ScalarType::USize => Value::Int(IntValue::U64(get::<usize>(peek)? as u64)),
+        ScalarType::I8 => Value::Int(IntValue::I8(get(peek)?)),
+        ScalarType::I16 => Value::Int(IntValue::I16(get(peek)?)),
+        ScalarType::I32 => Value::Int(IntValue::I32(get(peek)?)),
+        ScalarType::I64 => Value::Int(IntValue::I64(get(peek)?)),
+        ScalarType::I128 => {
+            let v = get::<i128>(peek)?;
+            let v = i64::try_from(v)
+                .map_err(|_| RuntimeError::new(format!("{v} does not fit in a Xur integer")))?;
+            Value::Int(IntValue::I64(v))
+        }
+        ScalarType::ISize => Value::Int(IntValue::I64(get::<isize>(peek)? as i64)),
         _ => return Err(unsupported(peek.shape())),
     })
 }
@@ -280,7 +292,7 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
             Value::List(items) => lock(items)
                 .iter()
                 .map(|item| match item {
-                    Value::Int(i) => u8::try_from(*i)
+                    Value::Int(i) => u8::try_from(i.to_i128())
                         .map_err(|_| RuntimeError::new(format!("{i} does not fit in `u8`"))),
                     other => Err(mismatch(u8::SHAPE, other)),
                 })
@@ -388,13 +400,13 @@ fn set_scalar(partial: Builder, scalar: ScalarType, value: &Value) -> RunResult<
     let shape = partial.shape();
     macro_rules! int {
         ($ty:ty) => {{
-            let int = match *value {
-                Value::Int(i) => i,
-                Value::Ptr(p) => p as i64,
+            let wide = match *value {
+                Value::Int(i) => i.to_i128(),
+                Value::Ptr(p) => p as i128,
                 _ => return Err(mismatch(shape, value)),
             };
-            let int = <$ty>::try_from(int).map_err(|_| {
-                RuntimeError::new(format!("{int} does not fit in `{}`", stringify!($ty)))
+            let int = <$ty>::try_from(wide).map_err(|_| {
+                RuntimeError::new(format!("{wide} does not fit in `{}`", stringify!($ty)))
             })?;
             partial.set(int)
         }};
@@ -406,8 +418,8 @@ fn set_scalar(partial: Builder, scalar: ScalarType, value: &Value) -> RunResult<
         (ScalarType::Char, Value::Str(s)) if s.chars().count() == 1 => {
             partial.set(s.chars().next().expect("one char"))
         }
-        (ScalarType::F64, &Value::Float(f)) => partial.set(f),
-        (ScalarType::F32, &Value::Float(f)) => partial.set(f as f32),
+        (ScalarType::F64, Value::Float(f)) => partial.set(f.as_f64()),
+        (ScalarType::F32, Value::Float(f)) => partial.set(f.as_f32()),
         (ScalarType::U8, _) => int!(u8),
         (ScalarType::U16, _) => int!(u16),
         (ScalarType::U32, _) => int!(u32),
@@ -521,28 +533,38 @@ pub use Option::None;
     #[test]
     fn scalars() {
         assert_eq!(round_trip(true), Value::Bool(true));
-        assert_eq!(round_trip(42u8), Value::Int(42));
-        assert_eq!(round_trip(-7i64), Value::Int(-7));
-        assert_eq!(round_trip(1.5f64), Value::Float(1.5));
+        assert_eq!(round_trip(42u8), Value::Int(IntValue::U8(42)));
+        assert_eq!(round_trip(-7i64), Value::int(-7));
+        assert_eq!(round_trip(1.5f64), Value::float(1.5));
         assert_eq!(round_trip(String::from("hi")), Value::str("hi"));
         assert_eq!(round_trip('x'), Value::str("x"));
         assert_eq!(round_trip(()), Value::Unit);
     }
 
     #[test]
+    fn integer_widths_preserved() {
+        let cx = cx();
+        let v = to_value(&cx, &42u64).unwrap();
+        assert!(matches!(v, Value::Int(IntValue::U64(42))));
+        let v = to_value(&cx, &-1i8).unwrap();
+        assert!(matches!(v, Value::Int(IntValue::I8(-1))));
+        assert_eq!(from_value::<u64>(&cx, &Value::Int(IntValue::U64(u64::MAX))).unwrap(), u64::MAX);
+    }
+
+    #[test]
     fn compound_values() {
         assert_eq!(
             round_trip(vec![1u32, 2]),
-            Value::list(vec![Value::Int(1), Value::Int(2)])
+            Value::list(vec![Value::Int(IntValue::U32(1)), Value::Int(IntValue::U32(2))])
         );
         assert_eq!(
             round_trip((1i32, String::from("a"))),
-            Value::tuple(vec![Value::Int(1), Value::str("a")])
+            Value::tuple(vec![Value::Int(IntValue::I32(1)), Value::str("a")])
         );
         let lang = cx().0;
         assert_eq!(
             round_trip(Some(3u8)),
-            Value::adt(lang.some, vec![Value::Int(3)])
+            Value::adt(lang.some, vec![Value::Int(IntValue::U8(3))])
         );
         assert_eq!(round_trip(None::<u8>), Value::adt(lang.none, vec![]));
         assert_eq!(
@@ -585,7 +607,7 @@ pub use Option::None;
 
     #[test]
     fn out_of_range_integers_are_errors() {
-        let error = from_value::<u8>(&cx(), &Value::Int(300)).unwrap_err();
+        let error = from_value::<u8>(&cx(), &Value::Int(IntValue::I32(300))).unwrap_err();
         assert_eq!(error.message, "300 does not fit in `u8`");
     }
 
@@ -593,7 +615,7 @@ pub use Option::None;
     fn mismatched_values_are_errors() {
         let error = from_value::<u32>(&cx(), &Value::str("1")).unwrap_err();
         assert_eq!(error.message, "expected `u32`, found string");
-        let error = from_value::<Vec<u32>>(&cx(), &Value::Int(1)).unwrap_err();
+        let error = from_value::<Vec<u32>>(&cx(), &Value::int(1)).unwrap_err();
         assert_eq!(error.message, "expected `Vec<u32>`, found integer");
     }
 
@@ -604,7 +626,7 @@ pub use Option::None;
             panic!("expected a record, found {value:?}");
         };
         assert_eq!(record.variant, Some(Symbol::intern("Rect")));
-        assert_eq!(record.field(Symbol::intern("h")), Some(&Value::Int(3)));
+        assert_eq!(record.field(Symbol::intern("h")), Some(&Value::Int(IntValue::U32(3))));
         round_trip(Shape::Empty);
         round_trip(Shape::Circle(1.5));
     }

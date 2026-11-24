@@ -31,18 +31,18 @@ impl<'de> Visitor<'de> for JsonVisitor {
     }
 
     fn visit_i64<E: de::Error>(self, v: i64) -> Result<JsonValue, E> {
-        Ok(JsonValue(Value::Int(v)))
+        Ok(JsonValue(Value::int(v)))
     }
 
     fn visit_u64<E: de::Error>(self, v: u64) -> Result<JsonValue, E> {
         match i64::try_from(v) {
-            Ok(i) => Ok(JsonValue(Value::Int(i))),
-            Err(_) => Ok(JsonValue(Value::Float(v as f64))),
+            Ok(i) => Ok(JsonValue(Value::int(i))),
+            Err(_) => Ok(JsonValue(Value::float(v as f64))),
         }
     }
 
     fn visit_f64<E: de::Error>(self, v: f64) -> Result<JsonValue, E> {
-        Ok(JsonValue(Value::Float(v)))
+        Ok(JsonValue(Value::float(v)))
     }
 
     fn visit_str<E: de::Error>(self, v: &str) -> Result<JsonValue, E> {

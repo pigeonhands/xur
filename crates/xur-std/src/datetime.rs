@@ -88,11 +88,12 @@ fn dt_add_months(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [this, Value::Int(n)] = args else {
         return Err(RuntimeError::new("`add_months` takes an integer"));
     };
+    let n = n.to_i64().ok_or_else(|| RuntimeError::new(format!("{n} is not a valid month count")))?;
     let dt = with_dt(this, |d| {
-        if *n >= 0 {
-            DateTime(d.0 + chrono::Months::new(*n as u32))
+        if n >= 0 {
+            DateTime(d.0 + chrono::Months::new(n as u32))
         } else {
-            DateTime(d.0 - chrono::Months::new((-*n) as u32))
+            DateTime(d.0 - chrono::Months::new((-n) as u32))
         }
     })?;
     into_value(cx, dt)
@@ -102,7 +103,8 @@ fn dt_add_years(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [this, Value::Int(n)] = args else {
         return Err(RuntimeError::new("`add_years` takes an integer"));
     };
-    let months = *n * 12;
+    let n = n.to_i64().ok_or_else(|| RuntimeError::new(format!("{n} is not a valid year count")))?;
+    let months = n * 12;
     let dt = with_dt(this, |d| {
         if months >= 0 {
             DateTime(d.0 + chrono::Months::new(months as u32))

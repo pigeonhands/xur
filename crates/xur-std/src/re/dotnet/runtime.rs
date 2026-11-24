@@ -97,7 +97,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 })
                 .ok_or_else(|| RuntimeError::new("expected a `Runtime`"))?;
             match res {
-                Ok(ptr) => Ok(result(cx, Ok(Value::Int(ptr)))),
+                Ok(ptr) => Ok(result(cx, Ok(Value::int(ptr)))),
                 Err(e) => Ok(result(cx, Err(e))),
             }
         })
@@ -124,7 +124,7 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
                 })
                 .ok_or_else(|| RuntimeError::new("expected a `Runtime`"))?;
             match res {
-                Ok(ptr) => Ok(result(cx, Ok(Value::Int(ptr)))),
+                Ok(ptr) => Ok(result(cx, Ok(Value::int(ptr)))),
                 Err(e) => Ok(result(cx, Err(e))),
             }
         });

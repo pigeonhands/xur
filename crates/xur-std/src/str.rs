@@ -131,7 +131,7 @@ fn find(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         return Err(RuntimeError::new("`find` takes a string needle"));
     };
     let found = s.find(&**needle).map(|byte_offset| {
-        Value::Int(s[..byte_offset].chars().count() as i64)
+        Value::int(s[..byte_offset].chars().count() as i64)
     });
     Ok(option(cx, found))
 }
@@ -142,7 +142,7 @@ fn rfind(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         return Err(RuntimeError::new("`rfind` takes a string needle"));
     };
     let found = s.rfind(&**needle).map(|byte_offset| {
-        Value::Int(s[..byte_offset].chars().count() as i64)
+        Value::int(s[..byte_offset].chars().count() as i64)
     });
     Ok(option(cx, found))
 }
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn string_methods() {
         assert_eq!(call("to_upper", &[Value::str("abc")]), Value::str("ABC"));
-        assert_eq!(call("len", &[Value::str("αβ")]), Value::Int(2));
+        assert_eq!(call("len", &[Value::str("αβ")]), Value::int(2));
         assert_eq!(
             call("split", &[Value::str("a,b"), Value::str(",")]),
             Value::list(vec![Value::str("a"), Value::str("b")])
@@ -179,7 +179,7 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("ord", &[Value::str("A")]),
-            Value::adt(lang.ok, vec![Value::Int(65)])
+            Value::adt(lang.ok, vec![Value::int(65)])
         );
     }
 
@@ -195,7 +195,7 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("parse_int", &[Value::str(" 42 ")]),
-            Value::adt(lang.ok, vec![Value::Int(42)])
+            Value::adt(lang.ok, vec![Value::int(42)])
         );
         assert_eq!(
             call("parse_int", &[Value::str("x")]),
@@ -209,15 +209,15 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("parse_hex", &[Value::str("ff")]),
-            Value::adt(lang.ok, vec![Value::Int(255)])
+            Value::adt(lang.ok, vec![Value::int(255)])
         );
         assert_eq!(
             call("parse_hex", &[Value::str("0xFF")]),
-            Value::adt(lang.ok, vec![Value::Int(255)])
+            Value::adt(lang.ok, vec![Value::int(255)])
         );
         assert_eq!(
             call("parse_hex", &[Value::str(" 7ee45f400000 ")]),
-            Value::adt(lang.ok, vec![Value::Int(0x7ee45f400000)])
+            Value::adt(lang.ok, vec![Value::int(0x7ee45f400000)])
         );
         assert_eq!(
             call("parse_hex", &[Value::str("zz")]),
@@ -240,12 +240,12 @@ mod tests {
     #[test]
     fn pad_right_pads_to_width() {
         assert_eq!(
-            call("pad_right", &[Value::str("hi"), Value::Int(5), Value::str(".")]),
+            call("pad_right", &[Value::str("hi"), Value::int(5), Value::str(".")]),
             Value::str("hi...")
         );
         // Already at width — no padding.
         assert_eq!(
-            call("pad_right", &[Value::str("hello"), Value::Int(3), Value::str(".")]),
+            call("pad_right", &[Value::str("hello"), Value::int(3), Value::str(".")]),
             Value::str("hello")
         );
     }
@@ -256,7 +256,7 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("find", &[Value::str("hello world"), Value::str("world")]),
-            Value::adt(lang.some, vec![Value::Int(6)])
+            Value::adt(lang.some, vec![Value::int(6)])
         );
         assert_eq!(
             call("find", &[Value::str("hello"), Value::str("xyz")]),
@@ -270,7 +270,7 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("rfind", &[Value::str("abcabc"), Value::str("abc")]),
-            Value::adt(lang.some, vec![Value::Int(3)])
+            Value::adt(lang.some, vec![Value::int(3)])
         );
     }
 
@@ -281,23 +281,23 @@ mod tests {
         let lang = TestCx::new(&registry, crate::PRELUDE).lang;
         assert_eq!(
             call("find", &[Value::str("αβγδ"), Value::str("γ")]),
-            Value::adt(lang.some, vec![Value::Int(2)])
+            Value::adt(lang.some, vec![Value::int(2)])
         );
     }
 
     #[test]
     fn slice_with_positive_and_negative_indices() {
         assert_eq!(
-            call("slice", &[Value::str("hello"), Value::Int(1), Value::Int(4)]),
+            call("slice", &[Value::str("hello"), Value::int(1), Value::int(4)]),
             Value::str("ell")
         );
         // Negative indices count from end.
         assert_eq!(
-            call("slice", &[Value::str("hello"), Value::Int(0), Value::Int(-1)]),
+            call("slice", &[Value::str("hello"), Value::int(0), Value::int(-1)]),
             Value::str("hell")
         );
         assert_eq!(
-            call("slice", &[Value::str("hello"), Value::Int(-3), Value::Int(-1)]),
+            call("slice", &[Value::str("hello"), Value::int(-3), Value::int(-1)]),
             Value::str("ll")
         );
     }
@@ -314,14 +314,14 @@ mod tests {
     fn bytes_returns_list_of_byte_values() {
         assert_eq!(
             call("bytes", &[Value::str("AB")]),
-            Value::list(vec![Value::Int(65), Value::Int(66)])
+            Value::list(vec![Value::int(65), Value::int(66)])
         );
     }
 
     #[test]
     fn insert_at_char_position() {
         assert_eq!(
-            call("insert", &[Value::str("helo"), Value::Int(3), Value::str("l")]),
+            call("insert", &[Value::str("helo"), Value::int(3), Value::str("l")]),
             Value::str("hello")
         );
     }
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn remove_char_range() {
         assert_eq!(
-            call("remove", &[Value::str("hello"), Value::Int(1), Value::Int(4)]),
+            call("remove", &[Value::str("hello"), Value::int(1), Value::int(4)]),
             Value::str("ho")
         );
     }

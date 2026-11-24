@@ -181,7 +181,10 @@ impl Interp<'_> {
             | (RtType::Ptr, Value::Ptr(_))
             | (RtType::List, Value::List(_))
             | (RtType::Map, Value::Map(_)) => true,
-            (RtType::Int { min, max, .. }, Value::Int(i)) => (min..=max).contains(&i),
+            (RtType::Int { min, max, .. }, Value::Int(i)) => {
+                let v = i.to_i128();
+                v >= *min as i128 && v <= *max as i128
+            }
             (RtType::Tuple(tys), Value::Tuple(items)) => {
                 tys.len() == items.len()
                     && tys

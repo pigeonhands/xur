@@ -218,20 +218,20 @@ unsafe fn marshal_in(
     for &kind in arg_kinds {
         match kind {
             ArgKind::Int => {
-                out.push(Value::Int(read_int(int_i) as i64));
+                out.push(Value::int(read_int(int_i) as i64));
                 int_i += 1;
             }
             ArgKind::Float32 => {
-                out.push(Value::Float(read_f32(sse_i) as f64));
+                out.push(Value::float(read_f32(sse_i) as f64));
                 sse_i += 1;
             }
             ArgKind::Float64 => {
-                out.push(Value::Float(read_f64(sse_i)));
+                out.push(Value::float(read_f64(sse_i)));
                 sse_i += 1;
             }
             ArgKind::Managed => {
                 let p = read_int(int_i) as usize;
-                out.push(into_value(handle, ManagedObject(p)).unwrap_or(Value::Int(p as i64)));
+                out.push(into_value(handle, ManagedObject(p)).unwrap_or(Value::int(p as i64)));
                 int_i += 1;
             }
             ArgKind::Decimal => {
@@ -288,21 +288,21 @@ unsafe fn marshal_out(
             ArgKind::Int => {
                 if changed
                     && let Some(Value::Int(n)) = rv {
-                        write_int(int_i, *n as u64);
+                        write_int(int_i, n.to_i128() as u64);
                     }
                 int_i += 1;
             }
             ArgKind::Float32 => {
                 if changed
                     && let Some(Value::Float(f)) = rv {
-                        write_f32(sse_i, *f as f32);
+                        write_f32(sse_i, f.as_f32());
                     }
                 sse_i += 1;
             }
             ArgKind::Float64 => {
                 if changed
                     && let Some(Value::Float(f)) = rv {
-                        write_f64(sse_i, *f);
+                        write_f64(sse_i, f.as_f64());
                     }
                 sse_i += 1;
             }
@@ -438,7 +438,7 @@ fn interpret_hook_result(
         }
         if adt.ctor == lang.some {
             let val = match adt.fields.first() {
-                Some(Value::Int(v)) => *v as u64,
+                Some(Value::Int(v)) => v.to_i128() as u64,
                 _ => 0,
             };
             return hooking::DispatchResult::override_int(val);
@@ -455,9 +455,9 @@ fn marshal_int_args(args: &[Value]) -> Result<Vec<u64>, RuntimeError> {
     let mut out = Vec::with_capacity(args.len());
     for v in args {
         match v {
-            Value::Int(i) => out.push(*i as u64),
+            Value::Int(i) => out.push(i.to_i128() as u64),
             Value::Bool(b) => out.push(*b as u64),
-            Value::Float(f) => out.push(*f as u64),
+            Value::Float(f) => out.push(f.as_f64() as u64),
             Value::Native(n) => {
                 #[cfg(feature = "xur-decimal")]
                 if let Some(regs) = n.with(|d: &xur_std::decimal::XurDecimal| d.to_dotnet_regs()) {
@@ -599,7 +599,8 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
                 .get()
                 .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
             let lang = cx.lang();
-            match rt.find_method_from_loaded(assembly, type_name, method, *param_count as i32) {
+            let pc = param_count.to_i64().ok_or_else(|| RuntimeError::new("param_count out of range"))? as i32;
+            match rt.find_method_from_loaded(assembly, type_name, method, pc) {
                 Ok(ptr) => {
                     let v = into_value(cx, MethodPtr(ptr as usize))?;
                     Ok(Value::adt(lang.ok, vec![v]))
@@ -673,7 +674,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(target_arch = "x86_64")]
             {
                 let result = safe_call_native(ptr.0, &call_args)?;
-                Ok(Value::Int(result as i64))
+                Ok(Value::int(result as i64))
             }
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("call only supported on x86_64"))
@@ -701,7 +702,7 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(target_arch = "x86_64")]
             {
                 let result = safe_call_native_float(ptr.0, &call_args)?;
-                Ok(Value::Float(result))
+                Ok(Value::float(result))
             }
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("call_float only supported on x86_64"))
@@ -921,7 +922,7 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
             let base = obj
                 .with(|o: &ManagedObject| o.0)
                 .ok_or_else(|| RuntimeError::new("expected a ManagedObject"))?;
-            let addr = (base as isize + *offset as isize) as usize;
+            let addr = (base as isize + offset.to_i64().ok_or_else(|| RuntimeError::new(format!("{offset} is not a valid offset")))? as isize) as usize;
             check_readable(addr, 8)
                 .map_err(|e| RuntimeError::new(format!("deref: {e}")))?;
             let val = unsafe { std::ptr::read_unaligned(addr as *const usize) };

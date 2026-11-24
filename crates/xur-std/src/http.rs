@@ -248,7 +248,7 @@ fn rb_timeout(_cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
     let [this, Value::Int(secs)] = args else {
         return Err(RuntimeError::new("`timeout` takes a number of seconds"));
     };
-    let secs = *secs as u64;
+    let secs = secs.to_u64().ok_or_else(|| RuntimeError::new("timeout must be a non-negative integer"))?;
     with_rb(this, |rb| {
         let mut rb = rb.clone();
         rb.timeout_secs = Some(secs);
