@@ -4988,6 +4988,7 @@ dependencies = [
  "hooking",
  "libc",
  "libloading 0.9.0",
+ "procodile",
  "rust_decimal",
  "tracing",
  "tracing-subscriber",

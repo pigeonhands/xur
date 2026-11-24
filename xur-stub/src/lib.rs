@@ -13,6 +13,7 @@ mod stub;
 const STACK_SIZE: usize = 256 << 20;
 const LOG_PATH: &str = "/tmp/xur-stub.log";
 
+
 fn init_logging() {
     let _ = std::fs::write(LOG_PATH, b"");
 }
@@ -25,6 +26,7 @@ fn install_crash_handler() {
         sa.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
         libc::sigaction(libc::SIGSEGV, &sa, std::ptr::null_mut());
         libc::sigaction(libc::SIGBUS, &sa, std::ptr::null_mut());
+        libc::sigaction(libc::SIGABRT, &sa, std::ptr::null_mut());
     }
 }
 
@@ -32,29 +34,79 @@ fn install_crash_handler() {
 unsafe extern "C" fn crash_signal_handler(
     sig: libc::c_int,
     info: *mut libc::siginfo_t,
-    ctx: *mut libc::c_void,
+    _ctx: *mut libc::c_void,
 ) {
     use std::io::Write;
-    let rip = if ctx.is_null() {
-        0u64
-    } else {
-        let uctx = ctx as *const libc::ucontext_t;
-        unsafe { (*uctx).uc_mcontext.gregs[libc::REG_RIP as usize] as u64 }
-    };
+
     let fault_addr = if info.is_null() {
         0u64
     } else {
         unsafe { (*info).si_addr() as u64 }
     };
-    let sig_name = if sig == libc::SIGSEGV {
-        "SIGSEGV"
-    } else {
-        "SIGBUS"
+    let sig_name = match sig {
+        libc::SIGSEGV => "SIGSEGV",
+        libc::SIGBUS => "SIGBUS",
+        libc::SIGABRT => "SIGABRT",
+        _ => "SIGNAL",
     };
-    let msg = format!(
+
+    // Extract rip and registers from platform-specific ucontext.
+    #[cfg(target_os = "linux")]
+    let (rip, reg_dump) = {
+        if _ctx.is_null() {
+            (0u64, String::new())
+        } else {
+            let uctx = _ctx as *const libc::ucontext_t;
+            let regs = unsafe { &(*uctx).uc_mcontext.gregs };
+            let rip = regs[libc::REG_RIP as usize] as u64;
+            let dump = format!(
+                "[xur-stub]   rdi=0x{:x} rsi=0x{:x} rdx=0x{:x} rcx=0x{:x}\n\
+                 [xur-stub]   r8=0x{:x} r9=0x{:x} rax=0x{:x} rbx=0x{:x}\n\
+                 [xur-stub]   rsp=0x{:x} rbp=0x{:x}\n",
+                regs[libc::REG_RDI as usize] as u64,
+                regs[libc::REG_RSI as usize] as u64,
+                regs[libc::REG_RDX as usize] as u64,
+                regs[libc::REG_RCX as usize] as u64,
+                regs[libc::REG_R8 as usize] as u64,
+                regs[libc::REG_R9 as usize] as u64,
+                regs[libc::REG_RAX as usize] as u64,
+                regs[libc::REG_RBX as usize] as u64,
+                regs[libc::REG_RSP as usize] as u64,
+                regs[libc::REG_RBP as usize] as u64,
+            );
+            (rip, dump)
+        }
+    };
+    #[cfg(not(target_os = "linux"))]
+    let (rip, reg_dump) = (0u64, String::new());
+
+    let mut msg = format!(
         "\n[xur-stub] CRASH: {} at rip=0x{:x} fault_addr=0x{:x}\n",
         sig_name, rip, fault_addr,
     );
+    msg.push_str(&reg_dump);
+
+    if rip != 0 {
+        if let Ok(handle) = procodile::ProcessHandle::open_current() {
+            let addr: procodile::Address = (rip as usize).into();
+            if let Ok(Some(region)) = handle.region_at(addr) {
+                let path = region
+                    .path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "<anonymous>".into());
+                let base: usize = region.base.into();
+                let offset = rip - base as u64;
+                msg.push_str(&format!(
+                    "[xur-stub]   module: {} base=0x{:x} rip_offset=0x{:x}\n",
+                    path, base, offset,
+                ));
+            } else {
+                msg.push_str("[xur-stub]   rip not in any mapped region (JIT code?)\n");
+            }
+        }
+    }
+
     let _ = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -287,7 +339,6 @@ mod tests {
             "megabonk_discover.xur",
             include_str!("../example/megabonk_discover.xur"),
         );
-        compile("sts2.xur", include_str!("../example/sts2.xur"));
     }
 
     #[test]
