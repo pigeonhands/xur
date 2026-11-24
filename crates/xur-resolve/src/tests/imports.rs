@@ -1,6 +1,43 @@
 use super::{resolve_files, resolve_src};
+use crate::Namespace;
 
 const SHAPES: &str = "pub enum Shape { Circle(f64) Square(f64) }\nfn helper() {}\npub fn area() {}";
+
+#[test]
+fn accessible_entries_hide_imported_private_items() {
+    let resolved = resolve_files(&[
+        (
+            "main.xur",
+            "const shapes = std::import(\"shapes.xur\");",
+        ),
+        ("shapes.xur", SHAPES),
+    ]);
+    resolved.assert_no_errors();
+    let res = resolved.program.resolutions();
+    // prelude is module 0, main is 1, shapes is 2.
+    let main = res.module_defs[1];
+    let shapes = res.module_defs[2];
+
+    // From `main`, only the public items of `shapes` can be named.
+    let from_main: Vec<&str> = res
+        .accessible_entries(shapes, Namespace::Value, main)
+        .iter()
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert!(from_main.contains(&"area"), "pub fn missing: {from_main:?}");
+    assert!(
+        !from_main.contains(&"helper"),
+        "private fn leaked: {from_main:?}"
+    );
+
+    // From within `shapes`, its private items are visible.
+    let from_self: Vec<&str> = res
+        .accessible_entries(shapes, Namespace::Value, shapes)
+        .iter()
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert!(from_self.contains(&"helper"), "own item hidden: {from_self:?}");
+}
 
 #[test]
 fn std_imports() {

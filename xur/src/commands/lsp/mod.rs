@@ -15,7 +15,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use xur_ast::{Expr, ExprKind, NodeId};
 use xur_ast::visit::Visitor;
 use xur_bytecode::ItemIndex;
-use xur_resolve::{DefKind, Namespace, Program, Res};
+use xur_resolve::{DefKind, Program, Res};
 use xur_runtime::Registry;
 use xur_span::{OverlayFileLoader, Span};
 
@@ -193,7 +193,6 @@ impl LanguageServer for Backend {
         };
         let program = &state.program;
         let sm = &program.krate.source_map;
-        let resolutions = program.resolutions();
 
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
@@ -201,26 +200,7 @@ impl LanguageServer for Backend {
         let Some(offset) = uri_position_to_offset(sm, uri, pos) else {
             return Ok(None);
         };
-        let Some(name) = name_at_offset(program, offset) else {
-            return Ok(None);
-        };
-        let Some(&res) = resolutions.res.get(&name.id) else {
-            return Ok(None);
-        };
-
-        let def_span = match res {
-            Res::Def(_, def_id) => resolutions.defs.get(def_id).span,
-            Res::Local(node_id) => resolutions.locals.get(&node_id).map(|id| id.span),
-            _ => None,
-        };
-
-        let Some(span) = def_span else {
-            return Ok(None);
-        };
-        let (target_uri, range) = span_to_range(sm, span);
-        Ok(Some(GotoDefinitionResponse::Scalar(Location::new(
-            target_uri, range,
-        ))))
+        Ok(definition_at(program, offset).map(GotoDefinitionResponse::Scalar))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -335,7 +315,6 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let program = &state.program;
-        let resolutions = program.resolutions();
 
         let uri = &params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
@@ -345,51 +324,7 @@ impl LanguageServer for Backend {
             docs.get(uri).and_then(|src| line_prefix(src, pos))
         };
 
-        let module_def = find_module_def(program, uri);
-        let mut items = Vec::new();
-
-        let path_scope = prefix.as_deref()
-            .and_then(|pfx| resolve_path_prefix(pfx, module_def?, resolutions));
-
-        if let Some(scope) = path_scope {
-            for (name, res) in resolutions.scope_entries(scope, Namespace::Value) {
-                items.push(CompletionItem {
-                    label: name.as_str().to_owned(),
-                    kind: Some(completion_kind(res)),
-                    ..Default::default()
-                });
-            }
-            for (name, res) in resolutions.scope_entries(scope, Namespace::Type) {
-                items.push(CompletionItem {
-                    label: name.as_str().to_owned(),
-                    kind: Some(completion_kind(res)),
-                    ..Default::default()
-                });
-            }
-        } else if let Some(module_def) = module_def {
-            for (name, res) in resolutions.scope_entries(module_def, Namespace::Value) {
-                items.push(CompletionItem {
-                    label: name.as_str().to_owned(),
-                    kind: Some(completion_kind(res)),
-                    ..Default::default()
-                });
-            }
-            for (name, res) in resolutions.scope_entries(module_def, Namespace::Type) {
-                items.push(CompletionItem {
-                    label: name.as_str().to_owned(),
-                    kind: Some(completion_kind(res)),
-                    ..Default::default()
-                });
-            }
-            for &kw in KEYWORDS {
-                items.push(CompletionItem {
-                    label: kw.to_owned(),
-                    kind: Some(CompletionItemKind::KEYWORD),
-                    ..Default::default()
-                });
-            }
-        }
-
+        let items = completions(program, uri, prefix.as_deref());
         Ok(Some(CompletionResponse::Array(items)))
     }
 
@@ -631,5 +566,165 @@ impl LanguageServer for Backend {
 
     async fn shutdown(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Cross-file analysis for static-string `std::import`s: a
+    //! `const m = std::import("./other.xur")` makes `m::Item` resolve into
+    //! `other.xur`, so navigation and completion reach across files.
+
+    use super::*;
+    use std::path::Path;
+    use xur_span::MemoryFileLoader;
+
+    /// The module the example `example/lang/main.xur` imports, trimmed to the
+    /// public and private items the tests exercise.
+    const MATH: &str = "\
+pub enum MathError { DivideByZero Overflow }
+pub fn add(a: u32, b: u32) -> u32 { a + b }
+pub fn div(a: u32, b: u32) -> Result<u32, MathError> {
+    if b == 0 { Err(MathError::DivideByZero) } else { Ok(a / b) }
+}
+fn secret() {}
+";
+
+    fn load(files: &[(&str, &str)]) -> Program {
+        let loader = Box::new(MemoryFileLoader::new(files.iter().copied()));
+        let registry = Arc::new(xur_std::registry());
+        let natives = Box::new(Arc::clone(&registry));
+        let (program, _diags) =
+            Program::load(Path::new(files[0].0), loader, natives, Some(xur_std::PRELUDE)).unwrap();
+        program
+    }
+
+    /// The global offset of the first occurrence of `needle` in the file whose
+    /// name ends with `file`.
+    fn offset_of(program: &Program, file: &str, needle: &str) -> usize {
+        let sf = program
+            .krate
+            .source_map
+            .files()
+            .iter()
+            .find(|f| f.name.ends_with(file))
+            .unwrap_or_else(|| panic!("no file ending `{file}`"));
+        let pos = sf
+            .src
+            .find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` not in `{file}`"));
+        sf.start + pos
+    }
+
+    /// The source text the location points at.
+    fn text_at(program: &Program, loc: &Location) -> String {
+        let sm = &program.krate.source_map;
+        let sf = find_file_by_uri(sm, &loc.uri).expect("located file");
+        let start = position_to_offset(sf, loc.range.start).unwrap();
+        let end = position_to_offset(sf, loc.range.end).unwrap();
+        sm.slice(Span { start, end }).to_owned()
+    }
+
+    fn uri(path: &str) -> Url {
+        Url::from_file_path(path).unwrap()
+    }
+
+    #[test]
+    fn goto_definition_jumps_into_imported_file() {
+        let program = load(&[
+            (
+                "/proj/main.xur",
+                "const math = std::import(\"./math.xur\");\n\
+                 fn f() -> math::MathError { math::MathError::Overflow }\n",
+            ),
+            ("/proj/math.xur", MATH),
+        ]);
+
+        // `math::MathError` in the return type jumps to the enum in math.xur.
+        let at = offset_of(&program, "main.xur", "math::MathError {");
+        let loc = definition_at(&program, at).expect("goto resolves");
+        assert!(
+            loc.uri.as_str().ends_with("math.xur"),
+            "expected math.xur, got {}",
+            loc.uri
+        );
+        assert_eq!(text_at(&program, &loc), "MathError");
+
+        // A nested `math::MathError::Overflow` path jumps to the variant.
+        let at = offset_of(&program, "main.xur", "math::MathError::Overflow");
+        let loc = definition_at(&program, at).expect("goto resolves");
+        assert!(loc.uri.as_str().ends_with("math.xur"));
+        assert_eq!(text_at(&program, &loc), "Overflow");
+    }
+
+    #[test]
+    fn goto_definition_on_the_module_alias_opens_the_file() {
+        let program = load(&[
+            (
+                "/proj/main.xur",
+                "const math = std::import(\"./math.xur\");\nfn f() { math::add(1, 2); }\n",
+            ),
+            ("/proj/math.xur", MATH),
+        ]);
+        // The cursor on `math` of `math::add` resolves the whole path to `add`.
+        let at = offset_of(&program, "main.xur", "math::add");
+        let loc = definition_at(&program, at).expect("goto resolves");
+        assert!(loc.uri.as_str().ends_with("math.xur"));
+        assert_eq!(text_at(&program, &loc), "add");
+    }
+
+    #[test]
+    fn completion_offers_only_public_items_of_an_imported_module() {
+        let program = load(&[
+            (
+                "/proj/main.xur",
+                "const math = std::import(\"./math.xur\");\nfn f() { let e = math:: }\n",
+            ),
+            ("/proj/math.xur", MATH),
+        ]);
+        let items = completions(&program, &uri("/proj/main.xur"), Some("    let e = math::"));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"MathError"), "missing MathError: {labels:?}");
+        assert!(labels.contains(&"add"), "missing add: {labels:?}");
+        assert!(labels.contains(&"div"), "missing div: {labels:?}");
+        // `secret` is private, so a `math::secret` path is rejected; it must
+        // not be offered.
+        assert!(!labels.contains(&"secret"), "private item offered: {labels:?}");
+    }
+
+    #[test]
+    fn missing_import_is_diagnosed_at_the_path_literal() {
+        let loader = Box::new(MemoryFileLoader::new([(
+            "/proj/main.xur",
+            "const gone = std::import(\"./gone.xur\");\n",
+        )]));
+        let registry = Arc::new(xur_std::registry());
+        let natives = Box::new(Arc::clone(&registry));
+        let (program, diags) = Program::load(
+            Path::new("/proj/main.xur"),
+            loader,
+            natives,
+            Some(xur_std::PRELUDE),
+        )
+        .unwrap();
+
+        let grouped = group_diagnostics(&program.krate.source_map, &diags);
+        let main = uri("/proj/main.xur");
+        let file_diags = grouped.get(&main).expect("diagnostic on main.xur");
+        assert_eq!(file_diags.len(), 1);
+        let diag = &file_diags[0];
+        assert!(
+            diag.message.contains("gone.xur"),
+            "message: {}",
+            diag.message
+        );
+        // The range covers the `"./gone.xur"` string literal.
+        let sf = find_file_by_uri(&program.krate.source_map, &main).unwrap();
+        let start = position_to_offset(sf, diag.range.start).unwrap();
+        let end = position_to_offset(sf, diag.range.end).unwrap();
+        assert_eq!(
+            program.krate.source_map.slice(Span { start, end }),
+            "\"./gone.xur\""
+        );
     }
 }

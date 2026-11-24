@@ -65,6 +65,22 @@ pub fn name_at_offset(program: &Program, offset: usize) -> Option<xur_resolve::N
     best
 }
 
+/// The definition the name at `offset` points to, as a location. Resolves
+/// across files, so a `module::Item` written against a `std::import`ed
+/// module jumps to `Item` in the imported file.
+pub fn definition_at(program: &Program, offset: usize) -> Option<Location> {
+    let resolutions = program.resolutions();
+    let name = name_at_offset(program, offset)?;
+    let res = *resolutions.res.get(&name.id)?;
+    let span = match res {
+        Res::Def(_, def_id) => resolutions.defs.get(def_id).span,
+        Res::Local(node_id) => resolutions.locals.get(&node_id).map(|id| id.span),
+        _ => None,
+    }?;
+    let (uri, range) = span_to_range(&program.krate.source_map, span);
+    Some(Location::new(uri, range))
+}
+
 pub fn span_to_range(sm: &SourceMap, span: Span) -> (Url, Range) {
     let file = sm.lookup_file(span.start);
     let start_lc = file.line_col(span.start);
@@ -135,6 +151,53 @@ pub fn find_module_def(program: &Program, uri: &Url) -> Option<DefId> {
         }
     }
     None
+}
+
+/// The completion items offered for the line `prefix` in file `uri`.
+///
+/// After a `module::` prefix it offers the names reachable in that scope —
+/// for an imported module, only its public items, as only those can be named
+/// by a `module::item` path. Otherwise it offers the current module's items
+/// and the keywords.
+pub fn completions(program: &Program, uri: &Url, prefix: Option<&str>) -> Vec<CompletionItem> {
+    let resolutions = program.resolutions();
+    let Some(module_def) = find_module_def(program, uri) else {
+        return Vec::new();
+    };
+    let mut items = Vec::new();
+
+    let path_scope = prefix.and_then(|pfx| resolve_path_prefix(pfx, module_def, resolutions));
+
+    if let Some(scope) = path_scope {
+        for ns in [Namespace::Value, Namespace::Type] {
+            for (name, res) in resolutions.accessible_entries(scope, ns, module_def) {
+                items.push(CompletionItem {
+                    label: name.as_str().to_owned(),
+                    kind: Some(completion_kind(res)),
+                    ..Default::default()
+                });
+            }
+        }
+    } else {
+        for ns in [Namespace::Value, Namespace::Type] {
+            for (name, res) in resolutions.scope_entries(module_def, ns) {
+                items.push(CompletionItem {
+                    label: name.as_str().to_owned(),
+                    kind: Some(completion_kind(res)),
+                    ..Default::default()
+                });
+            }
+        }
+        for &kw in KEYWORDS {
+            items.push(CompletionItem {
+                label: kw.to_owned(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                ..Default::default()
+            });
+        }
+    }
+
+    items
 }
 
 pub fn completion_kind(res: Res) -> CompletionItemKind {
