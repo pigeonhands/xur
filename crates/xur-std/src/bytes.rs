@@ -58,6 +58,14 @@ pub(crate) fn register(registry: &Registry) {
                 .ok()
                 .and_then(|i| bytes.get(i).copied())
                 .map(|b| b as i64)
+        })
+        .method("slice", |bytes: &[u8], start: i64, end: i64| -> Result<Vec<u8>, String> {
+            let s = usize::try_from(start).map_err(|_| "start out of range".to_string())?;
+            let e = usize::try_from(end).map_err(|_| "end out of range".to_string())?;
+            if s > e || e > bytes.len() {
+                return Err(format!("slice [{s}..{e}] out of range for {} bytes", bytes.len()));
+            }
+            Ok(bytes[s..e].to_vec())
         });
 
     macro_rules! numbers {

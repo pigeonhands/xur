@@ -15,6 +15,11 @@ Each
 .B {}
 in the template is replaced by the next argument, displayed as a string.
 .PP
+.B {:x}
+and
+.B {:X}
+format an integer argument as lowercase or uppercase hexadecimal.
+.PP
 Literal braces are written by doubling them:
 .B {{
 produces
@@ -27,6 +32,11 @@ produces
 Unmatched braces are an error. Extra arguments beyond the number of
 .B {}
 placeholders are also an error.
+Using
+.B {:x}
+or
+.B {:X}
+with a non-integer argument is an error.
 .SH EXAMPLES
 .nf
 use std::io;
@@ -35,6 +45,9 @@ fn main() {
     io::println("hello, {}!", "world");
     io::println("{} + {} = {}", 1, 2, 3);
     io::println("literal braces: {{}}");
+    io::println("hex: {:x}", 255);       // "hex: ff"
+    io::println("HEX: {:X}", 48879);     // "HEX: BEEF"
+    io::println("{} at {:x}", "ptr", 42); // "ptr at 2a"
 }
 .fi
 .SH SEE ALSO

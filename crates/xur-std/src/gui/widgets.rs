@@ -307,45 +307,45 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
     });
 
     ty.raw_function("scroll", |cx, args| {
-        let body_fn;
-        let max_height;
-        match args {
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        let (this_val, id_salt, max_height, body_fn) = match args {
+            [this_val, Value::Str(id), Value::Float(h), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
+                (this_val, Some(id.clone()), Some(*h as f32), b.clone())
+            }
+            [this_val, Value::Str(id), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
+                (this_val, Some(id.clone()), None, b.clone())
+            }
             [this_val, Value::Float(h), b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
-                max_height = Some(*h as f32);
-                body_fn = b.clone();
-                let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
-                return with_ui(this_val, |ui| {
-                    let mut ret = Value::Unit;
-                    ScrollArea::vertical().max_height(max_height.unwrap()).show(ui, |inner_ui| {
-                        let cx = unsafe { &mut *cx_ptr };
-                        let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                        match cx.call(&body_fn, &[inner]) {
-                            Ok(val) => ret = val,
-                            Err(e) => { tracing::error!("gui callback error: {}", e.message); }
-                        }
-                    });
-                    Ok(ret)
-                });
+                (this_val, None, Some(*h as f32), b.clone())
             }
             [this_val, b] if matches!(b, Value::Closure(_) | Value::Fn(_)) => {
-                body_fn = b.clone();
-                let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
-                return with_ui(this_val, |ui| {
-                    let mut ret = Value::Unit;
-                    ScrollArea::vertical().show(ui, |inner_ui| {
-                        let cx = unsafe { &mut *cx_ptr };
-                        let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
-                        match cx.call(&body_fn, &[inner]) {
-                            Ok(val) => ret = val,
-                            Err(e) => { tracing::error!("gui callback error: {}", e.message); }
-                        }
-                    });
-                    Ok(ret)
-                });
+                (this_val, None, None, b.clone())
             }
-            _ => {}
-        }
-        Err(RuntimeError::new("`scroll` takes a fn(ui) or (max_height: float, fn(ui))"))
+            _ => {
+                return Err(RuntimeError::new(
+                    "`scroll` takes fn(ui), (max_height, fn(ui)), (id, fn(ui)), or (id, max_height, fn(ui))"
+                ));
+            }
+        };
+        with_ui(this_val, |ui| {
+            let mut scroll = ScrollArea::vertical().auto_shrink([false, true]);
+            if let Some(id) = &id_salt {
+                scroll = scroll.id_salt(&**id);
+            }
+            if let Some(h) = max_height {
+                scroll = scroll.max_height(h);
+            }
+            let mut ret = Value::Unit;
+            scroll.show(ui, |inner_ui| {
+                let cx = unsafe { &mut *cx_ptr };
+                let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
+                match cx.call(&body_fn, &[inner]) {
+                    Ok(val) => ret = val,
+                    Err(e) => { tracing::error!("gui callback error: {}", e.message); }
+                }
+            });
+            Ok(ret)
+        })
     });
 
     ty.raw_function("grid", |cx, args| {
