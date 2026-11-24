@@ -39,6 +39,7 @@ fn stub_main() {
     let game: Option<proxies::GameState> = None;
     let combat: Option<proxies::Combat> = None;
     let cards: Option<proxies::CardHelper> = None;
+    let relics: Option<proxies::RelicHelper> = None;
     let init_error: Option<str> = None;
     let state = proxies::UiState::new();
 
@@ -54,18 +55,26 @@ fn stub_main() {
         // Process pending portrait uploads outside window_sized to avoid
         // re-entrant native object Mutex deadlock.
         draw::process_pending_portraits(ctx, state);
+        draw::process_pending_relic_icons(ctx, state);
 
         if game.is_none() && init_error.is_none() {
             match proxies::GameState::init(rt) {
                 Ok(g) => {
                     match proxies::Combat::init(rt) {
                         Ok(c) => {
+                            c.install_auto_draw_hook(rt, state);
                             game = Some(g);
                             combat = Some(c);
                             match proxies::CardHelper::init(rt) {
                                 Ok(ch) => { cards = Some(ch); }
                                 Err(e) => {
                                     log::info(fmt::format("CardHelper init error: {}", e));
+                                }
+                            }
+                            match proxies::RelicHelper::init(rt) {
+                                Ok(rh) => { relics = Some(rh); }
+                                Err(e) => {
+                                    log::info(fmt::format("RelicHelper init error: {}", e));
                                 }
                             }
                         }
@@ -104,11 +113,17 @@ fn stub_main() {
                 None => { return; }
             };
 
-            if !g.in_game() {
+            let in_game = match g.in_game() { Ok(v) => v, Err(_) => false };
+            if !in_game {
                 win.small("not in game (start a run)");
+                state.player_addr.set(0);
                 return;
             }
 
+            match g.player() {
+                Ok(p) => { state.player_addr.set(p.address()); }
+                Err(_) => { state.player_addr.set(0); }
+            }
             draw::draw_status(win, g, c);
             win.separator();
 
@@ -118,11 +133,12 @@ fn stub_main() {
                 if row.selectable(tab == Tab::Cards,  "Cards")  { state.tab.set(Tab::Cards); }
                 if row.selectable(tab == Tab::Gold,   "Gold")   { state.tab.set(Tab::Gold); }
                 if row.selectable(tab == Tab::Player, "Player") { state.tab.set(Tab::Player); }
+                if row.selectable(tab == Tab::Relics, "Relics") { state.tab.set(Tab::Relics); }
             });
             win.separator();
 
             match state.tab.get() {
-                Tab::Combat => { draw::draw_combat(win, g, c); }
+                Tab::Combat => { draw::draw_combat(win, g, c, state); }
                 Tab::Cards  => {
                     match cards {
                         Some(ch) => { draw::draw_cards(win, g, c, ch, state); }
@@ -131,6 +147,12 @@ fn stub_main() {
                 }
                 Tab::Gold   => { draw::draw_gold(win, g, state); }
                 Tab::Player => { draw::draw_player(win, g); }
+                Tab::Relics => {
+                    match relics {
+                        Some(rh) => { draw::draw_relics(win, rh, state); }
+                        None => { win.small("relic helper not available (check log)"); }
+                    }
+                }
             }
         });
     });

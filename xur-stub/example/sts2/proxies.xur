@@ -40,12 +40,37 @@ pub struct Combat {
 pub struct CardHelper {
     get_title: coreclr::MethodPtr
     get_portrait: coreclr::MethodPtr
-    remove_card: coreclr::MethodPtr
+    rs_remove_card: coreclr::MethodPtr
+    get_rm_instance: coreclr::MethodPtr
+    get_state: coreclr::MethodPtr
 }
 
 pub struct CardInfo {
     pub obj: coreclr::ManagedObject
     pub title: str
+}
+
+pub struct RelicHelper {
+    get_player_relics: coreclr::MethodPtr
+    get_title: coreclr::MethodPtr
+    get_formatted_text: coreclr::MethodPtr
+    get_icon: coreclr::MethodPtr
+    get_id: coreclr::MethodPtr
+    get_entry: coreclr::MethodPtr
+    to_mutable: coreclr::MethodPtr
+    relic_obtain: coreclr::MethodPtr
+    task_run_safely: coreclr::MethodPtr
+    get_shared_relic_pools: coreclr::MethodPtr
+    pool_get_all_relics: coreclr::MethodPtr
+    get_rm_instance: coreclr::MethodPtr
+    get_state: coreclr::MethodPtr
+    get_players: coreclr::MethodPtr
+}
+
+pub struct RelicInfo {
+    pub obj: coreclr::ManagedObject
+    pub name: str
+    pub id: str
 }
 
 pub struct PortraitData {
@@ -59,10 +84,18 @@ pub enum Tab {
     Cards
     Gold
     Player
+    Relics
 }
 
 struct CachedPortrait {
     addr: i64
+    tex_id: i64
+    width: i32
+    height: i32
+}
+
+struct CachedRelicIcon {
+    id: str
     tex_id: i64
     width: i32
     height: i32
@@ -75,13 +108,35 @@ pub struct PendingPortrait {
     pub data: bytes
 }
 
+pub struct PendingRelicIcon {
+    pub id: str
+    pub width: i32
+    pub height: i32
+    pub data: bytes
+}
+
+pub struct CatalogRelic {
+    pub name: str
+    pub id: str
+    pub pool_idx: i32
+    pub elem_idx: i32
+}
+
 pub struct UiState {
     tab: cell::Cell<Tab>
     gold_amount: cell::Cell<i32>
     energy_amount: cell::Cell<i32>
+    auto_draw: cell::Cell<bool>
+    player_addr: cell::Cell<i64>
     portraits: cell::Cell<[CachedPortrait]>
     pending: cell::Cell<[PendingPortrait]>
     requested: cell::Cell<[i64]>
+    relic_filter: cell::Cell<str>
+    relic_catalog: cell::Cell<[CatalogRelic]>
+    relic_catalog_built: cell::Cell<bool>
+    relic_icons_requested: cell::Cell<[str]>
+    relic_icons: cell::Cell<[CachedRelicIcon]>
+    relic_icons_pending: cell::Cell<[PendingRelicIcon]>
 }
 
 impl GameState {
@@ -110,60 +165,62 @@ impl GameState {
         })
     }
 
-    pub fn player(self) -> coreclr::ManagedObject {
+    pub fn player(self) -> Result<coreclr::ManagedObject> {
         let rm = self.get_rm_instance.call_ptr();
-        if rm.is_null() { return coreclr::null(); }
+        if rm.is_null() { return Ok(coreclr::null()); }
         let state = self.get_state.call_ptr(rm);
-        if state.is_null() { return coreclr::null(); }
+        if state.is_null() { return Ok(coreclr::null()); }
         let players_list = self.get_players.call_ptr(state);
-        if players_list.is_null() { return coreclr::null(); }
-        let count = players_list.read_i64(16);
-        if count <= 0 { return coreclr::null(); }
+        if players_list.is_null() { return Ok(coreclr::null()); }
+        let count = players_list.read_i64(16)?;
+        if count <= 0 { return Ok(coreclr::null()); }
         let items_array = players_list.deref(8);
-        if items_array.is_null() { return coreclr::null(); }
-        items_array.deref(16)
+        if items_array.is_null() { return Ok(coreclr::null()); }
+        Ok(items_array.deref(16))
     }
 
-    pub fn in_game(self) -> bool {
-        !self.player().is_null()
+    pub fn in_game(self) -> Result<bool> {
+        Ok(!self.player()?.is_null())
     }
 
-    pub fn creature(self) -> coreclr::ManagedObject {
-        let p = self.player();
-        if p.is_null() { return coreclr::null(); }
-        self.get_creature.call_ptr(p)
+    pub fn creature(self) -> Result<coreclr::ManagedObject> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(coreclr::null()); }
+        Ok(self.get_creature.call_ptr(p))
     }
 
-    pub fn combat_state(self) -> coreclr::ManagedObject {
-        let p = self.player();
-        if p.is_null() { return coreclr::null(); }
-        self.get_combat_state.call_ptr(p)
+    pub fn combat_state(self) -> Result<coreclr::ManagedObject> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(coreclr::null()); }
+        Ok(self.get_combat_state.call_ptr(p))
     }
 
-    pub fn gold(self) -> i32 {
-        let p = self.player();
-        if p.is_null() { return -1; }
-        self.get_gold.call(p)
+    pub fn gold(self) -> Result<i32> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(-1); }
+        Ok(self.get_gold.call(p))
     }
 
-    pub fn set_gold_to(self, amount: i32) {
-        let p = self.player();
-        if p.is_null() { return; }
+    pub fn set_gold_to(self, amount: i32) -> Result<()> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(()); }
         let setter = self.set_gold;
         godot::dispatch(|| { setter.call(p, amount); });
+        Ok(())
     }
 
-    pub fn max_energy(self) -> i32 {
-        let p = self.player();
-        if p.is_null() { return -1; }
-        self.get_max_energy.call(p)
+    pub fn max_energy(self) -> Result<i32> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(-1); }
+        Ok(self.get_max_energy.call(p))
     }
 
-    pub fn set_max_energy_to(self, amount: i32) {
-        let p = self.player();
-        if p.is_null() { return; }
+    pub fn set_max_energy_to(self, amount: i32) -> Result<()> {
+        let p = self.player()?;
+        if p.is_null() { return Ok(()); }
         let setter = self.set_max_energy;
         godot::dispatch(|| { setter.call(p, amount); });
+        Ok(())
     }
 }
 
@@ -215,6 +272,36 @@ impl Combat {
             get_hand, get_draw_pile, get_discard_pile, get_exhaust_pile,
             draw_card_cmd, godmode, player_creature_addr,
         })
+    }
+
+    pub fn install_auto_draw_hook(self, rt: coreclr::Runtime, state: UiState) {
+        let cm_t = "MegaCrit.Sts2.Core.Combat.CombatManager";
+        let check = rt.find_method("sts2", cm_t, "CheckForEmptyHand", 3);
+        match check {
+            Ok(method) => {
+                let ptr = method.resolve_jit();
+                log::info(fmt::format("CheckForEmptyHand: precode={} jit={}", method.address(), ptr.address()));
+                let auto_draw = state.auto_draw;
+                let player_addr = state.player_addr;
+                let draw_cmd = self.draw_card_cmd;
+                ptr.hook(|_this| {
+                    if auto_draw.get() {
+                        let addr = player_addr.get();
+                        if addr != 0 {
+                            let player = coreclr::from_address(addr);
+                            godot::dispatch(|| {
+                                draw_cmd.call(coreclr::null(), player);
+                            });
+                        }
+                    }
+                    None
+                });
+                log::info("auto-draw hook installed on CheckForEmptyHand");
+            }
+            Err(e) => {
+                log::info(fmt::format("auto-draw hook failed: {}", e));
+            }
+        }
     }
 
     pub fn hp(self, c: coreclr::ManagedObject) -> i32 {
@@ -281,30 +368,30 @@ impl Combat {
         godot::dispatch(|| { setter.call(pcs, cur + amount); });
     }
 
-    fn pile_count(pile: coreclr::ManagedObject) -> i32 {
-        if pile.is_null() { return 0; }
+    fn pile_count(pile: coreclr::ManagedObject) -> Result<i32> {
+        if pile.is_null() { return Ok(0); }
         let cards = pile.deref(8);
-        if cards.is_null() { return 0; }
-        cards.read_i32(16)
+        if cards.is_null() { return Ok(0); }
+        Ok(cards.read_i32(16)?)
     }
 
-    pub fn hand_count(self, pcs: coreclr::ManagedObject) -> i32 {
-        if pcs.is_null() { return -1; }
+    pub fn hand_count(self, pcs: coreclr::ManagedObject) -> Result<i32> {
+        if pcs.is_null() { return Ok(-1); }
         Combat::pile_count(self.get_hand.call_ptr(pcs))
     }
 
-    pub fn draw_pile_count(self, pcs: coreclr::ManagedObject) -> i32 {
-        if pcs.is_null() { return -1; }
+    pub fn draw_pile_count(self, pcs: coreclr::ManagedObject) -> Result<i32> {
+        if pcs.is_null() { return Ok(-1); }
         Combat::pile_count(self.get_draw_pile.call_ptr(pcs))
     }
 
-    pub fn discard_count(self, pcs: coreclr::ManagedObject) -> i32 {
-        if pcs.is_null() { return -1; }
+    pub fn discard_count(self, pcs: coreclr::ManagedObject) -> Result<i32> {
+        if pcs.is_null() { return Ok(-1); }
         Combat::pile_count(self.get_discard_pile.call_ptr(pcs))
     }
 
-    pub fn exhaust_count(self, pcs: coreclr::ManagedObject) -> i32 {
-        if pcs.is_null() { return -1; }
+    pub fn exhaust_count(self, pcs: coreclr::ManagedObject) -> Result<i32> {
+        if pcs.is_null() { return Ok(-1); }
         Combat::pile_count(self.get_exhaust_pile.call_ptr(pcs))
     }
 
@@ -350,46 +437,48 @@ impl Combat {
 impl CardHelper {
     pub fn init(rt: coreclr::Runtime) -> Result<CardHelper> {
         let asm = "sts2";
-        let gs = "GodotSharp";
         let card_t = "MegaCrit.Sts2.Core.Models.CardModel";
         let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+        let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
 
         log::info("resolving CardHelper...");
         let get_title = rt.method(asm, card_t, "get_Title")?;
         let get_portrait = rt.method(asm, card_t, "get_Portrait")?;
-        let remove_card = rt.find_method(asm, rs_t, "RemoveCard", 1)?;
+        let rs_remove_card = rt.method(asm, rs_t, "RemoveCard")?;
+        let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
+        let get_state = rt.method(asm, rm_t, "get_State")?;
 
         godot::resolve_image_bindings()?;
 
-        Ok(CardHelper { get_title, get_portrait, remove_card })
+        Ok(CardHelper { get_title, get_portrait, rs_remove_card, get_rm_instance, get_state })
     }
 
-    pub fn card_title(self, card: coreclr::ManagedObject) -> str {
-        if card.is_null() { return "?"; }
+    pub fn card_title(self, card: coreclr::ManagedObject) -> Result<str> {
+        if card.is_null() { return Ok("?"); }
         let s = self.get_title.call_ptr(card);
-        if s.is_null() { return "?"; }
-        s.read_string()
+        if s.is_null() { return Ok("?"); }
+        Ok(s.read_string()?)
     }
 
-    pub fn pile_cards(self, pile: coreclr::ManagedObject) -> [CardInfo] {
+    pub fn pile_cards(self, pile: coreclr::ManagedObject) -> Result<[CardInfo]> {
         let result = [];
-        if pile.is_null() { return result; }
+        if pile.is_null() { return Ok(result); }
         let list = pile.deref(8);
-        if list.is_null() { return result; }
-        let count = list.read_i32(16);
-        if count <= 0 { return result; }
+        if list.is_null() { return Ok(result); }
+        let count = list.read_i32(16)?;
+        if count <= 0 { return Ok(result); }
         let items = list.deref(8);
-        if items.is_null() { return result; }
+        if items.is_null() { return Ok(result); }
         let i = 0;
         while i < count {
             let card = items.deref(16 + i * 8);
             if !card.is_null() {
-                let title = self.card_title(card);
+                let title = self.card_title(card)?;
                 result.push(CardInfo { obj: card, title: title });
             }
             i += 1;
         }
-        result
+        Ok(result)
     }
 
     pub fn card_portrait_rgba(self, card: coreclr::ManagedObject) -> Option<PortraitData> {
@@ -407,14 +496,298 @@ impl CardHelper {
         }
     }
 
-    pub fn remove_from_deck(self, game: GameState, card: coreclr::ManagedObject) {
+    pub fn inspect_remove(self, card: coreclr::ManagedObject) {
+        if card.is_null() { log::info("inspect: card is null"); return; }
+        let rm = self.get_rm_instance.call_ptr();
+        if rm.is_null() { log::info("inspect: RunManager is null"); return; }
+        let rs = self.get_state.call_ptr(rm);
+        if rs.is_null() { log::info("inspect: RunState is null"); return; }
+        log::info(fmt::format("inspect: rs=0x{:x} card=0x{:x}", rs.address(), card.address()));
+        let i = 0;
+        while i < 192 {
+            match rs.read_i64(i) {
+                Ok(v) => { log::info(fmt::format("  rs+0x{:x}: 0x{:x}", i, v)); }
+                Err(_) => {}
+            }
+            i += 8;
+        }
+        log::info("--- card object ---");
+        i = 0;
+        while i < 64 {
+            match card.read_i64(i) {
+                Ok(v) => { log::info(fmt::format("  card+0x{:x}: 0x{:x}", i, v)); }
+                Err(_) => {}
+            }
+            i += 8;
+        }
+        log::info("inspect done (RemoveCard NOT called)");
+    }
+
+    pub fn remove_card(self, card: coreclr::ManagedObject) {
         if card.is_null() { return; }
-        let rm = game.get_rm_instance.call_ptr();
+        let rm = self.get_rm_instance.call_ptr();
         if rm.is_null() { return; }
-        let state = game.get_state.call_ptr(rm);
-        if state.is_null() { return; }
-        let remover = self.remove_card;
-        godot::dispatch(|| { remover.call(state, card); });
+        let rs = self.get_state.call_ptr(rm);
+        if rs.is_null() { return; }
+        self.rs_remove_card.call(rs, card);
+    }
+}
+
+impl RelicHelper {
+    pub fn init(rt: coreclr::Runtime) -> Result<RelicHelper> {
+        let asm = "sts2";
+        let rm_t = "MegaCrit.Sts2.Core.Runs.RunManager";
+        let rs_t = "MegaCrit.Sts2.Core.Runs.RunState";
+        let player_t = "MegaCrit.Sts2.Core.Entities.Players.Player";
+        let relic_t = "MegaCrit.Sts2.Core.Models.RelicModel";
+        let model_t = "MegaCrit.Sts2.Core.Models.AbstractModel";
+        let model_id_t = "MegaCrit.Sts2.Core.Models.ModelId";
+        let model_db_t = "MegaCrit.Sts2.Core.Models.ModelDb";
+        let relic_cmd_t = "MegaCrit.Sts2.Core.Commands.RelicCmd";
+        let task_t = "MegaCrit.Sts2.Core.Helpers.TaskHelper";
+        let loc_t = "MegaCrit.Sts2.Core.Localization.LocString";
+
+        log::info("resolving RelicHelper...");
+
+        let get_player_relics = rt.method(asm, player_t, "get_Relics")?;
+        let get_title = rt.method(asm, relic_t, "get_Title")?;
+        let get_formatted_text = rt.method(asm, loc_t, "GetFormattedText")?;
+        let get_icon = rt.method(asm, relic_t, "get_Icon")?;
+        let get_id = rt.method(asm, model_t, "get_Id")?;
+        let get_entry = rt.method(asm, model_id_t, "get_Entry")?;
+        let to_mutable = rt.method(asm, relic_t, "ToMutable")?;
+        let relic_obtain = rt.find_method(asm, relic_cmd_t, "Obtain", 3)?;
+        let task_run_safely = rt.method(asm, task_t, "RunSafely")?;
+        let pool_t = "MegaCrit.Sts2.Core.Models.RelicPoolModel";
+        let get_shared_relic_pools = rt.method(asm, model_db_t, "get_AllSharedRelicPools")?;
+        let pool_get_all_relics = rt.method(asm, pool_t, "get_AllRelics")?;
+        godot::resolve_image_bindings()?;
+        let get_rm_instance = rt.method(asm, rm_t, "get_Instance")?;
+        let get_state = rt.method(asm, rm_t, "get_State")?;
+        let get_players = rt.method(asm, rs_t, "get_Players")?;
+
+        log::info("RelicHelper resolved");
+        Ok(RelicHelper {
+            get_player_relics, get_title, get_formatted_text,
+            get_icon, get_id, get_entry,
+            to_mutable, relic_obtain, task_run_safely,
+            get_shared_relic_pools, pool_get_all_relics,
+            get_rm_instance, get_state, get_players,
+        })
+    }
+
+    fn player(self) -> coreclr::ManagedObject {
+        let rm = self.get_rm_instance.call_ptr();
+        if rm.is_null() { return coreclr::null(); }
+        let state = self.get_state.call_ptr(rm);
+        if state.is_null() { return coreclr::null(); }
+        let players_list = self.get_players.call_ptr(state);
+        if players_list.is_null() { return coreclr::null(); }
+        let items_array = players_list.deref(8);
+        if items_array.is_null() { return coreclr::null(); }
+        items_array.deref(16)
+    }
+
+    fn read_list(list: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
+        let result = [];
+        if list.is_null() { return result; }
+        let count = match list.read_i32(16) { Ok(c) => c, Err(_) => 0 };
+        if count <= 0 { return result; }
+        let items = list.deref(8);
+        if items.is_null() { return result; }
+        let i = 0;
+        while i < count {
+            let obj = items.deref(16 + i * 8);
+            if !obj.is_null() { result.push(obj); }
+            i += 1;
+        }
+        result
+    }
+
+    fn read_array(arr: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
+        let result = [];
+        if arr.is_null() { return result; }
+        let len = match arr.read_i64(8) { Ok(v) => v, Err(_) => 0 };
+        if len <= 0 || len > 10000 { return result; }
+        let i = 0;
+        while i < len {
+            let el = arr.deref(16 + i * 8);
+            if !el.is_null() { result.push(el); }
+            i += 1;
+        }
+        result
+    }
+
+    fn read_collection(obj: coreclr::ManagedObject) -> [coreclr::ManagedObject] {
+        if obj.is_null() { return []; }
+        // Try List<T>: +16 = _size (i32), +8 = _items (T[] array)
+        let size = match obj.read_i32(16) { Ok(c) => c, Err(_) => -1 };
+        let field8 = obj.deref(8);
+        if size > 0 && !field8.is_null() {
+            let arr_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => 0 };
+            if arr_len >= size {
+                return RelicHelper::read_array(field8);
+            }
+        }
+        // Try ReadOnlyCollection<T>: +8 = inner IList (array or list)
+        if !field8.is_null() {
+            // Check if field8 itself is an array (MT + length at +8)
+            let inner_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => -1 };
+            if inner_len > 0 && inner_len < 10000 {
+                return RelicHelper::read_array(field8);
+            }
+            // Otherwise try as List<T>
+            return RelicHelper::read_list(field8);
+        }
+        []
+    }
+
+    pub fn relic_title(self, relic: coreclr::ManagedObject) -> str {
+        if relic.is_null() { return "?"; }
+        let loc = self.get_title.call_ptr(relic);
+        if loc.is_null() { return "?"; }
+        let s = self.get_formatted_text.call_ptr(loc);
+        if s.is_null() { return "?"; }
+        match s.read_string() { Ok(v) => v, Err(_) => "?" }
+    }
+
+    pub fn relic_id(self, relic: coreclr::ManagedObject) -> str {
+        if relic.is_null() { return ""; }
+        let model_id = self.get_id.call_ptr(relic);
+        if model_id.is_null() { return ""; }
+        let entry = self.get_entry.call_ptr(model_id);
+        if entry.is_null() { return ""; }
+        match entry.read_string() { Ok(v) => v, Err(_) => "" }
+    }
+
+    pub fn current_relics(self) -> [RelicInfo] {
+        let p = self.player();
+        if p.is_null() { return []; }
+        let list = self.get_player_relics.call_ptr(p);
+        let result = [];
+        for obj in RelicHelper::read_list(list) {
+            let id = self.relic_id(obj);
+            result.push(RelicInfo { obj: obj, name: self.relic_title(obj), id: id });
+        }
+        result
+    }
+
+    pub fn all_relics(self) -> [CatalogRelic] {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return []; }
+        let catalog = [];
+        let seen = [];
+        let pools = RelicHelper::read_collection(shared);
+        let pi = 0;
+        for pool in pools {
+            let relics = self.pool_get_all_relics.call_ptr(pool);
+            if relics.is_null() { pi += 1; continue; }
+            let elems = RelicHelper::read_collection(relics);
+            let ei = 0;
+            for r in elems {
+                let id = self.relic_id(r);
+                if id == "" { ei += 1; continue; }
+                if !seen.contains(id) {
+                    seen.push(id);
+                    catalog.push(CatalogRelic {
+                        name: self.relic_title(r), id: id,
+                        pool_idx: pi, elem_idx: ei,
+                    });
+                }
+                ei += 1;
+            }
+            pi += 1;
+        }
+        catalog
+    }
+
+    fn read_collection_at(obj: coreclr::ManagedObject, idx: i32) -> coreclr::ManagedObject {
+        if obj.is_null() { return coreclr::null(); }
+        let field8 = obj.deref(8);
+        if field8.is_null() { return coreclr::null(); }
+        let inner_len = match field8.read_i64(8) { Ok(v) => v, Err(_) => -1 };
+        if inner_len > 0 && idx < inner_len {
+            return field8.deref(16 + idx * 8);
+        }
+        let size = match field8.read_i32(16) { Ok(c) => c, Err(_) => -1 };
+        if size > 0 {
+            let items = field8.deref(8);
+            if !items.is_null() && idx < size {
+                return items.deref(16 + idx * 8);
+            }
+        }
+        coreclr::null()
+    }
+
+    pub fn relic_icon_at(self, pool_idx: i32, elem_idx: i32, known_id: str) -> Option<PendingRelicIcon> {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return None; }
+        let pool = RelicHelper::read_collection_at(shared, pool_idx);
+        if pool.is_null() { return None; }
+        let relics = self.pool_get_all_relics.call_ptr(pool);
+        if relics.is_null() { return None; }
+        let relic = RelicHelper::read_collection_at(relics, elem_idx);
+        if relic.is_null() { return None; }
+        let tex = self.get_icon.call_ptr(relic);
+        if tex.is_null() { return None; }
+        match godot::texture_to_rgba(tex) {
+            Ok(result) => {
+                if result.0 > 0 && result.1 > 0 {
+                    Some(PendingRelicIcon {
+                        id: known_id, width: result.0,
+                        height: result.1, data: result.2,
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None
+        }
+    }
+
+    pub fn find_relic_by_id(self, id: str) -> Option<coreclr::ManagedObject> {
+        let shared = self.get_shared_relic_pools.call_ptr();
+        if shared.is_null() { return None; }
+        for pool in RelicHelper::read_collection(shared) {
+            let relics = self.pool_get_all_relics.call_ptr(pool);
+            if relics.is_null() { continue; }
+            for r in RelicHelper::read_collection(relics) {
+                if self.relic_id(r) == id { return Some(r); }
+            }
+        }
+        None
+    }
+
+    pub fn relic_icon_rgba(self, relic: coreclr::ManagedObject) -> Option<PortraitData> {
+        if relic.is_null() { return None; }
+        let tex = self.get_icon.call_ptr(relic);
+        if tex.is_null() { return None; }
+        match godot::texture_to_rgba(tex) {
+            Ok(result) => {
+                Some(PortraitData { width: result.0, height: result.1, data: result.2 })
+            }
+            Err(e) => {
+                log::info(fmt::format("relic icon error: {}", e));
+                None
+            }
+        }
+    }
+
+    pub fn add_relic(self, id: str) {
+        let p = self.player();
+        if p.is_null() { return; }
+        let mutable = self.to_mutable;
+        let obtain = self.relic_obtain;
+        let run_safely = self.task_run_safely;
+        godot::dispatch(|| {
+            let fresh = match self.find_relic_by_id(id) {
+                Some(r) => r,
+                None => { return; }
+            };
+            let m = mutable.call_ptr(fresh);
+            let task = obtain.call_ptr(m, p, -1);
+            run_safely.call(task);
+        });
     }
 }
 
@@ -424,9 +797,17 @@ impl UiState {
             tab: cell::new(Tab::Combat),
             gold_amount: cell::new(9999),
             energy_amount: cell::new(10),
+            auto_draw: cell::new(false),
+            player_addr: cell::new(0),
             portraits: cell::new([]),
             pending: cell::new([]),
             requested: cell::new([]),
+            relic_filter: cell::new(""),
+            relic_catalog: cell::new([]),
+            relic_catalog_built: cell::new(false),
+            relic_icons_requested: cell::new([]),
+            relic_icons: cell::new([]),
+            relic_icons_pending: cell::new([]),
         }
     }
 
@@ -466,5 +847,47 @@ impl UiState {
         let cur = self.pending.get();
         self.pending.set([]);
         cur
+    }
+
+    pub fn find_relic_icon(self, id: str) -> Option<CachedRelicIcon> {
+        for entry in self.relic_icons.get() {
+            if entry.id == id { return Some(entry); }
+        }
+        None
+    }
+
+    pub fn cache_relic_icon(self, id: str, tex_id: i64, width: i32, height: i32) {
+        let cache = self.relic_icons.get();
+        cache.push(CachedRelicIcon { id: id, tex_id: tex_id, width: width, height: height });
+        self.relic_icons.set(cache);
+    }
+
+    pub fn push_pending_relic_icon(self, p: PendingRelicIcon) {
+        let cur = self.relic_icons_pending.get();
+        cur.push(p);
+        self.relic_icons_pending.set(cur);
+    }
+
+    pub fn pending_relic_icon_count(self) -> i32 {
+        self.relic_icons_pending.get().len()
+    }
+
+    pub fn take_pending_relic_icons(self) -> [PendingRelicIcon] {
+        let cur = self.relic_icons_pending.get();
+        self.relic_icons_pending.set([]);
+        cur
+    }
+
+    pub fn is_relic_icon_requested(self, id: str) -> bool {
+        for r in self.relic_icons_requested.get() {
+            if r == id { return true; }
+        }
+        false
+    }
+
+    pub fn mark_relic_icon_requested(self, id: str) {
+        let r = self.relic_icons_requested.get();
+        r.push(id);
+        self.relic_icons_requested.set(r);
     }
 }
