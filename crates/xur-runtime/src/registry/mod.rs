@@ -679,10 +679,8 @@ impl Inner {
                         functions: ty.functions.clone(),
                         variants: if let Some(ref v) = ty.explicit_variants {
                             v.clone()
-                        } else if ty.hooks.is_none() {
-                            variant_decls(ty.shape)
                         } else {
-                            Vec::new()
+                            variant_decls(ty.shape)
                         },
                     }
                 })

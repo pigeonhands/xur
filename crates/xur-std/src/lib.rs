@@ -33,6 +33,7 @@ mod log;
 mod map;
 mod math;
 mod mem;
+mod native_enum_test;
 mod net;
 mod num;
 mod path;
@@ -97,6 +98,7 @@ pub fn register(registry: &Registry) {
     re::register(registry);
     math::register(registry);
     mem::register(registry);
+    native_enum_test::register(registry);
     list::register(registry);
     log::register(registry);
     map::register(registry);

@@ -1,0 +1,83 @@
+// Test that native Facet enums registered via ty() and shape_type()
+// can be pattern-matched from xur scripts.
+
+use std::io;
+use std::assert;
+use std::test::native_enum;
+
+fn test_shape_enum() {
+    io::println("--- ShapeEnum (shape_type) ---");
+
+    let a = native_enum::shape_alpha();
+    let b = native_enum::shape_beta("hello");
+    let g = native_enum::shape_gamma(42);
+
+    io::println("  alpha: {}", a);
+    io::println("  beta:  {}", b);
+    io::println("  gamma: {}", g);
+
+    let ra = match a {
+        native_enum::ShapeEnum::Alpha => "alpha",
+        native_enum::ShapeEnum::Beta(_) => "beta",
+        native_enum::ShapeEnum::Gamma(_) => "gamma",
+    };
+    assert::is_eq(ra, "alpha");
+
+    let rb = match b {
+        native_enum::ShapeEnum::Alpha => "alpha",
+        native_enum::ShapeEnum::Beta(s) => s,
+        native_enum::ShapeEnum::Gamma(_) => "gamma",
+    };
+    assert::is_eq(rb, "hello");
+
+    let rg = match g {
+        native_enum::ShapeEnum::Alpha => -1,
+        native_enum::ShapeEnum::Beta(_) => -1,
+        native_enum::ShapeEnum::Gamma(n) => n,
+    };
+    assert::is_eq(rg, 42);
+
+    io::println("  shape_type matching: OK");
+}
+
+fn test_ty_enum() {
+    io::println("--- TyEnum (ty) ---");
+
+    let a = native_enum::ty_alpha();
+    let b = native_enum::ty_beta("hello");
+    let g = native_enum::ty_gamma(42);
+
+    io::println("  alpha: {}", a);
+    io::println("  beta:  {}", b);
+    io::println("  gamma: {}", g);
+
+    let ra = match a {
+        native_enum::TyEnum::Alpha => "alpha",
+        native_enum::TyEnum::Beta(_) => "beta",
+        native_enum::TyEnum::Gamma(_) => "gamma",
+    };
+    assert::is_eq(ra, "alpha");
+
+    let rb = match b {
+        native_enum::TyEnum::Alpha => "alpha",
+        native_enum::TyEnum::Beta(s) => s,
+        native_enum::TyEnum::Gamma(_) => "gamma",
+    };
+    assert::is_eq(rb, "hello");
+
+    let rg = match g {
+        native_enum::TyEnum::Alpha => -1,
+        native_enum::TyEnum::Beta(_) => -1,
+        native_enum::TyEnum::Gamma(n) => n,
+    };
+    assert::is_eq(rg, 42);
+
+    io::println("  ty matching: OK");
+}
+
+fn main() -> Result<()> {
+    test_shape_enum();
+    test_ty_enum();
+    io::println("native_enums: all assertions passed");
+    Ok(())
+}

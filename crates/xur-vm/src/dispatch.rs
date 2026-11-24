@@ -93,6 +93,11 @@ impl Interp<'_> {
                 .registry
                 .type_function(object.ty, method.as_str())
                 .map(Value::NativeFn),
+            Value::NativeEnum(ne) => self
+                .shared
+                .registry
+                .type_function(ne.object.ty, method.as_str())
+                .map(Value::NativeFn),
             other => other.builtin_type().and_then(|ty| {
                 self.shared
                     .registry
@@ -145,6 +150,7 @@ impl Interp<'_> {
                     .field(self, object, field.as_str())
                     .ok_or_else(missing)?
             }
+            Value::NativeEnum(ne) => ne.field(field).cloned().ok_or_else(missing),
             Value::Record(record) => record.field(field).cloned().ok_or_else(missing),
             Value::Tuple(items) => numbered(items, field).ok_or_else(missing),
             Value::Adt(adt) => match self.shared.field_names(adt.ctor) {

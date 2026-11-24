@@ -43,6 +43,10 @@ pub enum Value {
     Adt(Arc<Adt>),
     /// A value of a registered Rust type, held as the Rust value itself.
     Native(Arc<NativeObject>),
+    /// A value of a registered Rust enum type. Keeps the boxed Rust value
+    /// (like `Native`) while exposing the active variant and fields so the
+    /// VM can pattern-match on it.
+    NativeEnum(Arc<NativeEnum>),
     /// A value of an unregistered Rust struct, converted to named fields.
     Record(Arc<Record>),
     /// A function defined in Xur, including those in `impl` blocks.
@@ -193,6 +197,41 @@ impl fmt::Debug for NativeObject {
     }
 }
 
+/// A value of a registered Rust enum type. Keeps the boxed Rust value for
+/// method dispatch and `from_value`, while exposing the active variant and
+/// its fields so the VM can pattern-match on it.
+pub struct NativeEnum {
+    pub object: Arc<NativeObject>,
+    pub variant: Symbol,
+    pub fields: Vec<(Symbol, Value)>,
+}
+
+impl NativeEnum {
+    pub fn field(&self, name: Symbol) -> Option<&Value> {
+        self.fields
+            .iter()
+            .find(|(field, _)| *field == name)
+            .map(|(_, value)| value)
+    }
+}
+
+impl fmt::Debug for NativeEnum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeEnum")
+            .field("ty", &self.object.ty)
+            .field("variant", &self.variant)
+            .finish()
+    }
+}
+
+impl PartialEq for NativeEnum {
+    fn eq(&self, other: &Self) -> bool {
+        self.object.ty == other.object.ty
+            && self.variant == other.variant
+            && self.fields == other.fields
+    }
+}
+
 /// Named fields: a value of a Rust struct or enum converted to Xur, or a
 /// record read with a layout.
 #[derive(Debug, Clone, PartialEq)]
@@ -279,6 +318,7 @@ impl Value {
             Self::Ptr(_) => "pointer",
             Self::Adt(_) => "struct or enum",
             Self::Native(_) => "native object",
+            Self::NativeEnum(_) => "native enum",
             Self::Record(_) => "record",
             Self::Fn(_) | Self::NativeFn(_) => "function",
             Self::Closure(_) => "closure",
@@ -376,6 +416,7 @@ impl PartialEq for Value {
             // Native objects are compared by identity here; the interpreter
             // compares their Rust values when the type supports it.
             (Self::Native(a), Self::Native(b)) => Arc::ptr_eq(a, b),
+            (Self::NativeEnum(a), Self::NativeEnum(b)) => a == b,
             (Self::Record(a), Self::Record(b)) => a == b,
             (Self::Fn(a), Self::Fn(b)) | (Self::Ctor(a), Self::Ctor(b)) => a == b,
             (Self::Module(a), Self::Module(b)) => a == b,

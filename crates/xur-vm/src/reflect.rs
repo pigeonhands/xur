@@ -55,6 +55,7 @@ impl Interp<'_> {
             // Not the methods every struct has, like `to_bytes`.
             Value::Adt(adt) => self.adt_methods(adt.ctor),
             Value::Native(object) => registry.type_methods(object.ty),
+            Value::NativeEnum(ne) => registry.type_methods(ne.object.ty),
             other => other
                 .builtin_type()
                 .map(|ty| registry.builtin_methods(ty))

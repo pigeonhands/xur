@@ -120,12 +120,16 @@ macro_rules! impl_into_native_fn {
                 )));
             };
             $(let $arg = from_value::<$arg>(cx, $arg)?;)*
-            let Value::Native(object) = receiver else {
-                return Err(RuntimeError::new(format!(
-                    "expected `{}`, found {}",
-                    $ty::SHAPE,
-                    receiver.kind()
-                )));
+            let object = match receiver {
+                Value::Native(object) => object,
+                Value::NativeEnum(ne) => &ne.object,
+                _ => {
+                    return Err(RuntimeError::new(format!(
+                        "expected `{}`, found {}",
+                        $ty::SHAPE,
+                        receiver.kind()
+                    )));
+                }
             };
             let result = object.$with(|this| $f(this, $($arg),*)).ok_or_else(|| {
                 RuntimeError::new(format!("expected `{}`, found another native type", $ty::SHAPE))

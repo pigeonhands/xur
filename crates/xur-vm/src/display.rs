@@ -82,6 +82,24 @@ impl Interp<'_> {
                 }
             }
             Value::Native(object) => self.shared.registry.display(object),
+            Value::NativeEnum(ne) => {
+                let registry = &self.shared.registry;
+                let name = format!("{}::{}", registry.type_name(ne.object.ty), ne.variant);
+                if ne.fields.is_empty() {
+                    name
+                } else {
+                    let is_tuple = ne.fields.iter().enumerate().all(|(i, (f, _))| f.as_str() == i.to_string());
+                    let fields: Vec<_> = ne.fields.iter().map(|(f, v)| match is_tuple {
+                        true => self.repr(v),
+                        false => format!("{f}: {}", self.repr(v)),
+                    }).collect();
+                    if is_tuple {
+                        format!("{name}({})", fields.join(", "))
+                    } else {
+                        format!("{name} {{ {} }}", fields.join(", "))
+                    }
+                }
+            }
             Value::Fn(def) | Value::Ctor(def) => format!("<fn {}>", self.def_path(*def)),
             Value::NativeFn(id) => format!("<fn {}>", self.shared.registry.function(*id).name),
             Value::Closure(_) => "<closure>".to_owned(),
@@ -114,6 +132,7 @@ impl Interp<'_> {
                 format!("`{ty}`")
             }
             Value::Native(object) => format!("`{}`", self.shared.registry.type_name(object.ty)),
+            Value::NativeEnum(ne) => format!("`{}`", self.shared.registry.type_name(ne.object.ty)),
             Value::Record(record) if record.ty.is_some() => {
                 let ty = record.ty.map(|ty| self.shared.registry.type_name(ty));
                 format!("`{}`", ty.unwrap_or_default())

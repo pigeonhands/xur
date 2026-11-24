@@ -44,6 +44,18 @@ pub fn into_value<T: Facet<'static> + Send + 'static>(
     value: T,
 ) -> RunResult<Value> {
     match cx.registry().type_of_shape(T::SHAPE) {
+        Some(ty) if is_enum_shape(T::SHAPE) => {
+            let (variant, fields) = peek_enum_fields(cx, Peek::new(&value))?;
+            let object = NativeObject::new(ty, Box::new(value));
+            Ok(Value::NativeEnum(
+                crate::value::NativeEnum {
+                    object: object.into(),
+                    variant,
+                    fields,
+                }
+                .into(),
+            ))
+        }
         Some(ty) => Ok(Value::Native(NativeObject::new(ty, Box::new(value)).into())),
         None => to_value(cx, &value),
     }
@@ -63,6 +75,20 @@ pub fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<V
     let shape = peek.shape();
     let registry = cx.registry();
     if let Some(ty) = registry.type_of_shape(shape) {
+        if is_enum_shape(shape) {
+            let (variant, fields) = peek_enum_fields(cx, peek)?;
+            let object = registry
+                .object_from_peek(ty, peek)
+                .ok_or_else(|| unsupported(shape))?;
+            return Ok(Value::NativeEnum(
+                crate::value::NativeEnum {
+                    object: object.into(),
+                    variant,
+                    fields,
+                }
+                .into(),
+            ));
+        }
         let object = registry
             .object_from_peek(ty, peek)
             .ok_or_else(|| unsupported(shape))?;
@@ -156,6 +182,28 @@ pub fn peek_to_value(cx: &dyn ConvertCx, peek: Peek<'_, 'static>) -> RunResult<V
     }
 }
 
+fn is_enum_shape(shape: &'static Shape) -> bool {
+    matches!(shape.ty, Type::User(UserType::Enum(_)))
+}
+
+fn peek_enum_fields(
+    cx: &dyn ConvertCx,
+    peek: Peek<'_, 'static>,
+) -> RunResult<(Symbol, Vec<(Symbol, Value)>)> {
+    let peek = peek.into_enum().map_err(reflect_error)?;
+    let variant = peek.active_variant().map_err(reflect_error)?;
+    let fields: Vec<(Symbol, Value)> = (0..variant.data.fields.len())
+        .map(|i| {
+            let field_name = Symbol::intern(variant.data.fields[i].name);
+            match peek.field(i).map_err(reflect_error)? {
+                Some(field) => Ok((field_name, peek_to_value(cx, field)?)),
+                None => Err(unsupported(peek.shape())),
+            }
+        })
+        .collect::<RunResult<_>>()?;
+    Ok((Symbol::intern(variant.name), fields))
+}
+
 /// The bits of a small opaque value, such as a set of bitflags, which is
 /// all of it that can be shown.
 fn opaque_bits(peek: Peek<'_, 'static>) -> Option<Value> {
@@ -218,6 +266,7 @@ fn build(cx: &dyn ConvertCx, partial: Builder, value: &Value) -> RunResult<Build
     if let Some(ty) = registry.type_of_shape(shape) {
         return match value {
             Value::Native(object) if object.ty == ty => registry.set_object(partial, object),
+            Value::NativeEnum(ne) if ne.object.ty == ty => registry.set_object(partial, &ne.object),
             _ => Err(mismatch(shape, value)),
         };
     }

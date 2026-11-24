@@ -339,6 +339,13 @@ impl<'s> Interp<'s> {
                     def: None,
                 })
             }
+            Value::NativeEnum(ne) => {
+                let name = self.shared.registry.type_name(ne.object.ty);
+                Some(TypeRef {
+                    name: name.to_owned(),
+                    def: None,
+                })
+            }
             _ => None,
         }
     }
@@ -635,18 +642,25 @@ impl<'s> Interp<'s> {
                 ty,
                 variant,
             } => {
-                let is = matches!(
-                    frame.get(*value),
-                    Value::Record(record)
-                        if record.ty == Some(*ty) && (variant.is_none() || record.variant == *variant)
-                );
+                let is = match frame.get(*value) {
+                    Value::Record(record) => {
+                        record.ty == Some(*ty)
+                            && (variant.is_none() || record.variant == *variant)
+                    }
+                    Value::NativeEnum(ne) => {
+                        ne.object.ty == *ty
+                            && (variant.is_none() || Some(ne.variant) == *variant)
+                    }
+                    _ => false,
+                };
                 frame.set(*dst, Value::Bool(is));
             }
             InstKind::RecordArity { dst, value, len } => {
-                let is = matches!(
-                    frame.get(*value),
-                    Value::Record(record) if record.fields.len() == *len as usize
-                );
+                let is = match frame.get(*value) {
+                    Value::Record(record) => record.fields.len() == *len as usize,
+                    Value::NativeEnum(ne) => ne.fields.len() == *len as usize,
+                    _ => false,
+                };
                 frame.set(*dst, Value::Bool(is));
             }
             InstKind::IsTuple { dst, value, len } => {
