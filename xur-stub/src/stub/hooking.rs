@@ -44,27 +44,33 @@ impl Clone for XurHook {
     }
 }
 
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+enum HookError {
+    LockPoisoned,
+    CreateFailed(String),
+    ApplyFailed(String),
+    RemoveFailed(String),
+}
+
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::hooking", |m| {
         m.ty::<XurSkip>("Skip");
-        m.raw_function_returns::<XurSkip>("Skip", |cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`Skip` takes no arguments"));
-            }
-            xur_runtime::convert::into_value(cx, XurSkip)
-        });
+        m.shape_type("HookError", HookError::SHAPE);
 
-        m.raw_function("create", |_cx, args| {
-            let [Value::Int(target), Value::Int(dest)] = args else {
-                return Err(RuntimeError::new(
-                    "`create` takes (target: int, destination: int)",
-                ));
-            };
-            let hook = unsafe { hooking::Hook::create(*target as *mut u8, *dest as *mut u8) }
-                .map_err(|e| RuntimeError::new(format!("{e}")))?;
-            let wrapped = XurHook(Mutex::new(hook));
-            xur_runtime::convert::into_value(_cx, wrapped)
-        });
+        m.function("Skip", || -> XurSkip { XurSkip });
+
+        m.named_function(
+            "create",
+            &["target", "dest"],
+            |target: i64, dest: i64| -> Result<XurHook, HookError> {
+                let hook =
+                    unsafe { hooking::Hook::create(target as *mut u8, dest as *mut u8) }
+                        .map_err(|e| HookError::CreateFailed(format!("{e}")))?;
+                Ok(XurHook(Mutex::new(hook)))
+            },
+        );
 
         m.raw_function("by_name", |_cx, args| {
             let (module, symbol, dest) = match args {
@@ -94,59 +100,24 @@ pub(crate) fn register(registry: &Registry) {
 
         let mut ty = m.ty::<XurHook>("Hook");
 
-        ty.raw_function("apply", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`apply` takes no arguments"));
-            };
-            with_hook(this, |hook| {
-                unsafe { hook.apply_hook() }.map_err(|e| RuntimeError::new(format!("{e}")))?;
-                Ok(Value::Unit)
-            })
+        ty.method("apply", |h: &XurHook| -> Result<(), HookError> {
+            let mut guard = h.0.lock().map_err(|_| HookError::LockPoisoned)?;
+            unsafe { guard.apply_hook() }.map_err(|e| HookError::ApplyFailed(format!("{e}")))
         });
 
-        ty.raw_function("remove", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`remove` takes no arguments"));
-            };
-            with_hook(this, |hook| {
-                unsafe { hook.remove_hook() }.map_err(|e| RuntimeError::new(format!("{e}")))?;
-                Ok(Value::Unit)
-            })
+        ty.method("remove", |h: &XurHook| -> Result<(), HookError> {
+            let mut guard = h.0.lock().map_err(|_| HookError::LockPoisoned)?;
+            unsafe { guard.remove_hook() }.map_err(|e| HookError::RemoveFailed(format!("{e}")))
         });
 
-        ty.raw_function("original", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`original` takes no arguments"));
-            };
-            with_hook(this, |hook| {
-                Ok(Value::Int(hook.original_function().as_ptr() as i64))
-            })
+        ty.method("original", |h: &XurHook| -> Result<i64, HookError> {
+            let guard = h.0.lock().map_err(|_| HookError::LockPoisoned)?;
+            Ok(guard.original_function().as_ptr() as i64)
         });
 
-        ty.raw_function("target", |_cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`target` takes no arguments"));
-            };
-            with_hook(this, |hook| {
-                Ok(Value::Int(hook.data.symbol_address.as_ptr() as i64))
-            })
+        ty.method("target", |h: &XurHook| -> Result<i64, HookError> {
+            let guard = h.0.lock().map_err(|_| HookError::LockPoisoned)?;
+            Ok(guard.data.symbol_address.as_ptr() as i64)
         });
     });
-}
-
-fn with_hook(
-    val: &Value,
-    f: impl FnOnce(&mut hooking::Hook<'static>) -> Result<Value, RuntimeError>,
-) -> Result<Value, RuntimeError> {
-    let Value::Native(obj) = val else {
-        return Err(RuntimeError::new("expected a `Hook`"));
-    };
-    obj.with(|wrapper: &XurHook| {
-        let mut guard = wrapper
-            .0
-            .lock()
-            .map_err(|_| RuntimeError::new("hook lock poisoned"))?;
-        f(&mut guard)
-    })
-    .ok_or_else(|| RuntimeError::new("expected a `Hook`"))?
 }
