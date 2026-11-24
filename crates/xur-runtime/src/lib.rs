@@ -13,7 +13,7 @@ pub use reflect::{AdtInfo, FieldInfo, FnInfo, TypeRef};
 pub use registry::{Context, Registry};
 pub use value::{
     Adt, BuiltinType, Closure, FloatValue, IntValue, MapKey, NativeObject, Range, Record, Value,
-    ValueIter, lock,
+    ValueIter, lock, with_pair,
 };
 pub use xur_resolve::LangItems;
 

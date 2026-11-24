@@ -4,7 +4,7 @@
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurList, lock};
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurList, lock, with_pair};
 use xur_runtime::registry::{ElemHint, XurType};
 
 use crate::option;
@@ -76,13 +76,17 @@ pub(crate) fn register(registry: &Registry) {
             let others = lock(&other.0).clone();
             lock(&list.0).extend(others);
         })
-        .method("to_hex", |list: &[Value]| {
+        .method("to_hex", |list: &[Value]| -> Result<String, String> {
+            // Validate each element is a byte, erroring on a non-int or
+            // out-of-range value instead of silently truncating `as u8`.
             list.iter()
                 .map(|v| match v {
-                    Value::Int(i) => format!("{:02x}", i.to_i128() as u8),
-                    _ => String::new(),
+                    Value::Int(i) => u8::try_from(i.to_i128())
+                        .map(|b| format!("{b:02x}"))
+                        .map_err(|_| format!("to_hex: {} is not a byte (0..=255)", i.to_i128())),
+                    _ => Err("to_hex: list contains a non-integer element".to_string()),
                 })
-                .collect::<String>()
+                .collect::<Result<String, String>>()
         })
         .raw_function_returns_xur("map", XurType::LIST, |cx, args| {
             let (list, [f]) = receiver(args)? else {
@@ -397,14 +401,16 @@ pub(crate) fn register(registry: &Registry) {
             }
             Ok(option(cx, Some(best.clone())))
         })
-        .method("zip", |list: &[Value], other: XurList| -> Value {
-            let right = lock(&other.0);
-            let result = list
-                .iter()
-                .zip(right.iter())
-                .map(|(a, b)| Value::list(vec![a.clone(), b.clone()]))
-                .collect();
-            Value::list(result)
+        .method("zip", |list: &XurList, other: XurList| -> Value {
+            // with_pair locks once when `xs.zip(xs)` aliases, twice otherwise.
+            with_pair(&list.0, &other.0, |left, right| {
+                let result = left
+                    .iter()
+                    .zip(right.iter())
+                    .map(|(a, b)| Value::list(vec![a.clone(), b.clone()]))
+                    .collect();
+                Value::list(result)
+            })
         });
 }
 

@@ -23,6 +23,25 @@ pub fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Locks two shared values for reading without cloning. When they are the same
+/// value (aliased `Arc` — e.g. `xs.zip(xs)`), locks it once and hands the single
+/// guard to both sides; otherwise locks each. This avoids the deadlock a plain
+/// double `lock` of the same non-reentrant `Mutex` would hit.
+pub fn with_pair<T: ?Sized, R>(
+    a: &Arc<Mutex<T>>,
+    b: &Arc<Mutex<T>>,
+    f: impl FnOnce(&T, &T) -> R,
+) -> R {
+    if Arc::ptr_eq(a, b) {
+        let g = lock(a);
+        f(&g, &g)
+    } else {
+        let ga = lock(a);
+        let gb = lock(b);
+        f(&ga, &gb)
+    }
+}
+
 /// An integer value that preserves its original width.
 #[derive(Debug, Clone, Copy)]
 pub enum IntValue {

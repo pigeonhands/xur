@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, XurStr, lock};
+use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, XurStr, lock, with_pair};
 
 
 type Bytes = Arc<Mutex<Vec<u8>>>;
@@ -34,11 +34,13 @@ pub(crate) fn register(registry: &Registry) {
             let other = lock(&other.0).clone();
             lock(&bytes.0).extend(other);
         })
-        .method("find", |bytes: &[u8], needle: XurBytes| -> Option<i64> {
-            find(bytes, &lock(&needle.0)).map(|at| at as i64)
+        .method("find", |bytes: &XurBytes, needle: XurBytes| -> Option<i64> {
+            // with_pair locks once when `data.find(data)` aliases the receiver,
+            // twice otherwise — no clone, no double-lock deadlock.
+            with_pair(&bytes.0, &needle.0, |hay, needle| find(hay, needle).map(|at| at as i64))
         })
-        .method("starts_with", |bytes: &[u8], prefix: XurBytes| -> bool {
-            bytes.starts_with(&lock(&prefix.0))
+        .method("starts_with", |bytes: &XurBytes, prefix: XurBytes| -> bool {
+            with_pair(&bytes.0, &prefix.0, |bytes, prefix| bytes.starts_with(&prefix[..]))
         })
         .method("to_hex", |bytes: &[u8]| -> String {
             bytes.iter().map(|byte| format!("{byte:02x}")).collect()

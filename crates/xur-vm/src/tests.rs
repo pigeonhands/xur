@@ -468,7 +468,7 @@ fn bytes_methods() {
     assert_eq!(
         run(src),
         Ok(
-            "efbeaddefffe0000 deadbeef -2 0\nb\"MZ\" Ok(\"hi\")\nSome(1)\n4d5a Ok(b\"MZ\")\n"
+            "efbeaddefffe0000 deadbeef -2 0\nb\"MZ\" Ok(\"hi\")\nSome(1)\nOk(\"4d5a\") Ok(b\"MZ\")\n"
                 .into()
         )
     );
@@ -1164,4 +1164,42 @@ fn repr_enum_equality_is_type_scoped() {
         }
     "#;
     assert_eq!(run(src), Ok("ok\n".into()));
+}
+
+#[test]
+fn list_to_hex_validates_bytes() {
+    // Out-of-byte-range element yields an error (propagated via `?`) instead of
+    // silently truncating `as u8`.
+    let over = run(r#"fn main() -> Result<()> { std::io::println("{}", [256].to_hex()?); Ok(()) }"#);
+    assert!(over.is_err(), "to_hex should reject 256, got {over:?}");
+    // Non-int element errors instead of being silently dropped.
+    let nonint = run(r#"fn main() -> Result<()> { std::io::println("{}", ["x"].to_hex()?); Ok(()) }"#);
+    assert!(nonint.is_err(), "to_hex should reject a string element, got {nonint:?}");
+    // Valid bytes still render.
+    let ok = run(r#"fn main() -> Result<()> { std::io::println("{}", [255, 0, 16].to_hex()?); Ok(()) }"#);
+    assert_eq!(ok, Ok("ff0010\n".into()));
+}
+
+#[test]
+fn self_aliased_collection_ops_dont_deadlock() {
+    // The receiver holds the collection's Mutex for the whole call; a locking
+    // argument that aliases it (xs.zip(xs), data.find(data)) must not re-lock.
+    let src = r#"
+        fn main() {
+            let xs = [1, 2, 3];
+            let _ = xs.zip(xs);
+            let data = std::bytes::from_list([1, 2, 1, 2]);
+            let _ = data.find(data);
+            let _ = data.starts_with(data);
+            std::io::println("ok");
+        }
+    "#;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(run(src));
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(r) => assert_eq!(r, Ok("ok\n".into())),
+        Err(_) => panic!("a self-aliased collection op deadlocked (timed out)"),
+    }
 }
