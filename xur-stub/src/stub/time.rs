@@ -1,39 +1,29 @@
-use xur_runtime::{Registry, RuntimeError, Value};
+use facet::Facet;
+use xur_runtime::Registry;
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+enum TimeError {
+    SetScale(String),
+}
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::re::unity::time", |m| {
         use hao_il2cpp_unity::time;
 
-        m.raw_function("scale", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`scale` takes no arguments"));
-            }
-            let scale = time::scale().unwrap_or(1.0);
-            Ok(Value::Float(scale as f64))
+        m.shape_type("TimeError", TimeError::SHAPE);
+
+        m.function("scale", || -> f64 { time::scale().unwrap_or(1.0) as f64 });
+
+        m.named_function("set_scale", &["scale"], |scale: f64| -> Result<(), TimeError> {
+            time::set_scale(scale as f32).map_err(|e| TimeError::SetScale(e.to_string()))
         });
 
-        m.raw_function("set_scale", |_cx, args| {
-            let [Value::Float(scale)] = args else {
-                return Err(RuntimeError::new("`set_scale` takes a float"));
-            };
-            let _ = time::set_scale(*scale as f32);
-            Ok(Value::Unit)
-        });
+        m.function("delta", || -> f64 { time::delta().unwrap_or(0.0) as f64 });
 
-        m.raw_function("delta", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`delta` takes no arguments"));
-            }
-            let dt = time::delta().unwrap_or(0.0);
-            Ok(Value::Float(dt as f64))
-        });
-
-        m.raw_function("frame_count", |_cx, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new("`frame_count` takes no arguments"));
-            }
-            let count = time::frame_count().unwrap_or(0);
-            Ok(Value::Int(count as i64))
+        m.function("frame_count", || -> i64 {
+            time::frame_count().unwrap_or(0) as i64
         });
     });
 }
