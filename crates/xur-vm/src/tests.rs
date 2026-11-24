@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use xur_resolve::Program;
-use xur_span::MemoryFileLoader;
+use xur_span::{MemoryFileLoader, RealFileLoader};
 
 use crate::Vm;
 
@@ -1111,4 +1111,31 @@ fn std_process_kill_stops_a_running_child() {
         }
     "#;
     assert_eq!(run(src), Ok("None\n".into()));
+}
+
+#[test]
+fn test_all_examples() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo = manifest.parent().unwrap().parent().unwrap();
+    std::env::set_current_dir(repo).expect("failed to chdir to repo root");
+
+    let main_xur = repo.join("example/main.xur");
+    let registry = Arc::new(xur_std::registry());
+    let natives = Box::new(Arc::clone(&registry));
+    let (program, diags) =
+        Program::load(&main_xur, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
+            .expect("failed to load example/main.xur");
+    assert!(diags.is_empty(), "compile errors: {diags:?}");
+
+    let output = Output::default();
+    let vm = Vm::new(program, registry, Box::new(output.clone()));
+    let result = vm.run_fn("test_all").expect("no test_all function");
+    let printed = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
+
+    let value = result.unwrap_or_else(|e| panic!("test_all failed: {}\n{printed}", e.message));
+    let passed = match value {
+        xur_runtime::Value::Int(n) => n,
+        other => panic!("test_all returned {other:?}, expected i64"),
+    };
+    assert!(passed > 10, "test_all only ran {passed} examples, expected >10");
 }
