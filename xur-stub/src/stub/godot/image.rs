@@ -8,6 +8,11 @@
 //! 2. GPU-readback the atlas once via `RenderingServer.Texture2DGet`
 //! 3. Cache the decompressed RGBA8 atlas by RID
 //! 4. Crop to the per-card region in Rust
+//!
+//! All managed Image manipulation (Texture2DGet → Decompress → Convert →
+//! GetData) happens inside a single `[UnmanagedCallersOnly]` compound
+//! method so the thread stays in cooperative GC mode — managed object
+//! pointers cannot be relocated between calls.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -24,6 +29,40 @@ struct CachedAtlas {
 
 static ATLAS_CACHE: Mutex<Option<HashMap<u64, CachedAtlas>>> = Mutex::new(None);
 
+fn readback_direct(
+    rt: &hao_runtime::Runtime,
+    tex: usize,
+) -> Result<(i64, i64, Vec<u8>), String> {
+    let rid = hao_godot::engine::texture2d::get_rid(rt, tex)
+        .map_err(|e| e.to_string())?;
+    if rid == 0 {
+        return Err("texture RID is 0".into());
+    }
+    let (w, h, data) = hao_godot::engine::image::extract_rgba_compound(rt, rid)
+        .map_err(|e| e.to_string())?;
+    Ok((w as i64, h as i64, data))
+}
+
+fn readback_atlas(
+    rt: &hao_runtime::Runtime,
+    tex: usize,
+) -> Result<(i64, i64, Vec<u8>), String> {
+    let region = hao_godot::engine::atlas_texture::get_region(rt, tex)
+        .map_err(|e| e.to_string())?;
+    let [rx, ry, rw, rh] = region;
+    if rw <= 0.0 || rh <= 0.0 {
+        return Err("not an atlas texture".into());
+    }
+    let rid = hao_godot::engine::texture2d::get_rid(rt, tex)
+        .map_err(|e| e.to_string())?;
+    if rid == 0 {
+        return Err("atlas RID is 0".into());
+    }
+    let (aw, _ah, atlas_data) = get_or_readback_atlas(rt, rid)?;
+    let data = crop_rgba(&atlas_data, aw, rx as u32, ry as u32, rw as u32, rh as u32);
+    Ok((rw as i64, rh as i64, data))
+}
+
 fn get_or_readback_atlas(
     rt: &hao_runtime::Runtime,
     rid: u64,
@@ -36,12 +75,7 @@ fn get_or_readback_atlas(
         }
     }
 
-    let img_ptr = hao_godot::engine::rendering_server::texture_2d_get(rt, rid)
-        .map_err(|e| e.to_string())?;
-    if img_ptr.is_null() {
-        return Err("Texture2DGet returned null".into());
-    }
-    let (w, h, data) = hao_godot::engine::image::extract_rgba(rt, img_ptr as usize)
+    let (w, h, data) = hao_godot::engine::image::extract_rgba_compound(rt, rid)
         .map_err(|e| e.to_string())?;
 
     let mut cache = ATLAS_CACHE.lock().unwrap();
@@ -87,49 +121,19 @@ pub(super) fn register(m: &mut ModuleBuilder<'_>) {
                 return Err("null texture".into());
             }
             let rt = hao_godot::runtime().map_err(|e| e.to_string())?;
+            readback_atlas(rt, tex.0).or_else(|_| readback_direct(rt, tex.0))
+        },
+    );
 
-            // Try AtlasTexture path: get atlas + region
-            let atlas_ptr = hao_godot::engine::atlas_texture::get_atlas(rt, tex.0)
-                .ok()
-                .filter(|p| !p.is_null());
-
-            if let Some(atlas) = atlas_ptr {
-                let region = hao_godot::engine::atlas_texture::get_region(rt, tex.0)
-                    .map_err(|e| e.to_string())?;
-                let [rx, ry, rw, rh] = region;
-                let rid = hao_godot::engine::texture2d::get_rid(rt, atlas as usize)
-                    .map_err(|e| e.to_string())?;
-                if rid == 0 {
-                    return Err("atlas RID is 0".into());
-                }
-
-                let (aw, _ah, atlas_data) = get_or_readback_atlas(rt, rid)?;
-
-                let data = crop_rgba(
-                    &atlas_data,
-                    aw,
-                    rx as u32,
-                    ry as u32,
-                    rw as u32,
-                    rh as u32,
-                );
-                return Ok((rw as i64, rh as i64, data));
+    m.named_function(
+        "texture_to_rgba_direct",
+        &["tex"],
+        |tex: ManagedObject| -> Result<(i64, i64, Vec<u8>), String> {
+            if tex.0 == 0 {
+                return Err("null texture".into());
             }
-
-            // Fallback: direct GPU readback for non-atlas textures
-            let rid = hao_godot::engine::texture2d::get_rid(rt, tex.0)
-                .map_err(|e| e.to_string())?;
-            if rid == 0 {
-                return Err("texture RID is 0".into());
-            }
-            let img_ptr = hao_godot::engine::rendering_server::texture_2d_get(rt, rid)
-                .map_err(|e| e.to_string())?;
-            if img_ptr.is_null() {
-                return Err("Texture2DGet returned null".into());
-            }
-            let (w, h, data) = hao_godot::engine::image::extract_rgba(rt, img_ptr as usize)
-                .map_err(|e| e.to_string())?;
-            Ok((w as i64, h as i64, data))
+            let rt = hao_godot::runtime().map_err(|e| e.to_string())?;
+            readback_direct(rt, tex.0)
         },
     );
 
