@@ -19,10 +19,22 @@ mod init;
 mod lifecycle;
 mod scene;
 
+use facet::Facet;
 use xur_runtime::Registry;
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub(super) enum GodotError {
+    NullPointer,
+    NotInitialized,
+    Failed(String),
+}
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::stub::godot", |m| {
+        m.shape_type("GodotError", GodotError::SHAPE);
+
         init::register(m);
         lifecycle::register(m);
         dispatch::register(m);

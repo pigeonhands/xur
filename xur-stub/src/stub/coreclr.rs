@@ -998,13 +998,6 @@ pub(crate) fn read_clr_string(addr: usize) -> Result<String, String> {
     Ok(String::from_utf16_lossy(slice))
 }
 
-pub(crate) fn managed_object_value(
-    cx: &mut dyn xur_runtime::Context,
-    addr: usize,
-) -> xur_runtime::RunResult<Value> {
-    into_value(cx, ManagedObject(addr))
-}
-
 fn extract_ptr(val: &Value) -> Result<MethodPtr, RuntimeError> {
     let Value::Native(obj) = val else {
         return Err(RuntimeError::new("expected a MethodPtr"));
