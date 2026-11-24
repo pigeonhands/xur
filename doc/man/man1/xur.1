@@ -86,6 +86,13 @@ Print the compiled bytecode of every function in the program.
 Start the language server, communicating over stdio.
 Provides diagnostics, go-to-definition, hover, find-references,
 completions, type inlay hints, and parameter-name inlay hints.
+These work across files: a
+.B const m = std::import("./other.xur")
+with a string-literal path is resolved statically, so
+.B m::Item
+navigates, completes, and hovers into
+.IR other.xur ,
+and a missing path is flagged on the literal.
 Editors launch this as a subprocess;
 see the Neovim and VS Code examples below.
 .SH EXAMPLES

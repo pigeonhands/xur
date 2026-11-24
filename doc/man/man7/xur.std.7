@@ -514,7 +514,13 @@ These are available without importing
 .BR std :
 .TP
 .B std::import(path)
-Dynamically import a module by path at runtime.
+Import a module by path and return it as a value.
+A string-literal path (e.g.
+.BR "std::import(\(dq./math.xur\(dq)" )
+is resolved statically: the file is loaded ahead of time, so
+.B math::Item
+paths resolve at compile time and the language server can navigate into it.
+Any other argument is imported dynamically at runtime.
 .TP
 .B std::panic(format, args...)
 Stop the program with a formatted runtime error.
