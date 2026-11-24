@@ -1,10 +1,14 @@
 //! Turning Rust functions into native functions, for each arity.
 
-use facet::Facet;
+use facet::{Facet, Shape};
 
 use super::{CallFn, Context, Signature};
-use crate::convert::{from_value, into_value};
+use crate::marshal::{FromValue, IntoXurValue};
 use crate::{RuntimeError, Value};
+
+fn shape_or_unit(s: Option<&'static Shape>) -> &'static Shape {
+    s.unwrap_or(<() as Facet>::SHAPE)
+}
 
 /// Methods taking `&T`, for [`TypeBuilder::method`].
 pub trait IntoNativeMethod<T, Marker> {
@@ -49,13 +53,13 @@ macro_rules! impl_into_native_fn {
         impl<F, R, $($arg),*> IntoNativeFn<fn($($arg),*) -> R> for F
         where
             F: Fn($($arg),*) -> R + Send + Sync + 'static,
-            R: Facet<'static> + Send + 'static,
-            $($arg: Facet<'static>,)*
+            R: IntoXurValue,
+            $($arg: FromValue,)*
         {
             fn into_native(self) -> (Signature, Box<CallFn>) {
                 let signature = Signature {
-                    params: vec![$($arg::SHAPE),*],
-                    ret: R::SHAPE,
+                    params: vec![$(shape_or_unit(<$arg as FromValue>::SHAPE)),*],
+                    ret: shape_or_unit(<R as IntoXurValue>::SHAPE),
                     param_names: Vec::new(),
                 };
                 let arity = signature.params.len();
@@ -67,8 +71,8 @@ macro_rules! impl_into_native_fn {
                             args.len()
                         )));
                     };
-                    let result = self($(from_value::<$arg>(cx, $arg)?),*);
-                    into_value(cx, result)
+                    let result = self($(<$arg as FromValue>::from_value(cx, $arg)?),*);
+                    result.into_xur_value(cx)
                 };
                 (signature, Box::new(call))
             }
@@ -78,10 +82,9 @@ macro_rules! impl_into_native_fn {
         where
             F: Fn(&T, $($arg),*) -> R + Send + Sync + 'static,
             T: Facet<'static> + Send + 'static,
-            R: Facet<'static> + Send + 'static,
-            $($arg: Facet<'static>,)*
+            R: IntoXurValue,
+            $($arg: FromValue,)*
         {
-            // Arguments are bound to variables named after their types.
             #[allow(non_snake_case)]
             fn into_native(self) -> (Signature, Box<CallFn>) {
                 impl_into_native_fn!(@method self, T, R, with, $($arg),*)
@@ -92,22 +95,19 @@ macro_rules! impl_into_native_fn {
         where
             F: Fn(&mut T, $($arg),*) -> R + Send + Sync + 'static,
             T: Facet<'static> + Send + 'static,
-            R: Facet<'static> + Send + 'static,
-            $($arg: Facet<'static>,)*
+            R: IntoXurValue,
+            $($arg: FromValue,)*
         {
-            // Arguments are bound to variables named after their types.
             #[allow(non_snake_case)]
             fn into_native(self) -> (Signature, Box<CallFn>) {
                 impl_into_native_fn!(@method self, T, R, with_mut, $($arg),*)
             }
         }
     };
-    // The body shared by `&self` and `&mut self` methods, which differ only
-    // in how the receiver is borrowed.
     (@method $f:ident, $ty:ident, $ret:ident, $with:ident, $($arg:ident),*) => {{
         let signature = Signature {
-            params: vec![$ty::SHAPE, $($arg::SHAPE),*],
-            ret: $ret::SHAPE,
+            params: vec![$ty::SHAPE, $(shape_or_unit(<$arg as FromValue>::SHAPE)),*],
+            ret: shape_or_unit(<$ret as IntoXurValue>::SHAPE),
             param_names: Vec::new(),
         };
         let arity = signature.params.len();
@@ -119,7 +119,7 @@ macro_rules! impl_into_native_fn {
                     args.len()
                 )));
             };
-            $(let $arg = from_value::<$arg>(cx, $arg)?;)*
+            $(let $arg = <$arg as FromValue>::from_value(cx, $arg)?;)*
             let object = match receiver {
                 Value::Native(object) => object,
                 Value::NativeEnum(ne) => &ne.object,
@@ -134,7 +134,7 @@ macro_rules! impl_into_native_fn {
             let result = object.$with(|this| $f(this, $($arg),*)).ok_or_else(|| {
                 RuntimeError::new(format!("expected `{}`, found another native type", $ty::SHAPE))
             })?;
-            into_value(cx, result)
+            result.into_xur_value(cx)
         };
         (signature, Box::new(call) as Box<CallFn>)
     }};
@@ -215,45 +215,14 @@ macro_rules! impl_builtin_method {
         where
             F: Fn(&Recv, $($arg),*) -> R + Send + Sync + 'static,
             Recv: BuiltinRecv + ?Sized + 'static,
-            R: Facet<'static> + Send + 'static,
-            $($arg: Facet<'static>,)*
+            R: IntoXurValue,
+            $($arg: FromValue,)*
         {
             #[allow(non_snake_case)]
             fn into_native(self) -> (Signature, Box<CallFn>) {
                 let signature = Signature {
-                    params: vec![$($arg::SHAPE),*],
-                    ret: R::SHAPE,
-                    param_names: Vec::new(),
-                };
-                let arity = signature.params.len() + 1; // +1 for receiver
-                let call = move |cx: &mut dyn Context, args: &[Value]| {
-                    #[allow(non_snake_case)]
-                    let [receiver, $($arg),*] = args else {
-                        return Err(RuntimeError::new(format!(
-                            "expected {arity} argument(s), found {}",
-                            args.len()
-                        )));
-                    };
-                    $(let $arg = from_value::<$arg>(cx, $arg)?;)*
-                    let result = Recv::with(receiver, |recv| self(recv, $($arg),*))?;
-                    into_value(cx, result)
-                };
-                (signature, Box::new(call))
-            }
-        }
-
-        impl<F, Recv, R, $($arg),*> IntoBuiltinMethodMut<Recv, fn($($arg),*) -> R> for F
-        where
-            F: Fn(&mut Recv, $($arg),*) -> R + Send + Sync + 'static,
-            Recv: BuiltinRecvMut + 'static,
-            R: Facet<'static> + Send + 'static,
-            $($arg: Facet<'static>,)*
-        {
-            #[allow(non_snake_case)]
-            fn into_native(self) -> (Signature, Box<CallFn>) {
-                let signature = Signature {
-                    params: vec![$($arg::SHAPE),*],
-                    ret: R::SHAPE,
+                    params: vec![$(shape_or_unit(<$arg as FromValue>::SHAPE)),*],
+                    ret: shape_or_unit(<R as IntoXurValue>::SHAPE),
                     param_names: Vec::new(),
                 };
                 let arity = signature.params.len() + 1;
@@ -265,9 +234,40 @@ macro_rules! impl_builtin_method {
                             args.len()
                         )));
                     };
-                    $(let $arg = from_value::<$arg>(cx, $arg)?;)*
+                    $(let $arg = <$arg as FromValue>::from_value(cx, $arg)?;)*
+                    let result = Recv::with(receiver, |recv| self(recv, $($arg),*))?;
+                    result.into_xur_value(cx)
+                };
+                (signature, Box::new(call))
+            }
+        }
+
+        impl<F, Recv, R, $($arg),*> IntoBuiltinMethodMut<Recv, fn($($arg),*) -> R> for F
+        where
+            F: Fn(&mut Recv, $($arg),*) -> R + Send + Sync + 'static,
+            Recv: BuiltinRecvMut + 'static,
+            R: IntoXurValue,
+            $($arg: FromValue,)*
+        {
+            #[allow(non_snake_case)]
+            fn into_native(self) -> (Signature, Box<CallFn>) {
+                let signature = Signature {
+                    params: vec![$(shape_or_unit(<$arg as FromValue>::SHAPE)),*],
+                    ret: shape_or_unit(<R as IntoXurValue>::SHAPE),
+                    param_names: Vec::new(),
+                };
+                let arity = signature.params.len() + 1;
+                let call = move |cx: &mut dyn Context, args: &[Value]| {
+                    #[allow(non_snake_case)]
+                    let [receiver, $($arg),*] = args else {
+                        return Err(RuntimeError::new(format!(
+                            "expected {arity} argument(s), found {}",
+                            args.len()
+                        )));
+                    };
+                    $(let $arg = <$arg as FromValue>::from_value(cx, $arg)?;)*
                     let result = Recv::with_mut(receiver, |recv| self(recv, $($arg),*))?;
-                    into_value(cx, result)
+                    result.into_xur_value(cx)
                 };
                 (signature, Box::new(call))
             }
