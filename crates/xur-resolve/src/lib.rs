@@ -52,7 +52,7 @@ pub use program::Program;
 pub use rt_type::RtType;
 
 use imports::Import;
-use scope::Scope;
+use scope::{Scope, Vis};
 
 /// The results of name resolution, keyed by AST node.
 #[derive(Debug)]
@@ -154,6 +154,26 @@ impl Resolutions {
             return Vec::new();
         };
         s.iter(ns).map(|(name, b)| (name, b.res)).collect()
+    }
+
+    /// Every name declared in `scope` in namespace `ns` that may be named
+    /// from module `from`: all names when `scope` belongs to `from`, and
+    /// only the public ones otherwise. Mirrors the privacy check applied to
+    /// `scope::name` paths, so completion only offers reachable names.
+    pub fn accessible_entries(
+        &self,
+        scope: DefId,
+        ns: Namespace,
+        from: DefId,
+    ) -> Vec<(Symbol, Res)> {
+        let Some(s) = self.scopes.get(&scope) else {
+            return Vec::new();
+        };
+        let own_module = s.module == from;
+        s.iter(ns)
+            .filter(|(_, b)| own_module || b.vis == Vis::Public)
+            .map(|(name, b)| (name, b.res))
+            .collect()
     }
 
     /// The definition of a top-level root module by name (e.g. `std`).
