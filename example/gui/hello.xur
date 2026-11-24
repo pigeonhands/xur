@@ -21,6 +21,9 @@ fn main() {
         if ui.button("Click me") {
             clicks = clicks + 1;
         }
-        ui.label(fmt::format("{} click(s)", clicks));
+        // hover_text groups its body and shows a tooltip on mouseover.
+        ui.hover_text("this counter updates when you click", |h| {
+            h.label(fmt::format("{} click(s)", clicks));
+        });
     });
 }

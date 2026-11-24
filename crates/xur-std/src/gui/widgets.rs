@@ -308,6 +308,35 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         })
     });
 
+    ty.raw_function("hover_text", |cx, args| {
+        let [this, Value::Str(tip), body] = args else {
+            return Err(RuntimeError::new("`hover_text` takes (tip: str, body: fn)"));
+        };
+        if !matches!(body, Value::Closure(_) | Value::Fn(_)) {
+            return Err(RuntimeError::new("body must be a function"));
+        }
+        let body = body.clone();
+        let tip = tip.clone();
+        let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
+        with_ui(this, |ui| {
+            let mut ret = Value::Unit;
+            // scope() groups the body's widgets so the hover test covers the whole
+            // cell; its InnerResponse.response is what on_hover_text attaches to.
+            let scoped = ui.scope(|inner_ui| {
+                let cx = unsafe { &mut *cx_ptr };
+                let inner = into_value(cx, EguiUi::from_ui(inner_ui)).expect("EguiUi registered");
+                match cx.call(&body, &[inner]) {
+                    Ok(val) => ret = val,
+                    Err(e) => { tracing::error!("gui callback error: {}", e.message); }
+                }
+            });
+            if !tip.is_empty() {
+                scoped.response.on_hover_text(tip.as_ref());
+            }
+            Ok(ret)
+        })
+    });
+
     ty.raw_function("scroll", |cx, args| {
         let cx_ptr = cx as *mut dyn xur_runtime::registry::Context;
         let (this_val, id_salt, max_height, body_fn) = match args {

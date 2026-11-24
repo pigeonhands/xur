@@ -75,6 +75,15 @@ Lay out children vertically.
 .B collapsing(heading: str, body: fn(ui)) -> ()
 A collapsible section.
 .TP
+.B hover_text(tip: str, body: fn(ui)) -> ()
+Group the widgets drawn by
+.B body
+and show
+.B tip
+as a tooltip when the pointer hovers over them. An empty
+.B tip
+shows nothing.
+.TP
 .B scroll(body: fn(ui)) -> ()
 Wrap children in a vertical scroll area.
 .TP
