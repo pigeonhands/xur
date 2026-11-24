@@ -1,3 +1,4 @@
+use std::ffi::{c_void, CStr};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -148,6 +149,18 @@ fn init() {
     install_crash_handler();
     log(format_args!("init"));
 
+    // Only auto-run scripts when a source is configured here: the LD_PRELOAD
+    // path, via XUR_STUB_PATH or an `xur` dir next to the host. When injected
+    // at attach-time there is no source — the script is handed over later
+    // through xur_stub_run — so return promptly and let the host keep running.
+    let dir = match script_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            log(format_args!("{e}"));
+            return;
+        }
+    };
+
     // Compile on a big-stack thread, but block until ctor() functions
     // have run — they must complete before the game's main() starts
     // (e.g. to install Il2Cpp hooks via egui::init()).
@@ -157,7 +170,7 @@ fn init() {
         .name("xur-stub".into())
         .stack_size(STACK_SIZE)
         .spawn(move || {
-            let scripts = match compile_scripts() {
+            let scripts = match compile_scripts_from(&dir) {
                 Ok(s) => {
                     log(format_args!("compiled {} script(s)", s.len()));
                     s
@@ -169,16 +182,7 @@ fn init() {
                 }
             };
 
-            for script in &scripts {
-                if let Some(Err(e)) = script.vm.run_fn("ctor") {
-                    log(format_args!(
-                        "{}: ctor: {}",
-                        script.path.display(),
-                        e.message
-                    ));
-                }
-            }
-
+            run_ctors(&scripts);
             scripts_tx.send(scripts).ok();
         })
         .expect("xur-stub: failed to spawn init thread");
@@ -187,23 +191,57 @@ fn init() {
 
     // Run main() on background threads — these can block forever (e.g.
     // egui overlays) without preventing the game from starting.
-    for script in scripts {
-        log(format_args!("starting {}", script.path.display()));
-        thread::Builder::new()
-            .name(format!("xur:{}", script.path.display()))
-            .stack_size(STACK_SIZE)
-            .spawn(move || {
-                if let Err(e) = run_main(&script) {
-                    log(format_args!("{}: {e}", script.path.display()));
-                }
-            })
-            .ok();
-    }
+    spawn_mains(scripts);
 }
 
-fn compile_scripts() -> Result<Vec<Script>, String> {
-    let dir = script_dir()?;
-    let paths = find_scripts(&dir)?;
+/// Injection entry point, called via procodile's `execute_remote_detached`
+/// (a remote `pthread_create`). `arg` points at a NUL-terminated `.xur` path
+/// (a file or directory) written into this process by the injector. Spawns the
+/// stub's big-stack worker — the VM needs far more stack than the injector's
+/// pthread has — then returns immediately so the remote thread exits.
+///
+/// # Safety
+/// `arg` must be null, or a valid pointer to a NUL-terminated UTF-8 path that
+/// stays valid until this call returns.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn xur_stub_run(arg: *mut c_void) -> *mut c_void {
+    if arg.is_null() {
+        log(format_args!("xur_stub_run: null path"));
+        return std::ptr::null_mut();
+    }
+    let path = match unsafe { CStr::from_ptr(arg as *const std::ffi::c_char) }.to_str() {
+        Ok(s) => PathBuf::from(s),
+        Err(e) => {
+            log(format_args!("xur_stub_run: invalid path: {e}"));
+            return std::ptr::null_mut();
+        }
+    };
+
+    thread::Builder::new()
+        .name("xur-inject".into())
+        .stack_size(STACK_SIZE)
+        .spawn(move || {
+            log(format_args!("inject: running {}", path.display()));
+            let scripts = match compile_scripts_from(&path) {
+                Ok(s) => {
+                    log(format_args!("compiled {} script(s)", s.len()));
+                    s
+                }
+                Err(e) => {
+                    log(format_args!("inject: {e}"));
+                    return;
+                }
+            };
+            run_ctors(&scripts);
+            spawn_mains(scripts);
+        })
+        .ok();
+
+    std::ptr::null_mut()
+}
+
+fn compile_scripts_from(path: &Path) -> Result<Vec<Script>, String> {
+    let paths = find_scripts(path)?;
     if paths.is_empty() {
         return Ok(Vec::new());
     }
@@ -237,6 +275,32 @@ fn compile_script(path: &Path) -> Result<Vm, String> {
     }
 
     Ok(Vm::new(program, registry, Box::new(io::stderr())))
+}
+
+/// Run each script's `ctor()` synchronously on the current thread.
+fn run_ctors(scripts: &[Script]) {
+    for script in scripts {
+        if let Some(Err(e)) = script.vm.run_fn("ctor") {
+            log(format_args!("{}: ctor: {}", script.path.display(), e.message));
+        }
+    }
+}
+
+/// Spawn each script's main on its own big-stack thread. These can block
+/// forever (e.g. egui overlays) without blocking the caller.
+fn spawn_mains(scripts: Vec<Script>) {
+    for script in scripts {
+        log(format_args!("starting {}", script.path.display()));
+        thread::Builder::new()
+            .name(format!("xur:{}", script.path.display()))
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                if let Err(e) = run_main(&script) {
+                    log(format_args!("{}: {e}", script.path.display()));
+                }
+            })
+            .ok();
+    }
 }
 
 fn run_main(script: &Script) -> Result<(), String> {
