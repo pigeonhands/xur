@@ -37,10 +37,6 @@ pub struct Combat {
     draw_card_cmd: coreclr::MethodPtr
     godmode: cell::Cell<bool>
     player_creature_addr: cell::Cell<i64>
-    // Hook targets (the raw method = precode) and the last JIT-body address we
-    // hooked. The game's internal calls run the JIT body, which moves when the
-    // method re-tiers (Tier0 -> Tier1) after ~one combat; maintain_hooks re-hooks
-    // the new body when the address changes, so hooks survive combat transitions.
     lose_hp_raw: coreclr::MethodPtr
     damage_block_raw: coreclr::MethodPtr
     check_raw: coreclr::MethodPtr
@@ -263,7 +259,6 @@ impl Combat {
         let get_exhaust_pile = rt.method(asm, pcs_t, "get_ExhaustPile")?;
         let draw_card_cmd = rt.find_method(asm, "MegaCrit.Sts2.Core.Commands.CardPileCmd", "Draw", 2)?;
 
-        log::info("resolving hook targets...");
         let godmode = cell::new(false);
         let player_creature_addr = cell::new(0);
         let lose_hp_raw = rt.method(asm, creature_t, "LoseHpInternal")?;
@@ -294,59 +289,69 @@ impl Combat {
         let godmode = self.godmode;
         let pca = self.player_creature_addr;
 
+        // Applying a hook rewrites the method's prologue bytes. That MUST happen on
+        // the game thread: patching from the render thread while the game thread is
+        // executing the same method corrupts control flow (it can run a half-written
+        // instruction stream). So resolve_jit() (a plain memory read) runs here, but
+        // the actual hook install is dispatched to the game thread, which patches at
+        // the dispatch-drain point when it is not inside the method.
+        //
         // LoseHpInternal(Decimal amount, ValueProp) and DamageBlockInternal share
         // the same signature. hook_args marshals by the closure's param types, so
-        // `this` arrives as the creature (a managed pointer) and `amount` as the
-        // Decimal damage. Returning amount=0 makes the method run normally and
-        // return a VALID result (no HP/block lost, not "killed") — this avoids
-        // nulling the return, which softlocked on e.g. Osty's death.
+        // `this` arrives as the creature and `amount` as the Decimal damage;
+        // returning amount=0 runs the method normally (valid result, not "killed").
+        // looks_jitted() gates on a REAL JIT body: before a method is compiled,
+        // resolve_jit() yields a shared CLR fixup thunk (a jump), and hooking that
+        // thunk fires for unrelated methods and corrupts them. We only hook once
+        // the body is real code, and log its first bytes to confirm.
         let lh = self.lose_hp_raw.resolve_jit();
-        if lh.address() != 0 && lh.address() != self.lose_hp_body.get() {
-            lh.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
-                if godmode.get() && this.address() == pca.get() {
-                    log::info(fmt::format("godmode LoseHp: this=0x{:x} amount={} -> 0", this.address(), amount));
-                    (this, decimal::from_int(0))
-                } else {
-                    (this, amount)
-                }
-            });
+        if lh.address() != 0 && lh.looks_jitted() && lh.address() != self.lose_hp_body.get() {
             self.lose_hp_body.set(lh.address());
-            log::info(fmt::format("godmode: (re)hooked LoseHpInternal body at {}", lh.address()));
+            let prologue = match lh.peek_bytes(8) { Ok(b) => b, Err(_) => "?" };
+            log::info(fmt::format("godmode: hooking LoseHpInternal at 0x{:x} bytes={}", lh.address(), prologue));
+            godot::dispatch(|| {
+                lh.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
+                    if godmode.get() && this.address() == pca.get() { (this, decimal::from_int(0)) }
+                    else { (this, amount) }
+                });
+            });
         }
 
         let db = self.damage_block_raw.resolve_jit();
-        if db.address() != 0 && db.address() != self.damage_block_body.get() {
-            db.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
-                if godmode.get() && this.address() == pca.get() {
-                    log::info(fmt::format("godmode DamageBlock: this=0x{:x} amount={} -> 0", this.address(), amount));
-                    (this, decimal::from_int(0))
-                } else {
-                    (this, amount)
-                }
-            });
+        if db.address() != 0 && db.looks_jitted() && db.address() != self.damage_block_body.get() {
             self.damage_block_body.set(db.address());
-            log::info(fmt::format("godmode: (re)hooked DamageBlockInternal body at {}", db.address()));
+            let prologue = match db.peek_bytes(8) { Ok(b) => b, Err(_) => "?" };
+            log::info(fmt::format("godmode: hooking DamageBlockInternal at 0x{:x} bytes={}", db.address(), prologue));
+            godot::dispatch(|| {
+                db.hook_args(|this: coreclr::ManagedObject, amount: decimal::Decimal| {
+                    if godmode.get() && this.address() == pca.get() { (this, decimal::from_int(0)) }
+                    else { (this, amount) }
+                });
+            });
         }
 
         let ck = self.check_raw.resolve_jit();
-        if ck.address() != 0 && ck.address() != self.check_body.get() {
+        if ck.address() != 0 && ck.looks_jitted() && ck.address() != self.check_body.get() {
+            self.check_body.set(ck.address());
+            let prologue = match ck.peek_bytes(8) { Ok(b) => b, Err(_) => "?" };
+            log::info(fmt::format("auto-draw: hooking CheckForEmptyHand at 0x{:x} bytes={}", ck.address(), prologue));
             let auto_draw = state.auto_draw;
             let player_addr = state.player_addr;
             let draw_cmd = self.draw_card_cmd;
-            ck.hook(|_this| {
-                if auto_draw.get() {
-                    let addr = player_addr.get();
-                    if addr != 0 {
-                        let player = coreclr::from_address(addr);
-                        godot::dispatch(|| {
-                            draw_cmd.call(coreclr::null(), player);
-                        });
+            godot::dispatch(|| {
+                ck.hook(|_this| {
+                    if auto_draw.get() {
+                        let addr = player_addr.get();
+                        if addr != 0 {
+                            let player = coreclr::from_address(addr);
+                            godot::dispatch(|| {
+                                draw_cmd.call(coreclr::null(), player);
+                            });
+                        }
                     }
-                }
-                None
+                    None
+                });
             });
-            self.check_body.set(ck.address());
-            log::info(fmt::format("auto-draw: (re)hooked CheckForEmptyHand body at {}", ck.address()));
         }
     }
 
