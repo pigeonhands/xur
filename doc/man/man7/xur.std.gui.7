@@ -89,6 +89,40 @@ A left side panel.
 .TP
 .B add_space(amount: float) -> ()
 Add vertical spacing.
+.SH TEXTURES
+A
+.B Texture
+is an opaque handle to an image the overlay can draw. It is an enum with two
+variants:
+.B Managed(int)
+for an image uploaded to the overlay (e.g.
+.BR load_texture_rgba )
+and
+.B User(int)
+for a native game texture registered by an engine module (e.g.
+.BR unity::egui::register_texture ).
+Scripts normally just hold a
+.B Texture
+and pass it to
+.BR image ;
+the variant is only relevant to the backend.
+.TP
+.B Ctx.load_texture_rgba(name: str, width: int, height: int, rgba: bytes) -> Result<Texture>
+Upload raw RGBA8 pixels (length
+.BR width*height*4 )
+as a managed texture and return its
+.BR Texture .
+.TP
+.B Ctx.free_texture(tex: Texture) -> ()
+Release a managed texture. User textures are released through their engine
+module's unregister function.
+.TP
+.B Ui.image(tex: Texture, width: float, height: float) -> ()
+Draw a texture at the given size. Handles both
+.B Managed
+and
+.B User
+textures.
 .SH EXAMPLES
 .nf
 use std::gui;
