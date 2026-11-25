@@ -29,7 +29,7 @@ use xur_ast::{Attribute, LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use xur_resolve::DefId;
 use xur_runtime::convert::into_value;
 use xur_runtime::{
-    AdtInfo, Context, IntValue, Raise, Record, RunResult, RuntimeError, TypeRef, Value, XurBytes,
+    AdtInfo, Context, IntValue, Record, Res, RunResult, RuntimeError, TypeRef, Value, XurBytes,
     lock,
 };
 use xur_span::Symbol;
@@ -683,11 +683,13 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             }
             options(args, |data| data.min_align = align)
         })
-        .method("read", |l: &Layout, data: XurBytes, offset: usize| -> Raise<Value> {
-            Raise(l.read(&lock(&data.0), offset))
+        // Reading untrusted bytes is recoverable (a bad offset/length is a
+        // normal parse failure), so return a Result rather than a fatal raise.
+        .method("read", |l: &Layout, data: XurBytes, offset: usize| -> Res<Value> {
+            Res(l.read(&lock(&data.0), offset).map_err(|e| e.to_string()))
         })
-        .method("from_bytes", |l: &Layout, data: XurBytes| -> Raise<Value> {
-            Raise(l.read(&lock(&data.0), 0))
+        .method("from_bytes", |l: &Layout, data: XurBytes| -> Res<Value> {
+            Res(l.read(&lock(&data.0), 0).map_err(|e| e.to_string()))
         })
         .raw_function("write", |cx, args| {
             let [_, Value::Bytes(data), Value::Int(offset), value] = args else {

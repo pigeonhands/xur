@@ -76,7 +76,7 @@ fn main() -> Result<()> {
     let data = layout.to_bytes(image) + pixels;
     io::println("{} bytes: {}", data.len(), data.to_hex());
 
-    let read = layout.from_bytes(data);
+    let read = layout.from_bytes(data)?;
     io::println("{}x{} pixels at offset {}", read.info.width, read.info.height, read.file.pixels_at);
     for field in reflect::layout::<FileHeader>().fields() {
         io::println("  {} {} at {}", field.name, field.ty, field.offset);
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
     // Any value with the right fields can be written.
     record.write(buffer, record.size(), Score { id: 7, score: 1.5, alive: true });
     io::println("{}", buffer.to_hex());
-    io::println("{}", record.read(buffer, record.size()));
+    io::println("{}", record.read(buffer, record.size())?);
 
     // Get a struct's layout and override its endianness at runtime.
     let le = reflect::layout::<FileHeader>();
@@ -108,11 +108,11 @@ fn main() -> Result<()> {
     io::println("BE bytes: {}", be_bytes.to_hex());
 
     // Parse the BE bytes back — multi-byte fields are swapped.
-    let from_be = be.from_bytes(be_bytes) as FileHeader;
+    let from_be = be.from_bytes(be_bytes)? as FileHeader;
     io::println("From BE: magic={}, size={}, pixels_at={}", from_be.magic, from_be.size, from_be.pixels_at);
 
     // Parse the same BE bytes with the LE layout — values differ.
-    let misread = le.from_bytes(be_bytes) as FileHeader;
+    let misread = le.from_bytes(be_bytes)? as FileHeader;
     io::println("BE bytes read as LE: magic={}, size={}", misread.magic, misread.size);
 
     Ok(())

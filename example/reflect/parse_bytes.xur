@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     io::println("Encoded: {}", data.to_hex());
 
     // Parse the bytes back and verify the round-trip.
-    let parsed = layout.from_bytes(data);
+    let parsed = layout.from_bytes(data)?;
     assert::is_eq(parsed.version, 1);
     assert::is_eq(parsed.kind, 0x10);
     assert::is_eq(parsed.length, 64);
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         .field("y", i32);
 
     let pair_bytes = pair_layout.to_bytes(@{ x: 42, y: -1 });
-    let pair = pair_layout.from_bytes(pair_bytes);
+    let pair = pair_layout.from_bytes(pair_bytes)?;
     assert::is_eq(pair.x, 42);
     assert::is_eq(pair.y, -1);
 

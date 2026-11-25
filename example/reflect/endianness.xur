@@ -34,7 +34,7 @@ fn main() -> Result<()> {
 
     // Parse as big-endian.
     let be_layout = reflect::layout::<HeaderBE>();
-    let be = be_layout.from_bytes(data) as HeaderBE;
+    let be = be_layout.from_bytes(data)? as HeaderBE;
     io::println("Big-endian:");
     io::println("  version  = {}", be.version);
     io::println("  kind     = {}", be.kind);
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     // Parse the same bytes as little-endian.
     let le_layout = reflect::layout::<HeaderLE>();
-    let le = le_layout.from_bytes(data) as HeaderLE;
+    let le = le_layout.from_bytes(data)? as HeaderLE;
     io::println("Little-endian:");
     io::println("  version  = {}", le.version);
     io::println("  kind     = {}", le.kind);
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
     io::println("LE encoded:  {}", le_bytes.to_hex());
 
     // Same single-byte fields, but multi-byte fields are reversed.
-    let as_le = le_layout.from_bytes(be_bytes) as HeaderLE;
+    let as_le = le_layout.from_bytes(be_bytes)? as HeaderLE;
     assert::is_eq(as_le.version, 1);
     assert::is_eq(as_le.kind, 2);
     assert::is_eq(as_le.length, 0x3412);

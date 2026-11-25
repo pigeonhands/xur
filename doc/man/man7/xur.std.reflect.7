@@ -90,11 +90,17 @@ Layout properties:
 .PP
 Reading and writing:
 .TP
-.B layout.read(data, offset) -> Value
-Read a struct from bytes at the given offset.
+.B layout.read(data, offset) -> Result<Value>
+Read a struct from bytes at the given offset. Returns a
+.B Result
+because malformed or too-short input is a recoverable error; thread it with
+.BR ? .
 .TP
-.B layout.from_bytes(data) -> Value
-Read a struct from the start of bytes.
+.B layout.from_bytes(data) -> Result<Value>
+Read a struct from the start of bytes. Returns a
+.B Result
+like
+.BR read .
 .TP
 .B layout.write(data, offset, value)
 Write a struct's fields into a byte buffer.
@@ -117,7 +123,7 @@ use std::io;
 
 struct Point { x: i64, y: i64 }
 
-fn main() {
+fn main() -> Result<()> {
     let p = Point { x: 1, y: 2 };
     io::println("fields: {}", reflect::fields(p));
     io::println("x = {}", reflect::get(p, "x"));
@@ -125,8 +131,9 @@ fn main() {
     let layout = reflect::layout::<Point>();
     io::println("{}", layout);
     let data = layout.to_bytes(p);
-    let p2 = layout.from_bytes(data);
+    let p2 = layout.from_bytes(data)?;
     io::println("round-trip: {}", p2);
+    Ok(())
 }
 .fi
 .SH SEE ALSO

@@ -661,15 +661,16 @@ fn layouts_follow_repr_and_field_attributes() {
         #[repr(align(32))] struct A { a: u8 }
         #[endian(Big)] struct B { a: u16, #[field(offset = 4)] b: i8 }
         struct N { inner: B, tail: u8 }
-        fn main() {
+        fn main() -> Result<()> {
             let io = std::io;
             io::println("{}", reflect::layout::<C>());
             io::println("{}", reflect::layout::<P>());
             io::println("{}", reflect::layout::<A>());
             let b = reflect::layout::<B>();
             let data = b.to_bytes(B { a: 0x0102, b: -2 });
-            io::println("{} {}", data.to_hex(), b.from_bytes(data));
+            io::println("{} {}", data.to_hex(), b.from_bytes(data)?);
             io::println("{}", reflect::layout_of(N { inner: B { a: 1, b: 1 }, tail: 0 }));
+            Ok(())
         }
     "#;
     assert_eq!(
