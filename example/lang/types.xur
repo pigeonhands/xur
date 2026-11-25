@@ -136,5 +136,20 @@ fn main() -> Result<()> {
     print_type_name(v);
     io::println("");
 
+    // Types are values: type_of preserves integer/float width, and
+    // arithmetic, shifts and byte reads track that width.
+    io::println("type_of + width:");
+    io::println("  type of 42  is {}", std::any::type_of(42));   // i64
+    io::println("  type of 1.5 is {}", std::any::type_of(1.5));  // f64
+    let data = b"\xc8\x64";                          // [200, 100] : u8
+    std::assert::is_eq(u8, std::any::type_of(data[0]));
+    std::assert::is_eq(data[0] + data[1], 44);       // 200 + 100 wraps within u8
+    std::assert::is_eq(u8, std::any::type_of(data[0] + data[1]));
+    std::assert::is_eq(data[0] << 9, data[0] << 1);  // shift masks the count to u8
+    let buf = std::bytes::zeroed(4);
+    buf.write_f32_le(0, 1.5);
+    std::assert::is_eq(f32, std::any::type_of(buf.read_f32_le(0)));  // reads keep width
+    io::println("");
+
     Ok(())
 }
