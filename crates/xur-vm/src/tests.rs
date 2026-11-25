@@ -1115,29 +1115,54 @@ fn std_process_kill_stops_a_running_child() {
 
 #[test]
 fn test_all_examples() {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let repo = manifest.parent().unwrap().parent().unwrap();
+    with_repo_cwd(|repo| {
+        let main_xur = repo.join("example/main.xur");
+        let registry = Arc::new(xur_std::registry());
+        let natives = Box::new(Arc::clone(&registry));
+        let (program, diags) =
+            Program::load(&main_xur, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
+                .expect("failed to load example/main.xur");
+        assert!(diags.is_empty(), "compile errors: {diags:?}");
+
+        let output = Output::default();
+        let vm = Vm::new(program, registry, Box::new(output.clone()));
+        let result = vm.run_fn("test_all").expect("no test_all function");
+        let printed = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
+
+        let value = result.unwrap_or_else(|e| panic!("test_all failed: {}\n{printed}", e.message));
+        let passed = match value {
+            xur_runtime::Value::Int(n) => {
+                n.to_i64().expect("test_all returned an int that doesn't fit i64")
+            }
+            other => panic!("test_all returned {other:?}, expected i64"),
+        };
+        assert!(passed > 10, "test_all only ran {passed} examples, expected >10");
+    });
+}
+
+/// Runs `f` with the process working directory at the repo root, serialized
+/// against other such tests and restored afterward (even on panic), so the
+/// chdir cannot race with or leak into other tests.
+fn with_repo_cwd<R>(f: impl FnOnce(&Path) -> R) -> R {
+    use std::sync::Mutex;
+    static CWD_LOCK: Mutex<()> = Mutex::new(());
+    struct Restore(Option<std::path::PathBuf>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            if let Some(dir) = self.0.take() {
+                let _ = std::env::set_current_dir(dir);
+            }
+        }
+    }
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _restore = Restore(std::env::current_dir().ok());
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     std::env::set_current_dir(repo).expect("failed to chdir to repo root");
-
-    let main_xur = repo.join("example/main.xur");
-    let registry = Arc::new(xur_std::registry());
-    let natives = Box::new(Arc::clone(&registry));
-    let (program, diags) =
-        Program::load(&main_xur, Box::new(RealFileLoader), natives, Some(xur_std::PRELUDE))
-            .expect("failed to load example/main.xur");
-    assert!(diags.is_empty(), "compile errors: {diags:?}");
-
-    let output = Output::default();
-    let vm = Vm::new(program, registry, Box::new(output.clone()));
-    let result = vm.run_fn("test_all").expect("no test_all function");
-    let printed = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
-
-    let value = result.unwrap_or_else(|e| panic!("test_all failed: {}\n{printed}", e.message));
-    let passed = match value {
-        xur_runtime::Value::Int(n) => n.to_i64().expect("test_all returned an int that doesn't fit i64"),
-        other => panic!("test_all returned {other:?}, expected i64"),
-    };
-    assert!(passed > 10, "test_all only ran {passed} examples, expected >10");
+    f(repo)
 }
 
 #[test]
