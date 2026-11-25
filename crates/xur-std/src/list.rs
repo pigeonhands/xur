@@ -4,7 +4,10 @@
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurList, lock, with_pair};
+use xur_runtime::{
+    BuiltinType, IntValue, Opt, Raise, Registry, RunResult, RuntimeError, Value, XurList, lock,
+    with_pair,
+};
 use xur_runtime::registry::{ElemHint, XurType};
 
 use crate::option;
@@ -19,36 +22,12 @@ pub(crate) fn register(registry: &Registry) {
         .method_mut("push", |list: &mut Vec<Value>, item: Value| {
             list.push(item);
         })
-        .raw_function("pop", |cx, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let item = lock(list).pop();
-            Ok(option(cx, item))
+        .method_mut("pop", |list: &mut Vec<Value>| -> Opt<Value> { Opt(list.pop()) })
+        .method("get", |list: &[Value], index: i64| -> Opt<Value> {
+            Opt(usize::try_from(index).ok().and_then(|i| list.get(i).cloned()))
         })
-        .raw_function("get", |cx, args| {
-            let (list, [index]) = receiver(args)? else {
-                return arity(1);
-            };
-            let item = usize::try_from(int(index)?)
-                .ok()
-                .and_then(|i| lock(list).get(i).cloned());
-            Ok(option(cx, item))
-        })
-        .raw_function("first", |cx, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let item = lock(list).first().cloned();
-            Ok(option(cx, item))
-        })
-        .raw_function("last", |cx, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let item = lock(list).last().cloned();
-            Ok(option(cx, item))
-        })
+        .method("first", |list: &[Value]| -> Opt<Value> { Opt(list.first().cloned()) })
+        .method("last", |list: &[Value]| -> Opt<Value> { Opt(list.last().cloned()) })
         .raw_function_returns_xur("insert", XurType::UNIT, |_, args| {
             let (list, [index, item]) = receiver(args)? else {
                 return arity(2);
@@ -58,13 +37,11 @@ pub(crate) fn register(registry: &Registry) {
             items.insert(index, item.clone());
             Ok(Value::Unit)
         })
-        .raw_function("remove", |_, args| {
-            let (list, [index]) = receiver(args)? else {
-                return arity(1);
-            };
-            let mut items = lock(list);
-            let index = position(int(index)?, items.len(), items.len())?;
-            Ok(items.remove(index))
+        .method_mut("remove", |list: &mut Vec<Value>, index: i64| -> Raise<Value> {
+            Raise((|| {
+                let index = position(index, list.len(), list.len())?;
+                Ok(list.remove(index))
+            })())
         })
         .method("contains", |list: &[Value], item: Value| -> bool {
             list.contains(&item)
@@ -323,83 +300,71 @@ pub(crate) fn register(registry: &Registry) {
             }
             Value::list(result)
         })
-        .raw_function("sum", |_, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list);
-            let Some(first) = items.first() else {
-                return Err(RuntimeError::new("sum on an empty list"));
-            };
-            match first {
-                Value::Int(_) => {
-                    let mut total: i128 = 0;
-                    for item in items.iter() {
-                        match item {
-                            Value::Int(n) => total += n.to_i128(),
-                            _ => return Err(RuntimeError::new("sum: mixed types")),
+        .method("sum", |items: &[Value]| -> Raise<Value> {
+            Raise((|| {
+                let Some(first) = items.first() else {
+                    return Err(RuntimeError::new("sum on an empty list"));
+                };
+                match first {
+                    Value::Int(_) => {
+                        let mut total: i128 = 0;
+                        for item in items {
+                            match item {
+                                Value::Int(n) => total += n.to_i128(),
+                                _ => return Err(RuntimeError::new("sum: mixed types")),
+                            }
                         }
+                        // Prefer i64, then u64, so a lone large u64 still sums.
+                        i64::try_from(total)
+                            .map(Value::int)
+                            .or_else(|_| u64::try_from(total).map(|u| Value::Int(IntValue::U64(u))))
+                            .map_err(|_| RuntimeError::new("sum: integer overflow"))
                     }
-                    Ok(Value::int(i64::try_from(total).map_err(|_| {
-                        RuntimeError::new("sum: integer overflow")
-                    })?))
-                }
-                Value::Float(_) => {
-                    let mut total: f64 = 0.0;
-                    for item in items.iter() {
-                        match item {
-                            Value::Float(n) => total += n.as_f64(),
-                            _ => return Err(RuntimeError::new("sum: mixed types")),
+                    Value::Float(_) => {
+                        let mut total: f64 = 0.0;
+                        for item in items {
+                            match item {
+                                Value::Float(n) => total += n.as_f64(),
+                                _ => return Err(RuntimeError::new("sum: mixed types")),
+                            }
                         }
+                        Ok(Value::float(total))
                     }
-                    Ok(Value::float(total))
+                    _ => Err(RuntimeError::new("sum: elements must be Int or Float")),
                 }
-                _ => Err(RuntimeError::new("sum: elements must be Int or Float")),
-            }
+            })())
         })
-        .raw_function("min", |cx, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list).clone();
-            if items.is_empty() {
-                return Ok(option(cx, None));
-            }
-            let mut best = &items[0];
-            for item in &items[1..] {
-                match compare(item, best) {
-                    Some(std::cmp::Ordering::Less) => best = item,
-                    Some(_) => {}
-                    None => {
-                        return Err(RuntimeError::new(
-                            "min: elements are not comparable",
-                        ))
+        .method("min", |items: &[Value]| -> Raise<Opt<Value>> {
+            Raise((|| {
+                let Some((first, rest)) = items.split_first() else {
+                    return Ok(Opt(None));
+                };
+                let mut best = first;
+                for item in rest {
+                    match compare(item, best) {
+                        Some(std::cmp::Ordering::Less) => best = item,
+                        Some(_) => {}
+                        None => return Err(RuntimeError::new("min: elements are not comparable")),
                     }
                 }
-            }
-            Ok(option(cx, Some(best.clone())))
+                Ok(Opt(Some(best.clone())))
+            })())
         })
-        .raw_function("max", |cx, args| {
-            let (list, []) = receiver(args)? else {
-                return arity(0);
-            };
-            let items = lock(list).clone();
-            if items.is_empty() {
-                return Ok(option(cx, None));
-            }
-            let mut best = &items[0];
-            for item in &items[1..] {
-                match compare(item, best) {
-                    Some(std::cmp::Ordering::Greater) => best = item,
-                    Some(_) => {}
-                    None => {
-                        return Err(RuntimeError::new(
-                            "max: elements are not comparable",
-                        ))
+        .method("max", |items: &[Value]| -> Raise<Opt<Value>> {
+            Raise((|| {
+                let Some((first, rest)) = items.split_first() else {
+                    return Ok(Opt(None));
+                };
+                let mut best = first;
+                for item in rest {
+                    match compare(item, best) {
+                        Some(std::cmp::Ordering::Greater) => best = item,
+                        Some(_) => {}
+                        None => return Err(RuntimeError::new("max: elements are not comparable")),
                     }
                 }
-            }
-            Ok(option(cx, Some(best.clone())))
+                Ok(Opt(Some(best.clone())))
+            })())
         })
         .method("zip", |list: &XurList, other: XurList| -> Value {
             // with_pair locks once when `xs.zip(xs)` aliases, twice otherwise.
