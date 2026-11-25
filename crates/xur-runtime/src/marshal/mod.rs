@@ -109,3 +109,26 @@ impl<T> From<Option<T>> for Opt<T> {
     }
 }
 
+/// A typed-function return of a recoverable **dynamic** `Result`, built as the
+/// prelude's `Ok`/`Err`. `Result<T, String>` works directly when `T: Facet`, but
+/// `Result<Value, String>` can't (the same coherence collision as [`Opt`]), so
+/// this newtype carries it — e.g. `layout.read` -> `Res<Value>`. The `Err` is a
+/// string message; see the `Raise` docs for runtime-vs-recoverable guidance.
+pub struct Res<T>(pub Result<T, String>);
+
+impl<T: IntoXurValue> IntoXurValue for Res<T> {
+    fn into_xur_value(self, cx: &dyn ConvertCx) -> RunResult<Value> {
+        let lang = cx.lang();
+        Ok(match self.0 {
+            Ok(value) => Value::adt(lang.ok, vec![value.into_xur_value(cx)?]),
+            Err(message) => Value::adt(lang.err, vec![Value::str(&message)]),
+        })
+    }
+}
+
+impl<T> From<Result<T, String>> for Res<T> {
+    fn from(result: Result<T, String>) -> Self {
+        Res(result)
+    }
+}
+
