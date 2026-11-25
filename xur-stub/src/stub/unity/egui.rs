@@ -166,10 +166,10 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         let mut ty = m.ty_existing::<EguiCtx>();
-        ty.method("key", |_ctx: &EguiCtx, name: String| -> Result<bool, EguiError> {
-            let code = parse_keycode(&name)
-                .ok_or(EguiError::UnknownKey(name))?;
-            Ok(input::key(code).unwrap_or(false))
+        ty.method("key", |_ctx: &EguiCtx, name: &str| -> bool {
+            // An unknown key name is simply "not pressed" (false), matching the
+            // overlay egui `key` and the `if f1 && !f1_down` toggle pattern.
+            parse_keycode(name).is_some_and(|code| input::key(code).unwrap_or(false))
         });
     });
 }
