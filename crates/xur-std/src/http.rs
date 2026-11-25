@@ -4,7 +4,7 @@ use std::sync::Arc;
 use facet::Facet;
 use ureq::ResponseExt;
 use xur_runtime::convert::into_value;
-use xur_runtime::{Context, NativeObject, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{Context, NativeObject, Registry, RunResult, RuntimeError, Value, XurStr, lock};
 
 use crate::{error_text, result};
 
@@ -40,8 +40,21 @@ pub(crate) fn register(registry: &Registry) {
             })
             .raw_function_returns::<Vec<u8>>("bytes", resp_bytes)
             .raw_function("json", resp_json)
-            .raw_function("header", resp_header)
-            .raw_function("headers", resp_headers);
+            .method("header", |r: &Response, name: XurStr| -> Option<String> {
+                let lower = name.to_lowercase();
+                r.headers
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == lower)
+                    .map(|(_, v)| v.clone())
+            })
+            .method("headers", |r: &Response| -> Value {
+                let fields: Vec<(xur_span::Symbol, Value)> = r
+                    .headers
+                    .iter()
+                    .map(|(k, v)| (xur_span::Symbol::intern(k), Value::str(v)))
+                    .collect();
+                Value::Record(xur_runtime::Record::new(fields).into())
+            });
     });
 }
 
@@ -118,33 +131,6 @@ fn resp_json(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
         Ok(value) => Ok(result(cx, Ok(value))),
         Err(e) => Ok(result(cx, Err(e.message))),
     }
-}
-
-fn resp_header(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Str(name)] = args else {
-        return Err(RuntimeError::new("`header` takes a header name string"));
-    };
-    let value = with_response(this, |r| {
-        let lower = name.to_lowercase();
-        r.headers
-            .iter()
-            .find(|(k, _)| k.to_lowercase() == lower)
-            .map(|(_, v)| v.clone())
-    })?;
-    Ok(crate::option(cx, value.map(|v| Value::str(&v))))
-}
-
-fn resp_headers(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this] = args else {
-        return Err(RuntimeError::new("`headers` takes no arguments"));
-    };
-    let headers = with_response(this, |r| r.headers.clone())?;
-    let fields: Vec<(xur_span::Symbol, Value)> = headers
-        .into_iter()
-        .map(|(k, v)| (xur_span::Symbol::intern(&k), Value::str(&v)))
-        .collect();
-    let _ = cx;
-    Ok(Value::Record(xur_runtime::Record::new(fields).into()))
 }
 
 // ── RequestBuilder ─────────────────────────────────────────────────

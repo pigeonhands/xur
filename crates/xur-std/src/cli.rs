@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use facet::Facet;
 use xur_runtime::convert::into_value;
-use xur_runtime::{NativeObject, Record, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{NativeObject, Raise, Record, Registry, RunResult, RuntimeError, Value, lock};
 use xur_runtime::registry::XurType;
 use xur_span::Symbol;
 
@@ -317,30 +317,19 @@ pub(crate) fn register(registry: &Registry) {
                 .map_err(|e| RuntimeError::new(error_text(e)))?;
                 Ok(Value::str(&value))
             })
-            .raw_function("subcommand", |cx, args| {
-                let [Value::Native(object)] = args else {
-                    return Err(RuntimeError::new("`subcommand` takes no arguments"));
-                };
-                let sub: Result<Option<String>, _> = with_args(object, |a| {
-                    a.0.lock().unwrap().subcommand()
-                })?;
-                match sub {
-                    Ok(sub) => {
-                        let val = option(cx, sub.map(|s| Value::str(&s)));
-                        Ok(result(cx, Ok(val)))
-                    }
-                    Err(e) => Ok(result(cx, Err(error_text(e)))),
-                }
+            .method("subcommand", |a: &Args| -> Result<Option<String>, String> {
+                a.0.lock().unwrap().subcommand().map_err(error_text)
             })
-            .raw_function("free", |cx, args| {
-                let [Value::Native(object)] = args else {
-                    return Err(RuntimeError::new("`free` takes no arguments"));
-                };
-                let free: Option<String> = with_args(object, |a| {
-                    a.0.lock().unwrap().opt_free_from_str()
-                })?
-                .map_err(|e| RuntimeError::new(error_text(e)))?;
-                Ok(option(cx, free.map(|s| Value::str(&s))))
+            .method("free", |a: &Args| -> Raise<Option<String>> {
+                Raise((|| {
+                    let free: Option<String> = a
+                        .0
+                        .lock()
+                        .unwrap()
+                        .opt_free_from_str()
+                        .map_err(|e| RuntimeError::new(error_text(e)))?;
+                    Ok(free)
+                })())
             })
             .raw_function_returns_xur("remaining", XurType::list::<String>(), |_cx, args| {
                 let [Value::Native(object)] = args else {
@@ -354,22 +343,16 @@ pub(crate) fn register(registry: &Registry) {
                         .collect(),
                 ))
             })
-            .raw_function("finish", |cx, args| {
-                let [Value::Native(object)] = args else {
-                    return Err(RuntimeError::new("`finish` takes no arguments"));
-                };
-                let remaining = with_args(object, |a| drain_args(&mut a.0.lock().unwrap()))?;
+            .method("finish", |a: &Args| -> Result<(), String> {
+                let remaining = drain_args(&mut a.0.lock().unwrap());
                 if remaining.is_empty() {
-                    Ok(result(cx, Ok(Value::Unit)))
+                    Ok(())
                 } else {
                     let names: Vec<_> = remaining
                         .iter()
                         .map(|os| os.to_string_lossy().into_owned())
                         .collect();
-                    Ok(result(
-                        cx,
-                        Err(format!("unexpected arguments: {}", names.join(", "))),
-                    ))
+                    Err(format!("unexpected arguments: {}", names.join(", ")))
                 }
             });
         // Declarative parsing

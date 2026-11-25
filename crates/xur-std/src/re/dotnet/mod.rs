@@ -37,7 +37,7 @@ use hao::dotnet::module::{ModuleKind, TargetRuntime};
 use hao::dotnet::signature::{MethodSig, SignatureFlags, TypeSig};
 use xur_runtime::convert::{into_value, reflect_error, to_value};
 use xur_runtime::registry::{ElemHint, ModuleBuilder, XurType};
-use xur_runtime::{Registry, RuntimeError, Value};
+use xur_runtime::{Registry, RuntimeError, Value, XurStr};
 
 use crate::{error_text, option, result};
 
@@ -266,35 +266,14 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         .method("runtime_version", |m: &DotnetModule| {
             m.0.lock().unwrap().runtime_version.clone()
         })
-        .raw_function("all_types", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`all_types` takes no arguments"));
-            };
-            with_module(this, |m| {
-                let types: Vec<DotnetTypeDef> =
-                    m.all_types().into_iter().map(DotnetTypeDef).collect();
-                into_value(cx, types)
-            })
+        .method("all_types", |m: &DotnetModule| -> Vec<DotnetTypeDef> {
+            m.0.lock().unwrap().all_types().into_iter().map(DotnetTypeDef).collect()
         })
-        .raw_function("all_methods", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`all_methods` takes no arguments"));
-            };
-            with_module(this, |m| {
-                let methods: Vec<DotnetMethodEntry> =
-                    m.all_methods().into_iter().map(DotnetMethodEntry).collect();
-                into_value(cx, methods)
-            })
+        .method("all_methods", |m: &DotnetModule| -> Vec<DotnetMethodEntry> {
+            m.0.lock().unwrap().all_methods().into_iter().map(DotnetMethodEntry).collect()
         })
-        .raw_function("all_fields", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`all_fields` takes no arguments"));
-            };
-            with_module(this, |m| {
-                let fields: Vec<DotnetField> =
-                    m.all_fields().into_iter().map(DotnetField).collect();
-                into_value(cx, fields)
-            })
+        .method("all_fields", |m: &DotnetModule| -> Vec<DotnetField> {
+            m.0.lock().unwrap().all_fields().into_iter().map(DotnetField).collect()
         })
         .raw_function_returns_xur("find_type", XurType::Named("Option", &[ElemHint::Name("TypeDefEntry")]), |cx, args| {
             let [this, Value::Str(namespace), Value::Str(name)] = args else {
@@ -333,40 +312,11 @@ fn register_in(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         .method("to_csharp", |m: &DotnetModule| {
             m.0.lock().unwrap().to_csharp()
         })
-        .raw_function("write", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`write` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Module`"));
-            };
-            let bytes = obj
-                .with(|m: &DotnetModule| m.0.lock().unwrap().write().map_err(error_text))
-                .ok_or_else(|| RuntimeError::new("expected a `Module`"))?;
-            match bytes {
-                Ok(b) => Ok(result(cx, Ok(Value::bytes(b)))),
-                Err(e) => Ok(result(cx, Err(e))),
-            }
+        .method("write", |m: &DotnetModule| -> Result<Vec<u8>, String> {
+            m.0.lock().unwrap().write().map_err(error_text)
         })
-        .raw_function("write_to_path", |cx, args| {
-            let [this, Value::Str(path)] = args else {
-                return Err(RuntimeError::new("`write_to_path` takes a path string"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Module`"));
-            };
-            let res = obj
-                .with(|m: &DotnetModule| {
-                    m.0.lock()
-                        .unwrap()
-                        .write_to_path(path.as_ref())
-                        .map_err(error_text)
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Module`"))?;
-            match res {
-                Ok(()) => Ok(result(cx, Ok(Value::Unit))),
-                Err(e) => Ok(result(cx, Err(e))),
-            }
+        .method("write_to_path", |m: &DotnetModule, path: XurStr| -> Result<(), String> {
+            m.0.lock().unwrap().write_to_path(&*path).map_err(error_text)
         })
         .raw_function_returns_xur("add_assembly_ref", XurType::UNIT, |_cx, args| {
             let [this, Value::Str(name)] = args else {
@@ -659,35 +609,14 @@ fn register_type_def_methods(dotnet: &mut ModuleBuilder<'_>) {
                 Ok(option(cx, val))
             })
         })
-        .raw_function("fields", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`fields` takes no arguments"));
-            };
-            with_type_def(this, |td| {
-                let fields: Vec<DotnetField> =
-                    td.fields.iter().cloned().map(DotnetField).collect();
-                into_value(cx, fields)
-            })
+        .method("fields", |t: &DotnetTypeDef| -> Vec<DotnetField> {
+            t.0.get().fields.iter().cloned().map(DotnetField).collect()
         })
-        .raw_function("methods", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`methods` takes no arguments"));
-            };
-            with_type_def(this, |td| {
-                let methods: Vec<DotnetMethodEntry> =
-                    td.methods.iter().cloned().map(DotnetMethodEntry).collect();
-                into_value(cx, methods)
-            })
+        .method("methods", |t: &DotnetTypeDef| -> Vec<DotnetMethodEntry> {
+            t.0.get().methods.iter().cloned().map(DotnetMethodEntry).collect()
         })
-        .raw_function("nested_types", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`nested_types` takes no arguments"));
-            };
-            with_type_def(this, |td| {
-                let nested: Vec<DotnetTypeDef> =
-                    td.nested_types.iter().cloned().map(DotnetTypeDef).collect();
-                into_value(cx, nested)
-            })
+        .method("nested_types", |t: &DotnetTypeDef| -> Vec<DotnetTypeDef> {
+            t.0.get().nested_types.iter().cloned().map(DotnetTypeDef).collect()
         });
 }
 
@@ -701,28 +630,14 @@ fn register_method_entry_methods(dotnet: &mut ModuleBuilder<'_>) {
         .method("is_public", |m: &DotnetMethodEntry| {
             m.0.get().flags & MethodFlags::MemberAccessMask == MethodFlags::Public
         })
-        .raw_function("signature", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`signature` takes no arguments"));
-            };
-            with_method_entry(this, |m| into_value(cx, DotnetMethodSig(m.signature.clone())))
+        .method("signature", |m: &DotnetMethodEntry| -> DotnetMethodSig {
+            DotnetMethodSig(m.0.get().signature.clone())
         })
-        .raw_function("params", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`params` takes no arguments"));
-            };
-            with_method_entry(this, |m| {
-                let names: Vec<String> = m.params.iter().map(|p| p.get().name.clone()).collect();
-                into_value(cx, names)
-            })
+        .method("params", |m: &DotnetMethodEntry| -> Vec<String> {
+            m.0.get().params.iter().map(|p| p.get().name.clone()).collect()
         })
-        .raw_function("return_type", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`return_type` takes no arguments"));
-            };
-            with_method_entry(this, |m| {
-                into_value(cx, DotnetTypeSig(m.signature.ret.clone()))
-            })
+        .method("return_type", |m: &DotnetMethodEntry| -> DotnetTypeSig {
+            DotnetTypeSig(m.0.get().signature.ret.clone())
         })
         .method("is_virtual", |m: &DotnetMethodEntry| {
             m.0.get().flags.contains(MethodFlags::Virtual)
@@ -752,74 +667,63 @@ fn register_method_body(dotnet: &mut ModuleBuilder<'_>) {
         .method("size", |b: &DotnetMethodBody| {
             b.0.instructions.len() as i64
         })
-        .raw_function("instructions", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`instructions` takes no arguments"));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a MethodBody"));
-            };
-            let lines = obj
-                .with(|b: &DotnetMethodBody| {
-                    b.0.instructions
-                        .iter()
-                        .enumerate()
-                        .map(|(i, instr)| {
-                            let op = &instr.operand;
-                            let operand_str = match op {
-                                Operand::None => String::new(),
-                                Operand::Int32(v) => format!(" {v}"),
-                                Operand::Int64(v) => format!(" {v}"),
-                                Operand::Float32(v) => format!(" {v}"),
-                                Operand::Float64(v) => format!(" {v}"),
-                                Operand::Target(l) => format!(" IL_{:04x}", l.0),
-                                Operand::Switch(targets) => {
-                                    let labels: Vec<String> =
-                                        targets.iter().map(|l| format!("IL_{:04x}", l.0)).collect();
-                                    format!(" ({})", labels.join(", "))
+        .method("instructions", |b: &DotnetMethodBody| -> Vec<String> {
+            b.0.instructions
+                .iter()
+                .enumerate()
+                .map(|(i, instr)| {
+                    let op = &instr.operand;
+                    let operand_str = match op {
+                        Operand::None => String::new(),
+                        Operand::Int32(v) => format!(" {v}"),
+                        Operand::Int64(v) => format!(" {v}"),
+                        Operand::Float32(v) => format!(" {v}"),
+                        Operand::Float64(v) => format!(" {v}"),
+                        Operand::Target(l) => format!(" IL_{:04x}", l.0),
+                        Operand::Switch(targets) => {
+                            let labels: Vec<String> =
+                                targets.iter().map(|l| format!("IL_{:04x}", l.0)).collect();
+                            format!(" ({})", labels.join(", "))
+                        }
+                        Operand::Local(idx) => format!(" V_{idx}"),
+                        Operand::Arg(idx) => format!(" A_{idx}"),
+                        Operand::String(s) => format!(" \"{s}\""),
+                        Operand::Sig(_) => " <sig>".into(),
+                        Operand::Token(token) => {
+                            match token {
+                                MT::Method(m) => {
+                                    let g = m.get();
+                                    let ty = g.declaring_type.upgrade()
+                                        .map(|t| t.get().full_name())
+                                        .unwrap_or_default();
+                                    format!(" {ty}::{}", g.name)
                                 }
-                                Operand::Local(idx) => format!(" V_{idx}"),
-                                Operand::Arg(idx) => format!(" A_{idx}"),
-                                Operand::String(s) => format!(" \"{s}\""),
-                                Operand::Sig(_) => " <sig>".into(),
-                                Operand::Token(token) => {
-                                    match token {
-                                        MT::Method(m) => {
-                                            let g = m.get();
-                                            let ty = g.declaring_type.upgrade()
-                                                .map(|t| t.get().full_name())
-                                                .unwrap_or_default();
-                                            format!(" {ty}::{}", g.name)
-                                        }
-                                        MT::Field(f) => {
-                                            let g = f.get();
-                                            let ty = g.declaring_type.upgrade()
-                                                .map(|t| t.get().full_name())
-                                                .unwrap_or_default();
-                                            format!(" {ty}::{}", g.name)
-                                        }
-                                        MT::MemberRef(mr) => {
-                                            let g = mr.get();
-                                            let class = match &g.parent {
-                                                hao::dotnet::entries::MemberRefParent::TypeRef(tr) => tr.get().full_name(),
-                                                hao::dotnet::entries::MemberRefParent::TypeDef(td) => td.get().full_name(),
-                                                _ => String::new(),
-                                            };
-                                            format!(" {class}::{}", g.name)
-                                        }
-                                        MT::TypeDef(t) => format!(" {}", t.get().full_name()),
-                                        MT::TypeRef(t) => format!(" {}", t.get().full_name()),
-                                        MT::TypeSpec(_) => " <typespec>".into(),
-                                        MT::MethodSpec(_) => " <methodspec>".into(),
-                                    }
+                                MT::Field(f) => {
+                                    let g = f.get();
+                                    let ty = g.declaring_type.upgrade()
+                                        .map(|t| t.get().full_name())
+                                        .unwrap_or_default();
+                                    format!(" {ty}::{}", g.name)
                                 }
-                            };
-                            format!("IL_{i:04x}: {}{operand_str}", instr.opcode)
-                        })
-                        .collect::<Vec<_>>()
+                                MT::MemberRef(mr) => {
+                                    let g = mr.get();
+                                    let class = match &g.parent {
+                                        hao::dotnet::entries::MemberRefParent::TypeRef(tr) => tr.get().full_name(),
+                                        hao::dotnet::entries::MemberRefParent::TypeDef(td) => td.get().full_name(),
+                                        _ => String::new(),
+                                    };
+                                    format!(" {class}::{}", g.name)
+                                }
+                                MT::TypeDef(t) => format!(" {}", t.get().full_name()),
+                                MT::TypeRef(t) => format!(" {}", t.get().full_name()),
+                                MT::TypeSpec(_) => " <typespec>".into(),
+                                MT::MethodSpec(_) => " <methodspec>".into(),
+                            }
+                        }
+                    };
+                    format!("IL_{i:04x}: {}{operand_str}", instr.opcode)
                 })
-                .ok_or_else(|| RuntimeError::new("expected a MethodBody"))?;
-            into_value(cx, lines)
+                .collect()
         });
 }
 
@@ -828,17 +732,11 @@ fn register_field_methods(dotnet: &mut ModuleBuilder<'_>) {
         .ty::<DotnetField>("FieldEntry")
         .method("name", |f: &DotnetField| f.0.get().name.clone())
         .method("is_static", |f: &DotnetField| f.0.get().is_static())
-        .raw_function("field_type", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`field_type` takes no arguments"));
-            };
-            with_field(this, |f| into_value(cx, DotnetTypeSig(f.signature.ty.clone())))
+        .method("field_type", |f: &DotnetField| -> DotnetTypeSig {
+            DotnetTypeSig(f.0.get().signature.ty.clone())
         })
-        .raw_function("signature", |cx, args| {
-            let [this] = args else {
-                return Err(RuntimeError::new("`signature` takes no arguments"));
-            };
-            with_field(this, |f| into_value(cx, DotnetTypeSig(f.signature.ty.clone())))
+        .method("signature", |f: &DotnetField| -> DotnetTypeSig {
+            DotnetTypeSig(f.0.get().signature.ty.clone())
         });
 }
 
@@ -862,17 +760,6 @@ fn with_method_entry(
     };
     obj.with(|m: &DotnetMethodEntry| f(&m.0.get()))
         .ok_or_else(|| RuntimeError::new("expected a `MethodEntry`"))?
-}
-
-fn with_field(
-    val: &Value,
-    f: impl FnOnce(&Field) -> Result<Value, RuntimeError>,
-) -> Result<Value, RuntimeError> {
-    let Value::Native(obj) = val else {
-        return Err(RuntimeError::new("expected a `Field`"));
-    };
-    obj.with(|fi: &DotnetField| f(&fi.0.get()))
-        .ok_or_else(|| RuntimeError::new("expected a `Field`"))?
 }
 
 fn with_module(

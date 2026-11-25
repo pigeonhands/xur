@@ -18,7 +18,7 @@ use facet::Facet;
 use hao_il2cpp::{FieldView, Game, MethodView, ParameterView, TypeView};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::{ElemHint, ModuleBuilder, XurType};
-use xur_runtime::{Registry, RuntimeError, Value};
+use xur_runtime::{Registry, RuntimeError, Value, XurStr};
 
 use crate::{error_text, option, result};
 
@@ -216,32 +216,14 @@ pub(super) fn register(registry: &Registry, dotnet: &mut ModuleBuilder<'_>) {
         .method("image_names", |g: &Il2CppGame| -> Vec<String> {
             g.0.image_names().map(|s| s.to_owned()).collect()
         })
-        .raw_function("write_assemblies", |cx, args| {
-            let [this, Value::Str(dir)] = args else {
-                return Err(RuntimeError::new(
-                    "`write_assemblies` takes a directory path",
-                ));
-            };
-            let Value::Native(obj) = this else {
-                return Err(RuntimeError::new("expected a `Game`"));
-            };
-            let res = obj
-                .with(|g: &Il2CppGame| {
-                    g.0.write_assemblies(dir.as_ref())
-                        .map(|paths| {
-                            paths
-                                .into_iter()
-                                .map(|p| Value::str(&p.display().to_string()))
-                                .collect::<Vec<_>>()
-                        })
-                        .map_err(error_text)
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `Game`"))?;
-            match res {
-                Ok(paths) => Ok(result(cx, Ok(Value::list(paths)))),
-                Err(e) => Ok(result(cx, Err(e))),
-            }
-        })
+        .method(
+            "write_assemblies",
+            |g: &Il2CppGame, dir: XurStr| -> Result<Vec<String>, String> {
+                g.0.write_assemblies(&*dir)
+                    .map(|paths| paths.into_iter().map(|p| p.display().to_string()).collect())
+                    .map_err(error_text)
+            },
+        )
         .raw_function_returns_xur("bytes_at", XurType::Named("Option", &[ElemHint::Name("bytes")]), |cx, args| {
             let [this, Value::Int(vaddr), Value::Int(len)] = args else {
                 return Err(RuntimeError::new("`bytes_at` takes (vaddr: int, len: int)"));
