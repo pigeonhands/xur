@@ -3,7 +3,7 @@
 use std::sync::{Arc, RwLock};
 
 use facet::Facet;
-use xur_runtime::{NativeObject, Registry, RunResult, RuntimeError, Value};
+use xur_runtime::{NativeObject, Registry, RuntimeError, Value};
 
 #[derive(Facet, Clone)]
 #[facet(opaque)]
@@ -25,13 +25,8 @@ pub(crate) fn register(registry: &Registry) {
             });
         module
             .ty::<Cell>("Cell")
-            .raw_function("get", |_cx, args| {
-                let [Value::Native(object)] = args else {
-                    return Err(RuntimeError::new("`get` takes no arguments"));
-                };
-                with(object, |cell: &Cell| {
-                    cell.0.read().unwrap_or_else(|p| p.into_inner()).clone()
-                })
+            .method("get", |cell: &Cell| -> Value {
+                cell.0.read().unwrap_or_else(|p| p.into_inner()).clone()
             })
             .raw_function("set", |_cx, args| {
                 let [Value::Native(object), value] = args else {
@@ -52,11 +47,5 @@ pub(crate) fn register(registry: &Registry) {
                 Ok(Value::Unit)
             });
     });
-}
-
-fn with<T: 'static, R>(object: &NativeObject, f: impl FnOnce(&T) -> R) -> RunResult<R> {
-    object
-        .with(f)
-        .ok_or_else(|| RuntimeError::new("expected a `Cell`"))
 }
 

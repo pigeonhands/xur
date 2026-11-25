@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use facet::Facet;
-use xur_runtime::{Context, Registry, RunResult, RuntimeError, Value};
-
-use crate::option;
+use xur_runtime::{Opt, Registry};
 
 pub(crate) fn register(registry: &Registry) {
     registry.lazy_module("std::regex", |module| {
@@ -24,7 +22,13 @@ pub(crate) fn register(registry: &Registry) {
                     .map(|m| m.as_str().to_string())
                     .collect::<Vec<_>>()
             })
-            .raw_function("captures", regex_captures)
+            .method("captures", |re: &Regex, text: String| -> Opt<Vec<Option<String>>> {
+                Opt(re.0.captures(&text).map(|caps| {
+                    caps.iter()
+                        .map(|m| m.map(|m| m.as_str().to_string()))
+                        .collect::<Vec<Option<String>>>()
+                }))
+            })
             .method("replace", |re: &Regex, text: String, replacement: String| {
                 re.0.replace(&text, replacement.as_str()).into_owned()
             })
@@ -45,27 +49,4 @@ impl std::fmt::Display for Regex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "/{}/", self.0.as_str())
     }
-}
-
-fn regex_captures(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
-    let [this, Value::Str(text)] = args else {
-        return Err(RuntimeError::new("`captures` takes a string"));
-    };
-    let Value::Native(obj) = this else {
-        return Err(RuntimeError::new("expected a Regex"));
-    };
-    let lang = cx.lang();
-    let caps = obj
-        .with(|r: &Regex| {
-            r.0.captures(text).map(|caps| {
-                caps.iter()
-                    .map(|m| match m {
-                        Some(m) => Value::adt(lang.some, vec![Value::str(m.as_str())]),
-                        None => Value::adt(lang.none, Vec::new()),
-                    })
-                    .collect::<Vec<_>>()
-            })
-        })
-        .ok_or_else(|| RuntimeError::new("expected a Regex"))?;
-    Ok(option(cx, caps.map(Value::list)))
 }

@@ -29,7 +29,8 @@ use xur_ast::{Attribute, LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use xur_resolve::DefId;
 use xur_runtime::convert::into_value;
 use xur_runtime::{
-    AdtInfo, Context, IntValue, Record, RunResult, RuntimeError, TypeRef, Value, lock,
+    AdtInfo, Context, IntValue, Raise, Record, RunResult, RuntimeError, TypeRef, Value, XurBytes,
+    lock,
 };
 use xur_span::Symbol;
 
@@ -609,7 +610,7 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
         .method("align", |l: &Layout| l.0.align)
         .method("is_big_endian", |l: &Layout| l.0.big_endian)
         .method("to_string", |l: &Layout| l.to_string())
-        .raw_function("fields", |_, args| Ok(layout_arg(args)?.field_records()))
+        .method("fields", |l: &Layout| -> Value { l.field_records() })
         .raw_function_returns::<i64>("offset_of", |_, args| {
             let [_, Value::Str(name)] = args else {
                 return Err(RuntimeError::new("`offset_of` takes a field name"));
@@ -682,17 +683,11 @@ pub(super) fn register(module: &mut xur_runtime::registry::ModuleBuilder<'_>) {
             }
             options(args, |data| data.min_align = align)
         })
-        .raw_function("read", |_, args| {
-            let [_, Value::Bytes(data), Value::Int(offset)] = args else {
-                return Err(RuntimeError::new("`read` takes bytes and an offset"));
-            };
-            layout_arg(args)?.read(&lock(data), usize_arg(*offset)?)
+        .method("read", |l: &Layout, data: XurBytes, offset: usize| -> Raise<Value> {
+            Raise(l.read(&lock(&data.0), offset))
         })
-        .raw_function("from_bytes", |_, args| {
-            let [_, Value::Bytes(data)] = args else {
-                return Err(RuntimeError::new("`from_bytes` takes bytes"));
-            };
-            layout_arg(args)?.read(&lock(data), 0)
+        .method("from_bytes", |l: &Layout, data: XurBytes| -> Raise<Value> {
+            Raise(l.read(&lock(&data.0), 0))
         })
         .raw_function("write", |cx, args| {
             let [_, Value::Bytes(data), Value::Int(offset), value] = args else {

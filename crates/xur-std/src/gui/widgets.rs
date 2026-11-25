@@ -6,7 +6,7 @@ use std::sync::Arc;
 use egui::{Color32, ColorImage, Frame, Grid, Image, ImageData, ScrollArea, Slider, TextureHandle, TextureId, TextureOptions, Vec2, Window};
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::ModuleBuilder;
-use xur_runtime::{Registry, RuntimeError, Value};
+use xur_runtime::{Registry, RuntimeError, Value, XurStr};
 
 use super::types::{EguiCtx, EguiUi, Texture, with_ctx, with_ui};
 
@@ -125,117 +125,64 @@ pub(crate) fn register_ctx_methods(_registry: &Registry, m: &mut ModuleBuilder<'
 pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_>) {
     let mut ty = m.ty::<EguiUi>("Ui");
 
-    ty.raw_function("label", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`label` takes a string"));
-        };
-        with_ui(this, |ui| {
-            ui.label(text.as_ref());
-            Ok(Value::Unit)
-        })
+    ty.method("label", |wrapper: &EguiUi, text: XurStr| {
+        wrapper.ui().label(&*text);
     });
 
-    ty.raw_function("heading", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`heading` takes a string"));
-        };
-        with_ui(this, |ui| {
-            ui.heading(text.as_ref());
-            Ok(Value::Unit)
-        })
+    ty.method("heading", |wrapper: &EguiUi, text: XurStr| {
+        wrapper.ui().heading(&*text);
     });
 
-    ty.raw_function("small", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`small` takes a string"));
-        };
-        with_ui(this, |ui| {
-            ui.small(text.as_ref());
-            Ok(Value::Unit)
-        })
+    ty.method("small", |wrapper: &EguiUi, text: XurStr| {
+        wrapper.ui().small(&*text);
     });
 
-    ty.raw_function("button", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`button` takes a string"));
-        };
-        with_ui(this, |ui| Ok(Value::Bool(ui.button(text.as_ref()).clicked())))
+    ty.method("button", |wrapper: &EguiUi, text: XurStr| -> bool {
+        wrapper.ui().button(&*text).clicked()
     });
 
-    ty.raw_function("separator", |_cx, args| {
-        let [this] = args else {
-            return Err(RuntimeError::new("`separator` takes no arguments"));
-        };
-        with_ui(this, |ui| {
-            ui.separator();
-            Ok(Value::Unit)
-        })
+    ty.method("separator", |wrapper: &EguiUi| {
+        wrapper.ui().separator();
     });
 
-    ty.raw_function("checkbox", |_cx, args| {
-        let [this, Value::Bool(checked), Value::Str(label)] = args else {
-            return Err(RuntimeError::new(
-                "`checkbox` takes (checked: bool, label: str)",
-            ));
-        };
-        with_ui(this, |ui| {
-            let mut val = *checked;
-            ui.checkbox(&mut val, label.as_ref());
-            Ok(Value::Bool(val))
-        })
+    ty.method("checkbox", |wrapper: &EguiUi, checked: bool, label: XurStr| -> bool {
+        let mut val = checked;
+        wrapper.ui().checkbox(&mut val, &*label);
+        val
     });
 
-    ty.raw_function("slider_float", |_cx, args| {
-        let [this, Value::Str(label), Value::Float(value), Value::Float(min), Value::Float(max)] =
-            args
-        else {
-            return Err(RuntimeError::new(
-                "`slider_float` takes (label, value, min, max)",
-            ));
-        };
-        with_ui(this, |ui| {
-            let mut val = value.as_f32();
-            ui.add(Slider::new(&mut val, min.as_f32()..=max.as_f32()).text(label.as_ref()));
-            Ok(Value::float(val as f64))
-        })
+    ty.method(
+        "slider_float",
+        |wrapper: &EguiUi, label: XurStr, value: f64, min: f64, max: f64| -> f64 {
+            let mut val = value as f32;
+            wrapper
+                .ui()
+                .add(Slider::new(&mut val, min as f32..=max as f32).text(&*label));
+            val as f64
+        },
+    );
+
+    ty.method(
+        "slider_int",
+        |wrapper: &EguiUi, label: XurStr, value: i64, min: i64, max: i64| -> i64 {
+            let mut val = value;
+            wrapper
+                .ui()
+                .add(Slider::new(&mut val, min..=max).text(&*label));
+            val
+        },
+    );
+
+    ty.method("text_edit", |wrapper: &EguiUi, text: String| -> String {
+        let mut buf = text;
+        wrapper.ui().text_edit_singleline(&mut buf);
+        buf
     });
 
-    ty.raw_function("slider_int", |_cx, args| {
-        let [this, Value::Str(label), Value::Int(value), Value::Int(min), Value::Int(max)] = args
-        else {
-            return Err(RuntimeError::new(
-                "`slider_int` takes (label, value, min, max)",
-            ));
-        };
-        with_ui(this, |ui| {
-            let mut val = value.to_i64().ok_or_else(|| RuntimeError::new("slider value out of i64 range"))?;
-            let lo = min.to_i64().ok_or_else(|| RuntimeError::new("slider min out of i64 range"))?;
-            let hi = max.to_i64().ok_or_else(|| RuntimeError::new("slider max out of i64 range"))?;
-            ui.add(Slider::new(&mut val, lo..=hi).text(label.as_ref()));
-            Ok(Value::int(val))
-        })
-    });
-
-    ty.raw_function("text_edit", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`text_edit` takes a string"));
-        };
-        with_ui(this, |ui| {
-            let mut buf = text.to_string();
-            ui.text_edit_singleline(&mut buf);
-            Ok(Value::Str(buf.into()))
-        })
-    });
-
-    ty.raw_function("text_edit_multiline", |_cx, args| {
-        let [this, Value::Str(text)] = args else {
-            return Err(RuntimeError::new("`text_edit_multiline` takes a string"));
-        };
-        with_ui(this, |ui| {
-            let mut buf = text.to_string();
-            ui.text_edit_multiline(&mut buf);
-            Ok(Value::Str(buf.into()))
-        })
+    ty.method("text_edit_multiline", |wrapper: &EguiUi, text: String| -> String {
+        let mut buf = text;
+        wrapper.ui().text_edit_multiline(&mut buf);
+        buf
     });
 
     ty.raw_function("horizontal", |cx, args| {
@@ -416,53 +363,25 @@ pub(crate) fn register_ui_methods(_registry: &Registry, m: &mut ModuleBuilder<'_
         })
     });
 
-    ty.raw_function("end_row", |_cx, args| {
-        let [this] = args else {
-            return Err(RuntimeError::new("`end_row` takes no arguments"));
-        };
-        with_ui(this, |ui| {
-            ui.end_row();
-            Ok(Value::Unit)
-        })
+    ty.method("end_row", |wrapper: &EguiUi| {
+        wrapper.ui().end_row();
     });
 
-    ty.raw_function("selectable", |_cx, args| {
-        let [this, Value::Bool(selected), Value::Str(text)] = args else {
-            return Err(RuntimeError::new(
-                "`selectable` takes (selected: bool, text: str)",
-            ));
-        };
-        with_ui(this, |ui| {
-            Ok(Value::Bool(
-                ui.selectable_label(*selected, text.as_ref())
-                    .clicked(),
-            ))
-        })
+    ty.method("selectable", |wrapper: &EguiUi, selected: bool, text: XurStr| -> bool {
+        wrapper.ui().selectable_label(selected, &*text).clicked()
     });
 
-    ty.raw_function("colored_label", |_cx, args| {
-        let [this, Value::Int(r), Value::Int(g), Value::Int(b), Value::Str(text)] = args else {
-            return Err(RuntimeError::new(
-                "`colored_label` takes (r, g, b, text)",
-            ));
-        };
-        with_ui(this, |ui| {
-            ui.colored_label(
-                Color32::from_rgb(r.to_i128() as u8, g.to_i128() as u8, b.to_i128() as u8),
-                text.as_ref(),
-            );
-            Ok(Value::Unit)
-        })
-    });
+    ty.method(
+        "colored_label",
+        |wrapper: &EguiUi, r: i64, g: i64, b: i64, text: XurStr| {
+            wrapper
+                .ui()
+                .colored_label(Color32::from_rgb(r as u8, g as u8, b as u8), &*text);
+        },
+    );
 
-    ty.raw_function("add_space", |_cx, args| {
-        let [this, Value::Float(amount)] = args else {
-            return Err(RuntimeError::new("`add_space` takes a float"));
-        };
-        with_ui(this, |ui| {
-            ui.add_space(amount.as_f32());
-            Ok(Value::Unit)
-        })
+    ty.method("add_space", |wrapper: &EguiUi, amount: f64| {
+        wrapper.ui().add_space(amount as f32);
     });
 
     ty.method("image", |wrapper: &EguiUi, tex: Texture, width: f64, height: f64| {
