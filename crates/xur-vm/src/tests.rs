@@ -1141,6 +1141,53 @@ fn test_all_examples() {
 }
 
 #[test]
+fn integer_width_arithmetic_wraps_and_preserves_type() {
+    // Byte indexing yields narrow (u8) values; these exercise the width rules,
+    // checking both the resulting value and its type via any::type_of.
+    let src = r#"
+        use std::assert;
+        use std::any;
+        fn main() {
+            let d = b"\xc8\x64\x01\x00";  // [200, 100, 1, 0], all u8
+            assert::is_eq(u8, any::type_of(d[0]));
+            // Overflow wraps to the operand width (u8): 200 + 100 == 44 : u8.
+            assert::is_eq(d[0] + d[1], 44);
+            assert::is_eq(u8, any::type_of(d[0] + d[1]));
+            // A shift keeps the LEFT operand's type and masks the count to its
+            // width, so 1u8 << 9 == 1u8 << 1 == 2 : u8 (not a widened 512).
+            assert::is_eq(d[2] << 9, 2);
+            assert::is_eq(u8, any::type_of(d[2] << 9));
+            // Bitwise uses the same signedness rule as arithmetic (signed if
+            // either operand is), so -1 | 0u8 is signed -1 : i64 (not u64::MAX).
+            assert::is_eq(-1 | d[3], -1);
+            assert::is_eq(i64, any::type_of(-1 | d[3]));
+        }
+    "#;
+    assert_eq!(run(src), Ok(String::new()));
+}
+
+#[test]
+fn float_arithmetic_preserves_width() {
+    // read_f32_le yields an f32; f32 + f32 stays f32 (checked via type_of) and
+    // keeps f32 precision: 0.1 + 0.2 rounds to exactly 0.3, not 0.30000000447…
+    let src = r#"
+        use std::assert;
+        use std::any;
+        fn main() {
+            let d = std::bytes::zeroed(8);
+            d.write_f32_le(0, 0.1);
+            d.write_f32_le(4, 0.2);
+            let a = d.read_f32_le(0);
+            assert::is_eq(f32, any::type_of(a));
+            let sum = a + d.read_f32_le(4);
+            assert::is_eq(f32, any::type_of(sum));
+            std::io::println("{}", sum);
+        }
+    "#;
+    assert_eq!(run(src), Ok("0.3\n".into()));
+}
+
+#[test]
 fn repr_enum_equality_is_type_scoped() {
     // A repr-enum variant coerces to its discriminant only against an int, not
     // against a *different* enum that happens to share that discriminant.

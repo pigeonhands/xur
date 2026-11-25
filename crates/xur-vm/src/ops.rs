@@ -1,21 +1,23 @@
 //! Operators on values, checked at runtime.
 //!
-//! As in Rust, integers and floats don't mix, and integer overflow and
-//! division by zero are errors rather than wrapping. Strings, lists and
-//! bytes can be concatenated with `+`, and indexed with a range to slice
-//! them.
+//! Integers and floats don't mix. Integer arithmetic WRAPS to the result's
+//! width on overflow (like Rust's release mode); division by zero is still an
+//! error. A binary op's result type is the wider of the two operands and signed
+//! if either is; a shift keeps the left operand's type and masks the count to
+//! its width; floats keep their width (f32 ⊕ f32 stays f32). Strings, lists and
+//! bytes can be concatenated with `+`, and indexed with a range to slice them.
 
 use std::cmp::Ordering;
 
 use xur_ast::{BinOpKind, UnOp};
-use xur_runtime::{IntValue, MapKey, Range, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{FloatValue, IntValue, MapKey, Range, RunResult, RuntimeError, Value, lock};
 
 use crate::interp::Interp;
 
 pub(crate) fn unary(op: UnOp, value: &Value) -> RunResult<Value> {
     match (op, value) {
-        (UnOp::Neg, Value::Int(i)) => i.checked_neg().map(Value::Int).ok_or_else(overflow),
-        (UnOp::Neg, Value::Float(f)) => Ok(Value::Float((-f.as_f64()).into())),
+        (UnOp::Neg, Value::Int(i)) => Ok(Value::Int(i.wrapping_neg())),
+        (UnOp::Neg, Value::Float(f)) => Ok(Value::Float(f.negate())),
         (UnOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
         (UnOp::BitNot, Value::Int(i)) => Ok(Value::Int(i.bit_not())),
         _ => Err(RuntimeError::new(format!(
@@ -63,14 +65,7 @@ impl Interp<'_> {
             (Shl, Value::Int(a), Value::Int(b)) => Some(shift_left(*a, *b)?),
             (Shr, Value::Int(a), Value::Int(b)) => Some(shift_right(*a, *b)?),
             (Add | Sub | Mul | Div | Rem, Value::Float(a), Value::Float(b)) => {
-                let (a, b) = (a.as_f64(), b.as_f64());
-                Some(Value::Float(match op {
-                    Add => a + b,
-                    Sub => a - b,
-                    Mul => a * b,
-                    Div => a / b,
-                    _ => a % b,
-                }.into()))
+                Some(Value::Float(float_arith(op, *a, *b)))
             }
             (Add, Value::Str(a), Value::Str(b)) => Some(Value::str(&format!("{a}{b}"))),
             (Add, Value::List(a), Value::List(b)) => {
@@ -139,63 +134,76 @@ impl Interp<'_> {
 
 fn int_arith(op: BinOpKind, a: IntValue, b: IntValue) -> RunResult<Value> {
     let (ai, bi) = (a.to_i128(), b.to_i128());
+    // Division/remainder by zero is an error; everything else wraps to the
+    // result width. i128 is wide enough that wrapping only kicks in at the final
+    // narrow for operands up to 64 bits, matching Rust's `wrapping_*`.
     let result = match op {
-        BinOpKind::Add => ai.checked_add(bi),
-        BinOpKind::Sub => ai.checked_sub(bi),
-        BinOpKind::Mul => ai.checked_mul(bi),
         BinOpKind::Div | BinOpKind::Rem if bi == 0 => {
             return Err(RuntimeError::new("attempt to divide by zero"));
         }
-        BinOpKind::Div => ai.checked_div(bi),
-        _ => ai.checked_rem(bi),
+        BinOpKind::Add => ai.wrapping_add(bi),
+        BinOpKind::Sub => ai.wrapping_sub(bi),
+        BinOpKind::Mul => ai.wrapping_mul(bi),
+        BinOpKind::Div => ai.wrapping_div(bi),
+        _ => ai.wrapping_rem(bi),
     };
-    let result = result.ok_or_else(overflow)?;
-    IntValue::promote(a, b, result)
-        .map(Value::Int)
-        .ok_or_else(overflow)
+    let (signed, width) = IntValue::promote_type(a, b);
+    Ok(Value::Int(IntValue::wrap(result, signed, width)))
 }
 
 fn int_bitwise(a: IntValue, b: IntValue, op: impl FnOnce(i128, i128) -> i128) -> Value {
     let result = op(a.to_i128(), b.to_i128());
-    let signed = a.is_signed() && b.is_signed();
-    let width = a.width().max(b.width());
-    // Mask the result to the target width to avoid i128 sign-extension artifacts.
-    let result = match width {
-        1 if !signed => result & 0xFF,
-        2 if !signed => result & 0xFFFF,
-        4 if !signed => result & 0xFFFF_FFFF,
-        8 if !signed => result & (u64::MAX as i128),
-        _ => result,
-    };
-    IntValue::narrow(result, signed, width)
-        .or_else(|| IntValue::narrow(result, signed, 8))
-        .map(Value::Int)
-        .unwrap_or_else(|| Value::int(result as i64))
+    let (signed, width) = IntValue::promote_type(a, b);
+    Value::Int(IntValue::wrap(result, signed, width))
+}
+
+fn float_arith(op: BinOpKind, a: FloatValue, b: FloatValue) -> FloatValue {
+    use BinOpKind::*;
+    // Preserve width: f32 ⊕ f32 stays f32 (computed in f32); otherwise f64.
+    match (a, b) {
+        (FloatValue::F32(x), FloatValue::F32(y)) => FloatValue::F32(match op {
+            Add => x + y,
+            Sub => x - y,
+            Mul => x * y,
+            Div => x / y,
+            _ => x % y,
+        }),
+        _ => {
+            let (x, y) = (a.as_f64(), b.as_f64());
+            FloatValue::F64(match op {
+                Add => x + y,
+                Sub => x - y,
+                Mul => x * y,
+                Div => x / y,
+                _ => x % y,
+            })
+        }
+    }
+}
+
+fn shift_amount(a: IntValue, b: IntValue) -> RunResult<u32> {
+    let count = b
+        .to_u32()
+        .ok_or_else(|| RuntimeError::new(format!("invalid shift amount: {b}")))?;
+    // Mask the count to the left operand's bit width, as Rust's wrapping shifts do.
+    Ok(count % (a.width() as u32 * 8))
 }
 
 fn shift_left(a: IntValue, b: IntValue) -> RunResult<Value> {
-    let shift = b.to_u32().ok_or_else(|| {
-        RuntimeError::new(format!("invalid shift amount: {b}"))
-    })?;
-    let result = a.to_i128().checked_shl(shift).ok_or_else(overflow)?;
-    IntValue::promote(a, b, result)
-        .map(Value::Int)
-        .ok_or_else(overflow)
+    let shift = shift_amount(a, b)?;
+    // Result keeps the LEFT operand's type; the count never influences it.
+    let result = a.to_i128().wrapping_shl(shift);
+    Ok(Value::Int(IntValue::wrap(result, a.is_signed(), a.width())))
 }
 
 fn shift_right(a: IntValue, b: IntValue) -> RunResult<Value> {
-    let shift = b.to_u32().ok_or_else(|| {
-        RuntimeError::new(format!("invalid shift amount: {b}"))
-    })?;
-    let result = a.to_i128().checked_shr(shift).ok_or_else(overflow)?;
-    IntValue::promote(a, b, result)
-        .map(Value::Int)
-        .ok_or_else(overflow)
+    let shift = shift_amount(a, b)?;
+    // to_i128 sign/zero-extends per the left type, so `>>` is arithmetic for a
+    // signed operand and logical for an unsigned one; wrap back to the left type.
+    let result = a.to_i128() >> shift;
+    Ok(Value::Int(IntValue::wrap(result, a.is_signed(), a.width())))
 }
 
-fn overflow() -> RuntimeError {
-    RuntimeError::new("arithmetic overflow")
-}
 
 fn compare(lhs: &Value, rhs: &Value) -> Option<Ordering> {
     match (lhs, rhs) {

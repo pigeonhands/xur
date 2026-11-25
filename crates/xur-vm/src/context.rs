@@ -94,6 +94,10 @@ impl Context for Interp<'_> {
         Interp::describe_type(self, value)
     }
 
+    fn type_of(&self, value: &Value) -> xur_resolve::RtType {
+        Interp::type_of(self, value)
+    }
+
     fn adt_info(&self, def: DefId) -> Option<AdtInfo> {
         Interp::adt_info(self, def)
     }

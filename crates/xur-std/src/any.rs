@@ -13,7 +13,19 @@ pub(crate) fn register(registry: &Registry) {
         .named_raw_function_returns::<String>("type_name", &[], type_name)
         .named_raw_function("try_cast", &["value"], try_cast)
         .named_raw_function("record", &["value"], to_record)
-        .named_raw_function("type_name_val", &["value"], type_name_val);
+        .named_raw_function("type_name_val", &["value"], type_name_val)
+        .named_raw_function("type_of", &["value"], type_of);
+}
+
+/// `type_of(value)`: the runtime type of `value` as a type value, preserving
+/// int/float width — e.g. `any::type_of(byte) == u8`.
+fn type_of(cx: &mut dyn Context, args: &[Value]) -> RunResult<Value> {
+    match args {
+        [value] => Ok(Value::Type(Box::new(cx.type_of(value)))),
+        _ => Err(RuntimeError::new(
+            "`type_of` takes one argument: `type_of(v)`",
+        )),
+    }
 }
 
 /// `type_name::<T>()`: the name of `T`.

@@ -106,40 +106,47 @@ impl IntValue {
         }
     }
 
-    /// Try to narrow `result` into an IntValue of the given signedness and width.
-    pub fn narrow(result: i128, signed: bool, width: u8) -> Option<Self> {
-        if signed {
-            match width {
-                1 => i8::try_from(result).ok().map(Self::I8),
-                2 => i16::try_from(result).ok().map(Self::I16),
-                4 => i32::try_from(result).ok().map(Self::I32),
-                _ => i64::try_from(result).ok().map(Self::I64),
-            }
-        } else {
-            match width {
-                1 => u8::try_from(result).ok().map(Self::U8),
-                2 => u16::try_from(result).ok().map(Self::U16),
-                4 => u32::try_from(result).ok().map(Self::U32),
-                _ => u64::try_from(result).ok().map(Self::U64),
-            }
+    /// The promoted `(signed, width)` of a binary op: signed if either operand
+    /// is, width the wider of the two. The single rule for arithmetic and
+    /// bitwise, so they agree.
+    pub fn promote_type(a: Self, b: Self) -> (bool, u8) {
+        (a.is_signed() || b.is_signed(), a.width().max(b.width()))
+    }
+
+    /// Wrap `value` into `(signed, width)` (two's-complement), as Rust's
+    /// release-mode / `wrapping_*` arithmetic does.
+    pub fn wrap(value: i128, signed: bool, width: u8) -> Self {
+        match (signed, width) {
+            (true, 1) => Self::I8(value as i8),
+            (true, 2) => Self::I16(value as i16),
+            (true, 4) => Self::I32(value as i32),
+            (true, _) => Self::I64(value as i64),
+            (false, 1) => Self::U8(value as u8),
+            (false, 2) => Self::U16(value as u16),
+            (false, 4) => Self::U32(value as u32),
+            (false, _) => Self::U64(value as u64),
         }
     }
 
-    /// Narrow `result` to the common promoted type of two operands. Tries the
-    /// natural type first, then widens, then flips signedness as a last resort.
-    pub fn promote(a: Self, b: Self, result: i128) -> Option<Self> {
-        let signed = a.is_signed() || b.is_signed();
-        let width = a.width().max(b.width());
-        Self::narrow(result, signed, width)
-            .or_else(|| Self::narrow(result, signed, 8))
-            .or_else(|| Self::narrow(result, !signed, 8))
+    /// Negation, preserving width and wrapping on overflow. The result is signed
+    /// (negating a value yields a signed value).
+    pub fn wrapping_neg(self) -> Self {
+        Self::wrap(self.to_i128().wrapping_neg(), true, self.width())
     }
 
-    pub fn checked_neg(self) -> Option<Self> {
-        let result = self.to_i128().checked_neg()?;
-        let width = self.width();
-        Self::narrow(result, true, width)
-            .or_else(|| Self::narrow(result, true, 8))
+    /// This value's type, preserving width and signedness.
+    pub fn rt_type(self) -> RtType {
+        let (name, min, max) = match self {
+            Self::I8(_) => ("i8", i8::MIN as i128, i8::MAX as i128),
+            Self::I16(_) => ("i16", i16::MIN as i128, i16::MAX as i128),
+            Self::I32(_) => ("i32", i32::MIN as i128, i32::MAX as i128),
+            Self::I64(_) => ("i64", i64::MIN as i128, i64::MAX as i128),
+            Self::U8(_) => ("u8", 0, u8::MAX as i128),
+            Self::U16(_) => ("u16", 0, u16::MAX as i128),
+            Self::U32(_) => ("u32", 0, u32::MAX as i128),
+            Self::U64(_) => ("u64", 0, u64::MAX as i128),
+        };
+        RtType::Int { name, min, max }
     }
 
     pub fn bit_not(self) -> Self {
@@ -247,6 +254,31 @@ impl FloatValue {
         match self {
             Self::F32(v) => v,
             Self::F64(v) => v as f32,
+        }
+    }
+
+    /// Negation, preserving width.
+    pub fn negate(self) -> Self {
+        match self {
+            Self::F32(v) => Self::F32(-v),
+            Self::F64(v) => Self::F64(-v),
+        }
+    }
+
+    pub fn width(self) -> u8 {
+        match self {
+            Self::F32(_) => 4,
+            Self::F64(_) => 8,
+        }
+    }
+
+    /// This value's type, preserving width.
+    pub fn rt_type(self) -> RtType {
+        RtType::Float {
+            name: match self {
+                Self::F32(_) => "f32",
+                Self::F64(_) => "f64",
+            },
         }
     }
 }

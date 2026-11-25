@@ -38,7 +38,7 @@ use std::thread::JoinHandle;
 use facet::{Facet, Peek, Shape, StructKind, StructType, Type, UserType};
 use xur_resolve::{
     DefId, NativeFnDecl, NativeFnId, NativeModule, NativeProvider, NativeTypeDecl, NativeTypeId,
-    NativeVariantDecl, NativeVariantKind,
+    NativeVariantDecl, NativeVariantKind, RtType,
     macros::MacroExpander,
 };
 
@@ -78,6 +78,9 @@ pub trait Context: ConvertCx {
 
     /// How the type of `value` is named in messages, e.g. `` `Point` ``.
     fn describe_type(&self, value: &Value) -> String;
+    /// The runtime type of `value` as a type value, preserving int/float width
+    /// (`reflect::type_of`).
+    fn type_of(&self, value: &Value) -> RtType;
     /// The struct or enum variant `def`, or `None` if it is neither.
     fn adt_info(&self, def: DefId) -> Option<AdtInfo>;
     /// The names of the methods `value.name()` can call.

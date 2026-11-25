@@ -1,6 +1,6 @@
 //! Formatting values, as `{}` does.
 
-use xur_resolve::DefKind;
+use xur_resolve::{DefKind, RtType};
 use xur_runtime::{Range, Value, lock};
 
 use crate::interp::Interp;
@@ -138,6 +138,52 @@ impl Interp<'_> {
                 format!("`{}`", ty.unwrap_or_default())
             }
             other => other.kind().to_owned(),
+        }
+    }
+
+    /// The runtime type of `value` as an [`RtType`], preserving int/float width.
+    pub(crate) fn type_of(&self, value: &Value) -> RtType {
+        match value {
+            Value::Unit => RtType::Unit,
+            Value::Bool(_) => RtType::Bool,
+            Value::Int(i) => i.rt_type(),
+            Value::Float(f) => f.rt_type(),
+            Value::Str(_) => RtType::Str,
+            Value::Bytes(_) => RtType::Bytes,
+            Value::Ptr(_) => RtType::Ptr,
+            Value::List(_) => RtType::List,
+            Value::Map(_) => RtType::Map,
+            Value::Type(_) => RtType::Type,
+            Value::Tuple(items) => RtType::Tuple(items.iter().map(|v| self.type_of(v)).collect()),
+            Value::Adt(adt) => {
+                let program = self.shared.program();
+                let defs = &program.resolutions().defs;
+                let def = defs.get(adt.ctor);
+                let tdef = match def.kind {
+                    DefKind::Variant => def.parent.unwrap_or(adt.ctor),
+                    _ => adt.ctor,
+                };
+                RtType::Adt {
+                    def: tdef,
+                    name: program.resolutions().def_path(tdef),
+                }
+            }
+            Value::Native(o) => RtType::Native {
+                id: o.ty,
+                name: self.shared.registry.type_name(o.ty),
+            },
+            Value::NativeEnum(ne) => RtType::Native {
+                id: ne.object.ty,
+                name: self.shared.registry.type_name(ne.object.ty),
+            },
+            Value::Record(r) => match r.ty {
+                Some(ty) => RtType::Native {
+                    id: ty,
+                    name: self.shared.registry.type_name(ty),
+                },
+                None => RtType::Any,
+            },
+            _ => RtType::Any,
         }
     }
 

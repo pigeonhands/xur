@@ -99,6 +99,17 @@ impl Context for TestCx<'_> {
         value.kind().to_owned()
     }
 
+    fn type_of(&self, value: &Value) -> xur_resolve::RtType {
+        match value {
+            Value::Int(i) => i.rt_type(),
+            Value::Float(f) => f.rt_type(),
+            Value::Bool(_) => xur_resolve::RtType::Bool,
+            Value::Str(_) => xur_resolve::RtType::Str,
+            Value::Bytes(_) => xur_resolve::RtType::Bytes,
+            _ => xur_resolve::RtType::Any,
+        }
+    }
+
     fn adt_info(&self, _def: DefId) -> Option<AdtInfo> {
         None
     }

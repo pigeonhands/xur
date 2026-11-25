@@ -6,7 +6,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use xur_runtime::{BuiltinType, Registry, RunResult, RuntimeError, Value, XurBytes, XurStr, lock, with_pair};
+use xur_runtime::{
+    BuiltinType, FloatValue, IntValue, Registry, RunResult, RuntimeError, Value, XurBytes, XurStr,
+    lock, with_pair,
+};
 
 
 type Bytes = Arc<Mutex<Vec<u8>>>;
@@ -72,7 +75,7 @@ pub(crate) fn register(registry: &Registry) {
                 .raw_function($read, |_, args| {
                     let (bytes, [offset]) = receiver(args)? else { return arity(1) };
                     let raw = read::<{ size_of::<$ty>() }>(&lock(bytes), offset)?;
-                    number_value(<$ty>::$from(raw))
+                    Ok(<$ty>::$from(raw).into_xur())
                 })
                 .raw_function($write, |_, args| {
                     let (bytes, [offset, value]) = receiver(args)? else { return arity(2) };
@@ -169,14 +172,26 @@ fn out_of_range(start: usize, len: usize, total: usize) -> RuntimeError {
     ))
 }
 
-/// A number read from bytes, as a Xur value.
-fn number_value<T: Into<Number>>(value: T) -> RunResult<Value> {
-    match value.into() {
-        Number::Int(i) => i64::try_from(i)
-            .map(Value::int)
-            .map_err(|_| RuntimeError::new(format!("{i} does not fit in a Xur integer"))),
-        Number::Float(f) => Ok(Value::float(f)),
-    }
+/// Wraps a Rust numeric value as a width-preserving Xur value, so a read
+/// returns the type it read (`read_u32_le` → `u32`, `read_f32_le` → `f32`).
+trait NumberValue {
+    fn into_xur(self) -> Value;
+}
+
+macro_rules! int_number_value {
+    ($($t:ty),*) => {$(
+        impl NumberValue for $t {
+            fn into_xur(self) -> Value { Value::Int(IntValue::from(self)) }
+        }
+    )*};
+}
+int_number_value!(u8, i8, u16, i16, u32, i32, u64, i64);
+
+impl NumberValue for f32 {
+    fn into_xur(self) -> Value { Value::Float(FloatValue::F32(self)) }
+}
+impl NumberValue for f64 {
+    fn into_xur(self) -> Value { Value::Float(FloatValue::F64(self)) }
 }
 
 /// A Xur value as a number of type `T`, named `name` in errors.
