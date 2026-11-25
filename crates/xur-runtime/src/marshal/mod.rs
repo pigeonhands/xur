@@ -53,11 +53,25 @@ impl IntoXurValue for Value {
     }
 }
 
-/// A typed-function return that **raises** on `Err` (its `RuntimeError`
-/// propagates) rather than becoming a Xur `Result` value, so a typed function
-/// can fail like a raw one. (A bare `Result<T, RuntimeError>` can't have its own
-/// `IntoXurValue` impl — it collides with the `Facet` blanket — so this newtype
-/// carries it.) The declared return type is `T`'s.
+/// A typed-function return that **raises** on `Err`: the `RuntimeError`
+/// propagates as a runtime error (unwinding the script) instead of becoming a
+/// Xur value.
+///
+/// Choose the error channel by whether a *script* is expected to handle it:
+///
+/// * **Runtime errors** — bugs and broken invariants the script should not
+///   recover from (a wrong type, an out-of-range index). Return `Raise<T>`.
+/// * **Recoverable errors** — expected failures a script handles (not found, a
+///   parse failure, a resource that isn't ready). Return a plain
+///   `Result<T, String>`, which becomes a Xur `Result` value.
+///
+/// A function can have **both**: return `Raise<Result<T, String>>` to raise on a
+/// runtime error *and* hand back a `Result` value for a recoverable one
+/// (`self.0?` raises, then the inner `Result<T, String>` converts to a value).
+///
+/// (A bare `Result<T, RuntimeError>` can't carry this itself — it collides with
+/// the `Facet` blanket impl — so this newtype does.) The declared return type
+/// is `T`'s.
 pub struct Raise<T>(pub RunResult<T>);
 
 impl<T: IntoXurValue> IntoXurValue for Raise<T> {
