@@ -16,7 +16,7 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use hao_il2cpp_runtime::{self as rt, Il2Cpp};
 use xur_runtime::convert::{into_value, ConvertCx};
-use xur_runtime::{FloatValue, Registry, RuntimeError, Value};
+use xur_runtime::{FloatValue, Raise, Registry, RuntimeError, Value};
 
 // ---------------------------------------------------------------------------
 // Static-field API — not in hao's Api struct, loaded from the game binary.
@@ -864,17 +864,11 @@ pub(crate) fn register(registry: &Registry) {
                     Err(e) => Err(rt_err(e)),
                 }
             })
-            .raw_function("assemblies", |cx, args| {
-                let [_this] = args else {
-                    return Err(RuntimeError::new("`assemblies` takes no arguments"));
-                };
-                let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-                let images = il2cpp.assemblies();
-                let list: Result<Vec<Value>, _> = images
-                    .iter()
-                    .map(|img| into_value(cx, XurUnityImage::new(img)))
-                    .collect();
-                Ok(Value::list(list?))
+            .method("assemblies", |_this: &XurUnitySdk| -> Raise<Vec<XurUnityImage>> {
+                Raise((|| {
+                    let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
+                    Ok(il2cpp.assemblies().iter().map(XurUnityImage::new).collect())
+                })())
             });
 
         // --- Class methods ---
@@ -939,39 +933,11 @@ pub(crate) fn register(registry: &Registry) {
                     .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
                 Ok(result)
             })
-            .raw_function("fields", |cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`fields` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `Class`"));
-                };
-                let list = obj
-                    .with(|c: &XurUnityClass| -> Result<Vec<Value>, RuntimeError> {
-                        c.class()
-                            .fields()
-                            .map(|f| into_value(cx, XurUnityField::new(&f)))
-                            .collect()
-                    })
-                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-                Ok(Value::list(list))
+            .method("fields", |c: &XurUnityClass| -> Vec<XurUnityField> {
+                c.class().fields().map(|f| XurUnityField::new(&f)).collect()
             })
-            .raw_function("methods", |cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`methods` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `Class`"));
-                };
-                let list = obj
-                    .with(|c: &XurUnityClass| -> Result<Vec<Value>, RuntimeError> {
-                        c.class()
-                            .methods()
-                            .map(|m| into_value(cx, XurUnityMethod::new(&m)))
-                            .collect()
-                    })
-                    .ok_or_else(|| RuntimeError::new("expected a `Class`"))??;
-                Ok(Value::list(list))
+            .method("methods", |c: &XurUnityClass| -> Vec<XurUnityMethod> {
+                c.class().methods().map(|m| XurUnityMethod::new(&m)).collect()
             })
             .method("name", |c: &XurUnityClass| -> String {
                 c.class().name().to_owned()
@@ -1087,22 +1053,16 @@ pub(crate) fn register(registry: &Registry) {
             .method("signature", |m: &XurUnityMethod| -> String {
                 m.method().signature()
             })
-            .raw_function("code_address", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`code_address` takes no arguments"));
-                };
-                let method = extract_method(this)?;
-                Ok(Value::Int((method.code() as usize).into()))
+            .method("code_address", |m: &XurUnityMethod| -> i64 {
+                m.method().code() as usize as i64
             })
-            .raw_function("hook_void_block", |cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`hook_void_block` takes no arguments"));
-                };
-                let method = extract_method(this)?;
-                let hook = method.hook_void_block().map_err(rt_err)?;
-                let state = hook.state;
-                std::mem::forget(hook);
-                into_value(cx, XurVoidBlockHook(state))
+            .method("hook_void_block", |m: &XurUnityMethod| -> Raise<XurVoidBlockHook> {
+                Raise((|| {
+                    let hook = m.method().hook_void_block().map_err(rt_err)?;
+                    let state = hook.state;
+                    std::mem::forget(hook);
+                    Ok(XurVoidBlockHook(state))
+                })())
             })
             .raw_function("hook", |cx, args| {
                 let [this, callback] = args else {
@@ -1216,17 +1176,8 @@ pub(crate) fn register(registry: &Registry) {
                 })
                 .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?
             })
-            .raw_function("args", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`args` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `HookContext`"));
-                };
-                obj.with(|ctx: &XurHookContext| {
-                    Value::list(ctx.args.iter().map(|(_, v)| v.clone()).collect())
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
+            .method("args", |ctx: &XurHookContext| -> Value {
+                Value::list(ctx.args.iter().map(|(_, v)| v.clone()).collect())
             })
             .raw_function("set_arg", |_cx, args| {
                 let [this, key, val] = args else {
@@ -1258,91 +1209,42 @@ pub(crate) fn register(registry: &Registry) {
                 .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))??;
                 Ok(Value::Unit)
             })
-            .raw_function("signature", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`signature` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `HookContext`"));
-                };
-                obj.with(|ctx: &XurHookContext| Value::str(&ctx.signature))
-                    .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))
+            .method("signature", |ctx: &XurHookContext| -> String {
+                ctx.signature.clone()
             })
-            .raw_function("call", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`call` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `HookContext`"));
-                };
-                let (
-                    original,
-                    int_regs,
-                    sse_regs,
-                    params,
-                    modified,
-                    return_element,
-                    handle,
-                    called,
-                ) = obj
-                    .with(|ctx: &XurHookContext| {
-                        (
-                            ctx.original,
-                            ctx.int_regs,
-                            ctx.sse_regs,
-                            ctx.params.clone(),
-                            ctx.modified.clone(),
-                            ctx.return_element,
-                            ctx.handle.clone(),
-                            ctx.called.clone(),
-                        )
-                    })
-                    .ok_or_else(|| RuntimeError::new("expected a `HookContext`"))?;
+            .method("call", |ctx: &XurHookContext| -> Raise<Value> {
+                Raise((|| {
+                    if ctx.called.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                        return Err(RuntimeError::new("ctx.call() can only be called once"));
+                    }
 
-                if called.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                    return Err(RuntimeError::new("ctx.call() can only be called once"));
-                }
-
-                // Write back any modified args before calling the original.
-                {
-                    let mods = xur_runtime::lock(&modified);
-                    let mut regs = hooking::SavedRegs { int_regs, sse_regs };
-                    for (idx, val) in mods.iter() {
-                        if *idx < params.len() {
-                            write_arg_to_regs(&mut regs, &params[*idx], val);
+                    // Write back any modified args before calling the original.
+                    {
+                        let mods = xur_runtime::lock(&ctx.modified);
+                        let mut regs = hooking::SavedRegs {
+                            int_regs: ctx.int_regs,
+                            sse_regs: ctx.sse_regs,
+                        };
+                        for (idx, val) in mods.iter() {
+                            if *idx < ctx.params.len() {
+                                write_arg_to_regs(&mut regs, &ctx.params[*idx], val);
+                            }
                         }
                     }
-                }
 
-                let result = unsafe { hooking::call_with_saved_regs(original, int_regs, sse_regs) };
-                Ok(marshal_call_result(&handle, &result, return_element))
+                    let result = unsafe {
+                        hooking::call_with_saved_regs(ctx.original, ctx.int_regs, ctx.sse_regs)
+                    };
+                    Ok(marshal_call_result(&ctx.handle, &result, ctx.return_element))
+                })())
             });
 
         m.ty::<XurVoidBlockHook>("VoidBlockHook")
-            .raw_function("set_blocked", |_cx, args| {
-                let [this, Value::Bool(blocked)] = args else {
-                    return Err(RuntimeError::new("`set_blocked` takes a bool"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `VoidBlockHook`"));
-                };
-                obj.with(|h: &XurVoidBlockHook| {
-                    h.0.store(*blocked, std::sync::atomic::Ordering::Relaxed);
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))?;
-                Ok(Value::Unit)
+            .method("set_blocked", |h: &XurVoidBlockHook, blocked: bool| {
+                h.0.store(blocked, std::sync::atomic::Ordering::Relaxed);
             })
-            .raw_function("is_blocked", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`is_blocked` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected a `VoidBlockHook`"));
-                };
-                obj.with(|h: &XurVoidBlockHook| {
-                    Value::Bool(h.0.load(std::sync::atomic::Ordering::Relaxed))
-                })
-                .ok_or_else(|| RuntimeError::new("expected a `VoidBlockHook`"))
+            .method("is_blocked", |h: &XurVoidBlockHook| -> bool {
+                h.0.load(std::sync::atomic::Ordering::Relaxed)
             });
 
         // --- Image methods ---
@@ -1350,34 +1252,11 @@ pub(crate) fn register(registry: &Registry) {
             .method("name", |i: &XurUnityImage| -> String {
                 i.image().name().to_owned()
             })
-            .raw_function("classes", |cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`classes` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected an `Image`"));
-                };
-                let list = obj
-                    .with(|i: &XurUnityImage| -> Result<Vec<Value>, RuntimeError> {
-                        i.image()
-                            .classes()
-                            .map(|c| into_value(cx, XurUnityClass::new(&c)))
-                            .collect()
-                    })
-                    .ok_or_else(|| RuntimeError::new("expected an `Image`"))??;
-                Ok(Value::list(list))
+            .method("classes", |i: &XurUnityImage| -> Vec<XurUnityClass> {
+                i.image().classes().map(|c| XurUnityClass::new(&c)).collect()
             })
-            .raw_function("class_count", |_cx, args| {
-                let [this] = args else {
-                    return Err(RuntimeError::new("`class_count` takes no arguments"));
-                };
-                let Value::Native(obj) = this else {
-                    return Err(RuntimeError::new("expected an `Image`"));
-                };
-                let count = obj
-                    .with(|i: &XurUnityImage| i.image().class_count())
-                    .ok_or_else(|| RuntimeError::new("expected an `Image`"))?;
-                Ok(Value::Int((count as i64).into()))
+            .method("class_count", |i: &XurUnityImage| -> i64 {
+                i.image().class_count() as i64
             });
 
         // --- Object methods ---
