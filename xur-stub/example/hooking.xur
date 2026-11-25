@@ -17,18 +17,19 @@ fn main() -> Result<()> {
     io::println("  hooking::create(target_addr, dest_addr)  — hook by address");
     io::println("  hooking::by_name(symbol, dest)           — hook by symbol");
     io::println("  hooking::by_name(module, symbol, dest)   — hook in a specific module");
-    io::println("  hook.apply()   — install the detour");
-    io::println("  hook.remove()  — restore original code");
-    io::println("  hook.original() — address of the relocated original");
-    io::println("  hook.target()  — address of the hooked function");
+    io::println("  hook.apply()?   — install the detour");
+    io::println("  hook.remove()?  — restore original code");
+    io::println("  hook.original()? — address of the relocated original");
+    io::println("  hook.target()?  — address of the hooked function");
 
+    // The hook ops return a Result, so thread them with `?`.
     // Example (requires real addresses):
     //
-    //   let hook = hooking::by_name("puts", my_detour_addr);
-    //   hook.apply();
+    //   let hook = hooking::by_name("puts", my_detour_addr)?;
+    //   hook.apply()?;
     //   // ... puts() now redirects to my_detour_addr
-    //   let original = hook.original();  // call this to reach the real puts
-    //   hook.remove();
+    //   let original = hook.original()?;  // call this to reach the real puts
+    //   hook.remove()?;
 
     Ok(())
 }

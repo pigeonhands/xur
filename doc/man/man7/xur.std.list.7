@@ -51,8 +51,9 @@ Reverse the list in place.
 Append all items from another list. Safe to call as
 .BR xs.extend(xs) .
 .TP
-.B to_hex() -> str
-Format a list of bytes as a hex string.
+.B to_hex() -> Result<str>
+Format a list of bytes as a hex string. Errors if an element is not an
+integer in the range 0..=255.
 .TP
 .B map(f) -> list
 Apply a function to each element and return a new list of results.

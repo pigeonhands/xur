@@ -1,4 +1,4 @@
-.TH XUR.STD.ANY 7 "2026-10-29" "xur 0.1.2" "Xur Manual"
+.TH XUR.STD.ANY 7 "2026-11-25" "xur 0.1.3" "Xur Manual"
 .SH NAME
 xur.std.any \- runtime type introspection
 .SH SYNOPSIS
@@ -12,14 +12,35 @@ provides basic runtime type information.
 Returns the name of
 .I T
 as a string.
+.TP
+.B type_name_val(value) -> str
+Returns the name of
+.IR value 's
+runtime type as a string.
+.TP
+.B type_of(value) -> type
+Returns
+.IR value 's
+runtime type as a type value, preserving integer and float width (so the
+type of a
+.B u8
+byte is
+.BR u8 ", not " i64 ).
+Compare it against a type literal (e.g.
+.BR u8 ", " f32 ) to assert a value's exact type.
 .SH EXAMPLES
 .nf
 use std::any;
+use std::assert;
 use std::io;
 
 fn main() {
     io::println("{}", any::type_name::<i64>());
-    io::println("{}", any::type_name::<Option<str>>());
+    io::println("{}", any::type_of(42));        // i64
+
+    // Byte indexing yields a u8; assert the type directly.
+    let byte = b"\\xff"[0];
+    assert::is_eq(u8, any::type_of(byte));
 }
 .fi
 .SH SEE ALSO
