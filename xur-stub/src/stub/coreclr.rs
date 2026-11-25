@@ -22,7 +22,7 @@ use facet::Facet;
 
 use xur_runtime::convert::{from_value, into_value, ConvertCx};
 use xur_runtime::registry::ModuleBuilder;
-use xur_runtime::{Raise, Registry, RuntimeError, Value};
+use xur_runtime::{Registry, RuntimeError, Value};
 use xur_std::decimal::XurDecimal;
 
 pub(crate) static RUNTIME: OnceLock<hao_runtime::Runtime> = OnceLock::new();
@@ -565,21 +565,12 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
              assembly: String,
              type_name: String,
              method: String|
-             -> Raise<Result<MethodPtr, String>> {
-                Raise((|| {
-                    let rt = RUNTIME
-                        .get()
-                        .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
-                    Ok(
-                        match rt
-                            .method_pointer_from_loaded(&assembly, &type_name, &method)
-                            .or_else(|_| rt.method_pointer(&assembly, &type_name, &method))
-                        {
-                            Ok(ptr) => Ok(MethodPtr(ptr as usize)),
-                            Err(e) => Err(e.to_string()),
-                        },
-                    )
-                })())
+             -> Result<MethodPtr, String> {
+                let rt = RUNTIME.get().ok_or("runtime not initialized")?;
+                rt.method_pointer_from_loaded(&assembly, &type_name, &method)
+                    .or_else(|_| rt.method_pointer(&assembly, &type_name, &method))
+                    .map(|ptr| MethodPtr(ptr as usize))
+                    .map_err(|e| e.to_string())
             },
         )
         .method(
@@ -589,40 +580,27 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
              type_name: String,
              method: String,
              param_count: i64|
-             -> Raise<Result<MethodPtr, String>> {
-                Raise((|| {
-                    let rt = RUNTIME
-                        .get()
-                        .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
-                    let pc = i32::try_from(param_count)
-                        .map_err(|_| RuntimeError::new("param_count out of range"))?;
-                    Ok(match rt.find_method_from_loaded(&assembly, &type_name, &method, pc) {
-                        Ok(ptr) => Ok(MethodPtr(ptr as usize)),
-                        Err(e) => Err(e.to_string()),
-                    })
-                })())
+             -> Result<MethodPtr, String> {
+                let rt = RUNTIME.get().ok_or("runtime not initialized")?;
+                let pc = i32::try_from(param_count)
+                    .map_err(|_| "param_count out of range".to_string())?;
+                rt.find_method_from_loaded(&assembly, &type_name, &method, pc)
+                    .map(|ptr| MethodPtr(ptr as usize))
+                    .map_err(|e| e.to_string())
             },
         )
         .method(
             "load_assembly",
-            |_this: &CoreClrRuntime, path: String| -> Raise<Result<(), String>> {
-                Raise((|| {
-                    let rt = RUNTIME
-                        .get()
-                        .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
-                    Ok(rt.load_assembly(&path).map_err(|e| e.to_string()))
-                })())
+            |_this: &CoreClrRuntime, path: String| -> Result<(), String> {
+                let rt = RUNTIME.get().ok_or("runtime not initialized")?;
+                rt.load_assembly(&path).map_err(|e| e.to_string())
             },
         )
         .method(
             "type_names",
-            |_this: &CoreClrRuntime, assembly: String| -> Raise<Result<Vec<String>, String>> {
-                Raise((|| {
-                    let rt = RUNTIME
-                        .get()
-                        .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
-                    Ok(rt.type_names(&assembly).map_err(|e| e.to_string()))
-                })())
+            |_this: &CoreClrRuntime, assembly: String| -> Result<Vec<String>, String> {
+                let rt = RUNTIME.get().ok_or("runtime not initialized")?;
+                rt.type_names(&assembly).map_err(|e| e.to_string())
             },
         )
         .method(
@@ -630,13 +608,9 @@ fn register_runtime(m: &mut ModuleBuilder<'_>) {
             |_this: &CoreClrRuntime,
              assembly: String,
              type_name: String|
-             -> Raise<Result<Vec<String>, String>> {
-                Raise((|| {
-                    let rt = RUNTIME
-                        .get()
-                        .ok_or_else(|| RuntimeError::new("runtime not initialized"))?;
-                    Ok(rt.method_names(&assembly, &type_name).map_err(|e| e.to_string()))
-                })())
+             -> Result<Vec<String>, String> {
+                let rt = RUNTIME.get().ok_or("runtime not initialized")?;
+                rt.method_names(&assembly, &type_name).map_err(|e| e.to_string())
             },
         );
 }
@@ -685,31 +659,29 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             #[cfg(not(target_arch = "x86_64"))]
             Err(RuntimeError::new("call_float only supported on x86_64"))
         })
-        .method("capture_this", |p: &MethodPtr| -> Raise<CapturedRef> {
-            Raise((|| {
-                if p.0 == 0 {
-                    return Err(RuntimeError::new("null MethodPtr"));
+        .method("capture_this", |p: &MethodPtr| -> Result<CapturedRef, String> {
+            if p.0 == 0 {
+                return Err("null MethodPtr".to_string());
+            }
+            #[cfg(target_arch = "x86_64")]
+            {
+                let slot: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+                let mut hook = unsafe {
+                    hook_writer().create_save_registers(p.0 as *mut u8, coreclr_hook_dispatch)
                 }
-                #[cfg(target_arch = "x86_64")]
-                {
-                    let slot: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
-                    let mut hook = unsafe {
-                        hook_writer().create_save_registers(p.0 as *mut u8, coreclr_hook_dispatch)
-                    }
-                    .map_err(|e| RuntimeError::new(format!("hook failed: {e:?}")))?;
-                    let orig = hook.original_function().as_ptr() as usize;
-                    hooks()
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .insert(orig, HookEntry::Capture(slot));
-                    unsafe { hook.apply_hook() }
-                        .map_err(|e| RuntimeError::new(format!("apply hook failed: {e:?}")))?;
-                    std::mem::forget(hook);
-                    Ok(CapturedRef(slot))
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Err(RuntimeError::new("capture_this only supported on x86_64"))
-            })())
+                .map_err(|e| format!("hook failed: {e:?}"))?;
+                let orig = hook.original_function().as_ptr() as usize;
+                hooks()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(orig, HookEntry::Capture(slot));
+                unsafe { hook.apply_hook() }
+                    .map_err(|e| format!("apply hook failed: {e:?}"))?;
+                std::mem::forget(hook);
+                Ok(CapturedRef(slot))
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            Err("capture_this only supported on x86_64".to_string())
         })
         .raw_function("hook", |cx, args| {
             let [this, callback] = args else {
@@ -806,41 +778,35 @@ fn register_method_ptr(m: &mut ModuleBuilder<'_>) {
             let b = unsafe { *(p.0 as *const u8) };
             !matches!(b, 0xe9 | 0xeb | 0xe8 | 0xff | 0xcc)
         })
-        .method("resolve_jit", |p: &MethodPtr| -> Raise<MethodPtr> {
-            Raise((|| {
-                if p.0 == 0 {
-                    return Err(RuntimeError::new("null MethodPtr"));
+        .method("resolve_jit", |p: &MethodPtr| -> Result<MethodPtr, String> {
+            if p.0 == 0 {
+                return Err("null MethodPtr".to_string());
+            }
+            #[cfg(target_arch = "x86_64")]
+            {
+                let resolved = unsafe { hao_runtime::jit::resolve_jit(p.0) };
+                if resolved == 0 {
+                    return Err("resolve_jit returned null".to_string());
                 }
-                #[cfg(target_arch = "x86_64")]
-                {
-                    let resolved = unsafe { hao_runtime::jit::resolve_jit(p.0) };
-                    if resolved == 0 {
-                        return Err(RuntimeError::new("resolve_jit returned null"));
-                    }
-                    Ok(MethodPtr(resolved))
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Err(RuntimeError::new("resolve_jit only supported on x86_64"))
-            })())
+                Ok(MethodPtr(resolved))
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            Err("resolve_jit only supported on x86_64".to_string())
         })
         .method(
             "patch_precode_target",
-            |p: &MethodPtr, new_target: MethodPtr| -> Raise<()> {
-                Raise((|| {
-                    if p.0 == 0 {
-                        return Err(RuntimeError::new("null MethodPtr"));
-                    }
-                    #[cfg(target_arch = "x86_64")]
-                    {
-                        unsafe { hao_runtime::jit::patch_precode_target(p.0, new_target.0) }
-                            .map_err(|e| RuntimeError::new(e.to_string()))?;
-                        Ok(())
-                    }
-                    #[cfg(not(target_arch = "x86_64"))]
-                    Err(RuntimeError::new(
-                        "patch_precode_target only supported on x86_64",
-                    ))
-                })())
+            |p: &MethodPtr, new_target: MethodPtr| -> Result<(), String> {
+                if p.0 == 0 {
+                    return Err("null MethodPtr".to_string());
+                }
+                #[cfg(target_arch = "x86_64")]
+                {
+                    unsafe { hao_runtime::jit::patch_precode_target(p.0, new_target.0) }
+                        .map_err(|e| e.to_string())?;
+                    Ok(())
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Err("patch_precode_target only supported on x86_64".to_string())
             },
         )
         .raw_function("call_string", |_cx, args| {
@@ -891,13 +857,11 @@ fn register_managed_object(m: &mut ModuleBuilder<'_>) {
             check_readable(addr, 8)?;
             Ok(unsafe { std::ptr::read_unaligned(addr as *const i64) })
         })
-        .method("deref", |o: &ManagedObject, offset: i64| -> Raise<ManagedObject> {
-            Raise((|| {
-                let addr = (o.0 as isize + offset as isize) as usize;
-                check_readable(addr, 8).map_err(|e| RuntimeError::new(format!("deref: {e}")))?;
-                let val = unsafe { std::ptr::read_unaligned(addr as *const usize) };
-                Ok(ManagedObject(val))
-            })())
+        .method("deref", |o: &ManagedObject, offset: i64| -> Result<ManagedObject, String> {
+            let addr = (o.0 as isize + offset as isize) as usize;
+            check_readable(addr, 8).map_err(|e| format!("deref: {e}"))?;
+            let val = unsafe { std::ptr::read_unaligned(addr as *const usize) };
+            Ok(ManagedObject(val))
         })
         .method("read_u8", |o: &ManagedObject, offset: i64| -> Result<i64, String> {
             let addr = (o.0 as isize + offset as isize) as usize;

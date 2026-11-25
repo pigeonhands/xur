@@ -864,11 +864,10 @@ pub(crate) fn register(registry: &Registry) {
                     Err(e) => Err(rt_err(e)),
                 }
             })
-            .method("assemblies", |_this: &XurUnitySdk| -> Raise<Vec<XurUnityImage>> {
-                Raise((|| {
-                    let il2cpp = Il2Cpp::loaded().map_err(rt_err)?;
-                    Ok(il2cpp.assemblies().iter().map(XurUnityImage::new).collect())
-                })())
+            .method("assemblies", |_this: &XurUnitySdk| -> Result<Vec<XurUnityImage>, String> {
+                // il2cpp not being loaded yet is recoverable — hand back a Result.
+                let il2cpp = Il2Cpp::loaded().map_err(|e| e.to_string())?;
+                Ok(il2cpp.assemblies().iter().map(XurUnityImage::new).collect())
             });
 
         // --- Class methods ---
@@ -1056,13 +1055,12 @@ pub(crate) fn register(registry: &Registry) {
             .method("code_address", |m: &XurUnityMethod| -> i64 {
                 m.method().code() as usize as i64
             })
-            .method("hook_void_block", |m: &XurUnityMethod| -> Raise<XurVoidBlockHook> {
-                Raise((|| {
-                    let hook = m.method().hook_void_block().map_err(rt_err)?;
-                    let state = hook.state;
-                    std::mem::forget(hook);
-                    Ok(XurVoidBlockHook(state))
-                })())
+            .method("hook_void_block", |m: &XurUnityMethod| -> Result<XurVoidBlockHook, String> {
+                // A failed hook is recoverable, not a fatal bug.
+                let hook = m.method().hook_void_block().map_err(|e| e.to_string())?;
+                let state = hook.state;
+                std::mem::forget(hook);
+                Ok(XurVoidBlockHook(state))
             })
             .raw_function("hook", |cx, args| {
                 let [this, callback] = args else {

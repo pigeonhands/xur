@@ -18,7 +18,7 @@ use facet::Facet;
 use unrealkit::UeVersion;
 use xur_runtime::convert::into_value;
 use xur_runtime::registry::Context;
-use xur_runtime::{Raise, Registry, RuntimeError, Value};
+use xur_runtime::{Registry, RuntimeError, Value};
 
 static SDK: OnceLock<unrealkit::Sdk> = OnceLock::new();
 static PROCESS_EVENT: OnceLock<unrealkit::ProcessEventFn> = OnceLock::new();
@@ -30,6 +30,12 @@ fn err(msg: impl std::fmt::Display) -> RuntimeError {
 fn get_sdk() -> Result<&'static unrealkit::Sdk, RuntimeError> {
     SDK.get()
         .ok_or_else(|| err("unreal SDK not initialized — call unreal::init() first"))
+}
+
+/// `get_sdk` as a recoverable `String` error, for typed methods that return a
+/// `Result` (an uninitialised SDK is something a script can handle, not fatal).
+fn sdk_ref() -> Result<&'static unrealkit::Sdk, String> {
+    get_sdk().map_err(|e| e.to_string())
 }
 
 fn xur_option(cx: &dyn Context, value: Option<Value>) -> Value {
@@ -263,34 +269,30 @@ pub(crate) fn register(registry: &Registry) {
         });
 
         // set_process_event(addr: int) -> ()
-        m.function("set_process_event", |addr: i64| -> Raise<()> {
-            Raise((|| {
-                let addr = usize::try_from(addr).map_err(|_| err("address out of range"))?;
-                let fn_ptr: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(addr) };
-                PROCESS_EVENT
-                    .set(fn_ptr)
-                    .map_err(|_| err("ProcessEvent already set"))?;
-                Ok(())
-            })())
+        m.function("set_process_event", |addr: i64| -> Result<(), String> {
+            let addr = usize::try_from(addr).map_err(|_| "address out of range".to_string())?;
+            let fn_ptr: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(addr) };
+            PROCESS_EVENT
+                .set(fn_ptr)
+                .map_err(|_| "ProcessEvent already set".to_string())?;
+            Ok(())
         });
 
         // set_process_event_vtable(index: int) -> ()
-        m.function("set_process_event_vtable", |index: i64| -> Raise<()> {
-            Raise((|| {
-                let sdk = get_sdk()?;
-                let obj = sdk
-                    .objects()
-                    .next()
-                    .ok_or_else(|| err("no UObjects found for vtable read"))?;
-                let vtable_ptr = unsafe { *(obj.ptr() as *const *const *const u8) };
-                let idx = usize::try_from(index).map_err(|_| err("index out of range"))?;
-                let fn_ptr = unsafe { *vtable_ptr.add(idx) };
-                let pe: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(fn_ptr) };
-                PROCESS_EVENT
-                    .set(pe)
-                    .map_err(|_| err("ProcessEvent already set"))?;
-                Ok(())
-            })())
+        m.function("set_process_event_vtable", |index: i64| -> Result<(), String> {
+            let sdk = sdk_ref()?;
+            let obj = sdk
+                .objects()
+                .next()
+                .ok_or("no UObjects found for vtable read")?;
+            let vtable_ptr = unsafe { *(obj.ptr() as *const *const *const u8) };
+            let idx = usize::try_from(index).map_err(|_| "index out of range".to_string())?;
+            let fn_ptr = unsafe { *vtable_ptr.add(idx) };
+            let pe: unrealkit::ProcessEventFn = unsafe { std::mem::transmute(fn_ptr) };
+            PROCESS_EVENT
+                .set(pe)
+                .map_err(|_| "ProcessEvent already set".to_string())?;
+            Ok(())
         });
 
         // --- UObject type ---
@@ -320,12 +322,10 @@ pub(crate) fn register(registry: &Registry) {
                     .transpose()?;
                 Ok(xur_option(cx, outer))
             })
-            .method("is_a", |this: &XurUnrealObject, class_name: String| -> Raise<bool> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let uobj = unrealkit::UObject::new(this.0, &sdk.names);
-                    Ok(uobj.is_a(&class_name))
-                })())
+            .method("is_a", |this: &XurUnrealObject, class_name: String| -> Result<bool, String> {
+                let sdk = sdk_ref()?;
+                let uobj = unrealkit::UObject::new(this.0, &sdk.names);
+                Ok(uobj.is_a(&class_name))
             })
             .function("ptr", |obj: &XurUnrealObject| -> u64 { obj.0 as u64 })
             .raw_function("get", |cx, args| {
@@ -381,26 +381,22 @@ pub(crate) fn register(registry: &Registry) {
                     .transpose()?;
                 Ok(xur_option(cx, sup))
             })
-            .method("children", |this: &XurUnrealClass| -> Raise<Vec<String>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls
-                        .children()
-                        .map(|f| format!("{} ({})", f.name(), f.class_name()))
-                        .collect())
-                })())
+            .method("children", |this: &XurUnrealClass| -> Result<Vec<String>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls
+                    .children()
+                    .map(|f| format!("{} ({})", f.name(), f.class_name()))
+                    .collect())
             })
             .function("instance_size", |cls: &XurUnrealClass| -> i64 {
                 let sdk = get_sdk().expect("SDK not initialized");
                 unrealkit::UClass::new(cls.0, &sdk.names).instance_size() as i64
             })
-            .method("hierarchy", |this: &XurUnrealClass| -> Raise<Vec<String>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls.class_hierarchy().map(|c| c.name()).collect())
-                })())
+            .method("hierarchy", |this: &XurUnrealClass| -> Result<Vec<String>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls.class_hierarchy().map(|c| c.name()).collect())
             })
             .raw_function_returns::<XurUnrealProperty>("property", |cx, args| {
                 if args.len() != 2 {
@@ -420,23 +416,19 @@ pub(crate) fn register(registry: &Registry) {
                     None => Ok(xur_option(cx, None)),
                 }
             })
-            .method("properties", |this: &XurUnrealClass| -> Raise<Vec<XurUnrealProperty>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls.properties().map(|p| XurUnrealProperty(p.ptr())).collect())
-                })())
+            .method("properties", |this: &XurUnrealClass| -> Result<Vec<XurUnrealProperty>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls.properties().map(|p| XurUnrealProperty(p.ptr())).collect())
             })
-            .method("all_properties", |this: &XurUnrealClass| -> Raise<Vec<XurUnrealProperty>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls
-                        .class_hierarchy()
-                        .flat_map(|c| c.properties())
-                        .map(|p| XurUnrealProperty(p.ptr()))
-                        .collect())
-                })())
+            .method("all_properties", |this: &XurUnrealClass| -> Result<Vec<XurUnrealProperty>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls
+                    .class_hierarchy()
+                    .flat_map(|c| c.properties())
+                    .map(|p| XurUnrealProperty(p.ptr()))
+                    .collect())
             })
             .raw_function_returns::<XurUnrealFunction>("method", |cx, args| {
                 if args.len() != 2 {
@@ -456,23 +448,19 @@ pub(crate) fn register(registry: &Registry) {
                     None => Ok(xur_option(cx, None)),
                 }
             })
-            .method("methods", |this: &XurUnrealClass| -> Raise<Vec<XurUnrealFunction>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls.functions().map(|f| XurUnrealFunction(f.ptr())).collect())
-                })())
+            .method("methods", |this: &XurUnrealClass| -> Result<Vec<XurUnrealFunction>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls.functions().map(|f| XurUnrealFunction(f.ptr())).collect())
             })
-            .method("all_methods", |this: &XurUnrealClass| -> Raise<Vec<XurUnrealFunction>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let ucls = unrealkit::UClass::new(this.0, &sdk.names);
-                    Ok(ucls
-                        .class_hierarchy()
-                        .flat_map(|c| c.functions())
-                        .map(|f| XurUnrealFunction(f.ptr()))
-                        .collect())
-                })())
+            .method("all_methods", |this: &XurUnrealClass| -> Result<Vec<XurUnrealFunction>, String> {
+                let sdk = sdk_ref()?;
+                let ucls = unrealkit::UClass::new(this.0, &sdk.names);
+                Ok(ucls
+                    .class_hierarchy()
+                    .flat_map(|c| c.functions())
+                    .map(|f| XurUnrealFunction(f.ptr()))
+                    .collect())
             });
 
         // --- UProperty type ---
@@ -549,38 +537,31 @@ pub(crate) fn register(registry: &Registry) {
                 unrealkit::UFunction::new(f.0, &sdk.names).native_func_ptr() as usize as i64
             })
             .function("ptr", |f: &XurUnrealFunction| -> i64 { f.0 as usize as i64 })
-            .method("signature", |this: &XurUnrealFunction| -> Raise<String> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let func = unrealkit::UFunction::new(this.0, &sdk.names);
-                    Ok(func.signature())
-                })())
+            .method("signature", |this: &XurUnrealFunction| -> Result<String, String> {
+                let sdk = sdk_ref()?;
+                let func = unrealkit::UFunction::new(this.0, &sdk.names);
+                Ok(func.signature())
             })
-            .method("params", |this: &XurUnrealFunction| -> Raise<Vec<XurUnrealProperty>> {
-                Raise((|| {
-                    let sdk = get_sdk()?;
-                    let func = unrealkit::UFunction::new(this.0, &sdk.names);
-                    Ok(func.params().map(|p| XurUnrealProperty(p.ptr())).collect())
-                })())
+            .method("params", |this: &XurUnrealFunction| -> Result<Vec<XurUnrealProperty>, String> {
+                let sdk = sdk_ref()?;
+                let func = unrealkit::UFunction::new(this.0, &sdk.names);
+                Ok(func.params().map(|p| XurUnrealProperty(p.ptr())).collect())
             })
-            .method("hook", |this: &XurUnrealFunction, detour_addr: i64| -> Raise<i64> {
-                Raise((|| {
-                    let detour =
-                        usize::try_from(detour_addr).map_err(|_| err("detour_addr out of range"))?;
-                    let sdk = get_sdk()?;
-                    let func = unrealkit::UFunction::new(this.0, &sdk.names);
-                    let native = func.native_func_ptr();
-                    if native.is_null() {
-                        return Err(err("UFunction has no native pointer"));
-                    }
-                    let mut hook =
-                        unsafe { hooking::Hook::create(native as *mut u8, detour as *mut u8) }
-                            .map_err(|e| err(format!("{e}")))?;
-                    unsafe { hook.apply_hook() }.map_err(|e| err(format!("{e}")))?;
-                    let original = hook.original_function().as_ptr() as usize;
-                    std::mem::forget(hook);
-                    Ok(original as i64)
-                })())
+            .method("hook", |this: &XurUnrealFunction, detour_addr: i64| -> Result<i64, String> {
+                let detour =
+                    usize::try_from(detour_addr).map_err(|_| "detour_addr out of range".to_string())?;
+                let sdk = sdk_ref()?;
+                let func = unrealkit::UFunction::new(this.0, &sdk.names);
+                let native = func.native_func_ptr();
+                if native.is_null() {
+                    return Err("UFunction has no native pointer".to_string());
+                }
+                let mut hook = unsafe { hooking::Hook::create(native as *mut u8, detour as *mut u8) }
+                    .map_err(|e| e.to_string())?;
+                unsafe { hook.apply_hook() }.map_err(|e| e.to_string())?;
+                let original = hook.original_function().as_ptr() as usize;
+                std::mem::forget(hook);
+                Ok(original as i64)
             })
             .raw_function("invoke", |cx, args| {
                 if args.len() < 2 {
