@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use facet::Facet;
 use xur_runtime::convert::into_value;
-use xur_runtime::{NativeObject, Raise, Record, Registry, RunResult, RuntimeError, Value, lock};
+use xur_runtime::{NativeObject, Record, Registry, RunResult, RuntimeError, Value, lock};
 use xur_runtime::registry::XurType;
 use xur_span::Symbol;
 
@@ -320,16 +320,10 @@ pub(crate) fn register(registry: &Registry) {
             .method("subcommand", |a: &Args| -> Result<Option<String>, String> {
                 a.0.lock().unwrap().subcommand().map_err(error_text)
             })
-            .method("free", |a: &Args| -> Raise<Option<String>> {
-                Raise((|| {
-                    let free: Option<String> = a
-                        .0
-                        .lock()
-                        .unwrap()
-                        .opt_free_from_str()
-                        .map_err(|e| RuntimeError::new(error_text(e)))?;
-                    Ok(free)
-                })())
+            .method("free", |a: &Args| -> Result<Option<String>, String> {
+                // A parse failure is recoverable: hand the script a Result, not a
+                // fatal raise.
+                a.0.lock().unwrap().opt_free_from_str().map_err(error_text)
             })
             .raw_function_returns_xur("remaining", XurType::list::<String>(), |_cx, args| {
                 let [Value::Native(object)] = args else {

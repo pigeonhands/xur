@@ -36,8 +36,12 @@ but returns an error if the option is missing.
 The first free argument, if it does not start with
 .BR \- .
 .TP
-.B free() -> Result<[str], str>
-All remaining free (non-flag) arguments.
+.B free() -> Result<Option<str>, str>
+The next free (non-flag) argument, or
+.B None
+if there are none. Errors only if the argument is not valid UTF-8, so thread it
+with
+.BR ? .
 .TP
 .B remaining() -> [str]
 All remaining arguments, including flags.
@@ -95,10 +99,11 @@ fn main() -> Result<()> {
     let args = cli::args();
     let verbose = args.contains("--verbose");
     let output = args.option("--output");
-    let files = args.free()?;
+    let input = args.free()?;
     args.finish()?;
-    for file in files {
-        io::println("processing: {}", file);
+    match input {
+        Some(file) => io::println("processing: {}", file),
+        None => io::println("no input file given"),
     }
     Ok(())
 }

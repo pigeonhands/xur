@@ -26,7 +26,7 @@ fn main() -> Result<()> {
             io::println("hello, {}!", name);
         },
         Some("count") => {
-            let n = args.free();
+            let n = args.free()?;
             args.finish()?;
             let n = match n {
                 None => return Err("count requires a number"),
